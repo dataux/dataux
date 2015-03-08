@@ -8,6 +8,9 @@ import (
 	"github.com/dataux/dataux/vendor/mixer/mysql"
 )
 
+// Table represents traditional definition of Database Table
+//   It belongs to a Schema and can be used to
+//   create a Datasource used to read this table
 type Table struct {
 	Name           string
 	Fields         []*mysql.Field
@@ -15,14 +18,16 @@ type Table struct {
 	DescribeValues [][]interface{}
 }
 
-// Schema is the schema for a named database, shared
-// across multiple nodes
+// Schema is a collection of tables/datatypes, servers to be
+//  a single schema.  Must be same BackendType (mysql, elasticsearch)
 type Schema struct {
-	Db         string
-	Nodes      map[string]*BackendConfig
-	Conf       *SchemaConfig
-	Tables     map[string]*Table
-	TableNames []string
+	Db          string
+	BackendType string `json:"backend_type"`
+	Address     string `json:"address"` // If you have don't need per node routing
+	Nodes       map[string]*BackendConfig
+	Conf        *SchemaConfig
+	Tables      map[string]*Table
+	TableNames  []string
 }
 
 func (m *Schema) AddTable(name string, fields []*mysql.Field) {
@@ -38,8 +43,12 @@ func (m *Schema) AddTable(name string, fields []*mysql.Field) {
 }
 
 // Get a backend to fulfill a request
-func (m *Schema) ChooseBackend() {
-
+func (m *Schema) ChooseBackend() string {
+	if m.Address != "" {
+		return m.Address
+	}
+	// ELSE:   round-robbin?   hostpool?
+	return m.Address
 }
 
 func NewTable(table string) *Table {
@@ -49,6 +58,7 @@ func NewTable(table string) *Table {
 	}
 	return t
 }
+
 func (m *Table) DescribeResultset() *mysql.Resultset {
 	rs := new(mysql.Resultset)
 	rs.Fields = mysql.DescribeHeaders

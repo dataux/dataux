@@ -77,7 +77,7 @@ func (m *SqlToEs) Host() string {
 	return "http://localhost:9200"
 }
 
-func (m *SqlToEs) Query(req *expr.SqlSelect) (*Response, error) {
+func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 
 	var err error
 	m.sel = req
@@ -165,7 +165,7 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*Response, error) {
 		return nil, fmt.Errorf("No response, error fetching elasticsearch query")
 	}
 
-	resp := &Response{Request: m}
+	resp := NewResultRows(m)
 	resp.Total = jhResp.Int("hits.total")
 	resp.Aggs = jhResp.Helper("aggregations")
 	if req.Where != nil {

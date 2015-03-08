@@ -19,10 +19,16 @@ type Result struct {
 }
 
 type Resultset struct {
-	Fields     []*Field
-	FieldNames map[string]int
-	Values     [][]interface{}
-	RowDatas   []RowData
+	Fields     []*Field        // List of fields in this result set
+	FieldNames map[string]int  // List of name, to position in column list
+	Values     [][]interface{} // row-results
+	RowDatas   []RowData       // The serialized mysql byte value of a row
+}
+
+func NewResultSet() *Resultset {
+	return &Resultset{
+		FieldNames: make(map[string]int),
+	}
 }
 
 type RowData []byte

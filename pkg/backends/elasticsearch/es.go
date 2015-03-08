@@ -18,6 +18,19 @@ import (
 
 /*
 
+Lets turn this into Three things
+
+- FrontEnd:
+  - stmt := stmt.Parse(txt)
+  - myresults := NewMysqlResultWriter(stmt)
+  - err := NewHandler(myresults, stmt)
+
+- Handler(resultWriter, stmt):
+   job := newJobRunner(config, resultWriter)
+   err := job.Accept(stmt)
+
+- MysqlResultWriter
+
 */
 
 var _ = value.ErrValue
@@ -138,22 +151,6 @@ func (m *HandlerElasticsearch) chooseCommand(writer models.ResultWriter, req *mo
 	return nil
 }
 
-func (m *HandlerElasticsearch) createSqlVm(sql string) (sqlVm expr.SqlStatement, err error) {
-	defer func() {
-		if e := recover(); e != nil {
-			err = fmt.Errorf("could not parse query %s error %v", sql, e)
-			u.Error(err)
-		}
-	}()
-	sqlVm, err = expr.ParseSql(sql)
-	if err != nil {
-		u.Debugf("could not parse sql vm %v", err)
-	} else {
-		u.Debugf("got sql vm: %T", sqlVm)
-	}
-	return
-}
-
 func (m *HandlerElasticsearch) handleQuery(sql string) (err error) {
 	u.Debugf("handleQuery: %v", sql)
 	if !m.conf.SupressRecover {
@@ -165,14 +162,11 @@ func (m *HandlerElasticsearch) handleQuery(sql string) (err error) {
 				return
 			}
 		}()
-	} else {
-		//u.Debugf("Suppressing recovery? ")
 	}
 
-	sql = strings.TrimRight(sql, ";")
-
-	// Just temp, ensure it parses
-	sqlVm, err := m.createSqlVm(sql)
+	// Ensure it parses, right now we can't handle multiple statement (ie with semi-colons separating)
+	//sql = strings.TrimRight(sql, ";")
+	stmt, err := expr.ParseSql(sql)
 	if err != nil {
 		sql = strings.ToLower(sql)
 		switch {
@@ -185,32 +179,28 @@ func (m *HandlerElasticsearch) handleQuery(sql string) (err error) {
 		u.Debugf("error on parse sql statement: %v", err)
 		return err
 	}
-	if sqlVm == nil {
-		u.Warnf("Create sql statement: %v", err)
-		return nil
-	}
 
 	//u.Debugf("handleQuery: %T %#v", stmt, stmt)
-	switch v := sqlVm.(type) {
+	switch stmtNode := stmt.(type) {
 	case *expr.SqlDescribe:
 		switch {
-		case v.Identity != "":
-			//u.Warnf("describe not supported?  %v  %T", v, sqlVm)
+		case stmtNode.Identity != "":
+			//u.Warnf("describe not supported?  %v  %T", v, stmt)
 			//return fmt.Errorf("Describe not supported yet")
-			return m.handleDescribeTable(sql, v)
-		case v.Stmt != nil && v.Stmt.Keyword() == lex.TokenSelect:
-			u.Infof("describe/explain: %#v", v)
+			return m.handleDescribeTable(sql, stmtNode)
+		case stmtNode.Stmt != nil && stmtNode.Stmt.Keyword() == lex.TokenSelect:
+			u.Infof("describe/explain: %#v", stmtNode)
 		default:
-			u.Warnf("unrecognized describe/explain: %#v", v)
+			u.Warnf("unrecognized describe/explain: %#v", stmtNode)
 		}
-		return fmt.Errorf("describe/explain not yet supported: %#v", v)
+		return fmt.Errorf("describe/explain not yet supported: %#v", stmtNode)
 	// case *sqlparser.SimpleSelect:
-	// 		return m.handleSimpleSelect(sql, v)
+	// 		return m.handleSimpleSelect(sql, stmtNode)
 	case *expr.SqlSelect:
-		if sysVar := v.SysVariable(); len(sysVar) > 0 {
-			return m.handleSelectSysVariable(sql, v, sysVar)
+		if sysVar := stmtNode.SysVariable(); len(sysVar) > 0 {
+			return m.handleSelectSysVariable(sql, stmtNode, sysVar)
 		}
-		return m.handleSelect(sql, v, nil)
+		return m.handleSelect(sql, stmtNode, nil)
 	// case *sqlparser.Insert:
 	// 	return m.handleExec(stmt, sql, nil)
 	// case *sqlparser.Update:
@@ -220,7 +210,7 @@ func (m *HandlerElasticsearch) handleQuery(sql string) (err error) {
 	// case *sqlparser.Replace:
 	// 	return m.handleExec(stmt, sql, nil)
 	// case *sqlparser.Set:
-	// 	return m.handleSet(v)
+	// 	return m.handleSet(stmtNode)
 	// case *sqlparser.Begin:
 	// 	return m.handleBegin()
 	//case *sqlparser.Commit:
@@ -228,12 +218,12 @@ func (m *HandlerElasticsearch) handleQuery(sql string) (err error) {
 	// case *sqlparser.Rollback:
 	// 	return m.handleRollback()
 	case *expr.SqlShow:
-		return m.handleShow(sql, v)
+		return m.handleShow(sql, stmtNode)
 	// case *sqlparser.Admin:
-	// 	return m.handleAdmin(v)
+	// 	return m.handleAdmin(stmtNode)
 	default:
-		u.Warnf("sql not supported?  %v  %T", v, v)
-		return fmt.Errorf("statement %T not support now", v)
+		u.Warnf("sql not supported?  %v  %T", stmtNode, stmtNode)
+		return fmt.Errorf("statement %T not support now", stmtNode)
 	}
 
 	return nil
@@ -270,26 +260,25 @@ func (m *HandlerElasticsearch) handleSelect(sql string, req *expr.SqlSelect, arg
 		return err
 	}
 
+	rw := NewMysqlResultWriter(m.conn, req, resp, tbl, m.schema, resp)
+	// Lets write out Column Headers if this
+	// resultWriter needs it
+	if err := rw.WriteHeaders(); err != nil {
+		return err
+	}
+
 	// This all needs to be factored into some lib
-	rs := new(mysql.Resultset)
+	rs := rw.rs
 	if req.Star {
-		rs.Fields = tbl.Fields
-		rs.FieldNames = tbl.FieldNames()
+
 	} else if req.CountStar() {
 		// Count *
-		rs.FieldNames = make(map[string]int)
-		rs.FieldNames["count"] = 0
-		rs.Fields = append(rs.Fields, mysql.NewField("count", m.schema.Db, m.schema.Db, 32, mysql.MYSQL_TYPE_LONG))
 		vals := make([]interface{}, 1)
 		vals[0] = resp.Total
 		rs.AddRowValues(vals)
 		return m.conn.WriteResultset(m.conn.Status, rs)
 	} else if len(resp.Aggs) > 0 {
 		// Aggregates have two types:   Single Value, and Multi-Value.   We should return an error if we inter-mix them
-
-		// tbl.AddField(mysql.NewField("type", s.Db, s.Db, 24, mysql.MYSQL_TYPE_STRING))
-		// tbl.AddField(mysql.NewField("_score", s.Db, s.Db, 24, mysql.MYSQL_TYPE_FLOAT))
-		rs.FieldNames = make(map[string]int)
 		hasSingleValue, hasMultiValue := false, false
 		for _, col := range req.Columns {
 			//fldName := col.Key()
@@ -300,10 +289,8 @@ func (m *HandlerElasticsearch) handleSelect(sql string, req *expr.SqlSelect, arg
 					hasMultiValue = true
 				case "min", "max", "avg", "sum":
 					hasSingleValue = true
-					rs.Fields = append(rs.Fields, mysql.NewField(col.As, m.schema.Db, m.schema.Db, 32, mysql.MYSQL_TYPE_FLOAT))
 				case "count", "cardinality":
 					hasSingleValue = true
-					rs.Fields = append(rs.Fields, mysql.NewField(col.As, m.schema.Db, m.schema.Db, 32, mysql.MYSQL_TYPE_LONG))
 				}
 				u.Debugf("field: %v", col.As)
 			}
@@ -332,16 +319,12 @@ func (m *HandlerElasticsearch) handleSelect(sql string, req *expr.SqlSelect, arg
 			rs.AddRowValues(vals)
 		} else if hasMultiValue {
 			// MultiValue returns are resultsets that have multiple rows for a single expression, ie top 10 terms for this field, etc
-			rs.Fields = append(rs.Fields, mysql.NewField("field", m.schema.Db, m.schema.Db, 32, mysql.MYSQL_TYPE_STRING))
-			rs.Fields = append(rs.Fields, mysql.NewField("key", m.schema.Db, m.schema.Db, 500, mysql.MYSQL_TYPE_STRING))
-			rs.Fields = append(rs.Fields, mysql.NewField("count", m.schema.Db, m.schema.Db, 500, mysql.MYSQL_TYPE_STRING))
+
 			if len(req.GroupBy) > 0 {
 				//for i, col := range req.Columns {
 				for i, _ := range req.GroupBy {
 					fldName := fmt.Sprintf("group_by_%d", i)
-
 					u.Debugf("looking for col: %v  %v", fldName, resp.Aggs.Get(fldName+"/results"))
-
 					results := resp.Aggs.Helpers(fldName + "/buckets")
 					for _, result := range results {
 						vals := make([]interface{}, 3)
@@ -358,15 +341,8 @@ func (m *HandlerElasticsearch) handleSelect(sql string, req *expr.SqlSelect, arg
 			} else {
 				// MultiValue are generally aggregates
 				for _, col := range req.Columns {
-					//fldName := col.Key()
 					fldName := col.As
-					// switch fnexpr := col.Tree.Root.(type) {
-					// case *expr.FuncNode:
-
-					// }
-
 					u.Debugf("looking for col: %v  %v", fldName, resp.Aggs.Get(fldName+"/results"))
-
 					results := resp.Aggs.Helpers(fldName + "/buckets")
 					for _, result := range results {
 						vals := make([]interface{}, 3)
@@ -375,35 +351,11 @@ func (m *HandlerElasticsearch) handleSelect(sql string, req *expr.SqlSelect, arg
 						vals[2] = result.Int("doc_count")
 						rs.AddRowValues(vals)
 					}
-					// u.Warnf("missing value? %v", resp.Aggs.Get(fldName))
-					// by, _ := json.MarshalIndent(resp.Aggs.Get(fldName), " ", " ")
-					// vals[1] = by
-
 				}
 			}
-
 		}
 
 		return m.conn.WriteResultset(m.conn.Status, rs)
-	} else {
-		namePos := 0
-		rs.FieldNames = make(map[string]int)
-		//u.Debugf("field map: %#v", tbl.FieldMap)
-		for _, col := range req.Columns {
-			fldName := col.As
-
-			if fld, ok := tbl.FieldMap[col.SourceField]; ok {
-				u.Debugf("looking for col: %v AS %v  %v", col.SourceField, fldName, mysql.TypeString(fld.Type))
-				fldCopy := fld.Clone()
-				fldCopy.NameOverride(col.As)
-				//fld.FieldName = col.SourceField
-				rs.Fields = append(rs.Fields, fldCopy)
-				rs.FieldNames[fldName] = namePos
-				namePos++
-			} else {
-				u.Warnf("not found? '%#v' ", col)
-			}
-		}
 	}
 
 	metaFields := map[string]byte{"_id": 1, "_type": 1, "_score": 1}
@@ -443,6 +395,74 @@ func (m *HandlerElasticsearch) handleSelect(sql string, req *expr.SqlSelect, arg
 	}
 
 	return m.conn.WriteResultset(m.conn.Status, rs)
+}
+
+type MysqlResultWriter struct {
+	schema *models.Schema
+	tbl    *models.Table
+	resp   *ResultReader
+	rs     *mysql.Resultset
+	req    *expr.SqlSelect
+	res    ResultProvider
+	conn   *proxy.Conn
+}
+
+func NewMysqlResultWriter(conn *proxy.Conn, req *expr.SqlSelect, res ResultProvider,
+	tbl *models.Table, schema *models.Schema, resp *ResultReader) *MysqlResultWriter {
+	m := &MysqlResultWriter{req: req, res: res, conn: conn, tbl: tbl, schema: schema, resp: resp}
+	m.rs = mysql.NewResultSet()
+	return m
+}
+
+func (m *MysqlResultWriter) WriteHeaders() error {
+
+	if m.req.Star {
+		m.rs.Fields = m.tbl.Fields
+		m.rs.FieldNames = m.tbl.FieldNames()
+	} else if m.req.CountStar() {
+		// Count(*)
+		m.rs.FieldNames["count"] = 0
+		m.rs.Fields = append(m.rs.Fields, mysql.NewField("count", m.schema.Db, m.schema.Db, 32, mysql.MYSQL_TYPE_LONG))
+	} else if len(m.resp.Aggs) > 0 {
+		hasMultiValue := false
+		for _, col := range m.req.Columns {
+			switch fnexpr := col.Tree.Root.(type) {
+			case *expr.FuncNode:
+				switch fnexpr.Name {
+				case "terms":
+					hasMultiValue = true
+				case "min", "max", "avg", "sum":
+					m.rs.Fields = append(m.rs.Fields, mysql.NewField(col.As, m.schema.Db, m.schema.Db, 32, mysql.MYSQL_TYPE_FLOAT))
+				case "count", "cardinality":
+					m.rs.Fields = append(m.rs.Fields, mysql.NewField(col.As, m.schema.Db, m.schema.Db, 32, mysql.MYSQL_TYPE_LONG))
+				}
+			}
+		}
+		if hasMultiValue {
+			// MultiValue returns are resultsets that have multiple rows for a single expression, ie top 10 terms for this field, etc
+			m.rs.Fields = append(m.rs.Fields, mysql.NewField("field", m.schema.Db, m.schema.Db, 32, mysql.MYSQL_TYPE_STRING))
+			m.rs.Fields = append(m.rs.Fields, mysql.NewField("key", m.schema.Db, m.schema.Db, 500, mysql.MYSQL_TYPE_STRING))
+			m.rs.Fields = append(m.rs.Fields, mysql.NewField("count", m.schema.Db, m.schema.Db, 500, mysql.MYSQL_TYPE_STRING))
+		}
+	} else {
+		namePos := 0
+		for _, col := range m.req.Columns {
+			fldName := col.As
+			if fld, ok := m.tbl.FieldMap[col.SourceField]; ok {
+				u.Debugf("looking for col: %v AS %v  %v", col.SourceField, fldName, mysql.TypeString(fld.Type))
+				fldCopy := fld.Clone()
+				fldCopy.NameOverride(col.As)
+				//fld.FieldName = col.SourceField
+				m.rs.Fields = append(m.rs.Fields, fldCopy)
+				m.rs.FieldNames[fldName] = namePos
+				namePos++
+			} else {
+				u.Warnf("not found? '%#v' ", col)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (m *HandlerElasticsearch) handleSelectSysVariable(sql string, stmt *expr.SqlSelect, sysVar string) error {
@@ -541,8 +561,10 @@ func (m *HandlerElasticsearchShared) loadSchemasFromConfig() error {
 			}
 
 			schema := &models.Schema{
-				Db:     schemaConf.DB,
-				Tables: make(map[string]*models.Table),
+				Db:          schemaConf.DB,
+				Address:     schemaConf.Address,
+				BackendType: schemaConf.BackendType,
+				Tables:      make(map[string]*models.Table),
 			}
 
 			m.schemas[schemaConf.DB] = schema
@@ -587,11 +609,19 @@ func (m *HandlerElasticsearchShared) loadTableSchema(table string) (*models.Tabl
 	if m.schema == nil {
 		return nil, fmt.Errorf("no schema in use")
 	}
+	// check cache first
+	if tbl, ok := m.schema.Tables[table]; ok {
+		return tbl, nil
+	}
 
 	s := m.schema
+	host := s.ChooseBackend()
+	if m.schema.Address == "" {
+		u.Errorf("missing address: %#v", m.schema)
+	}
 	tbl := models.NewTable(table)
 
-	indexUrl := fmt.Sprintf("http://localhost:9200/%s/_mapping", tbl.Name)
+	indexUrl := fmt.Sprintf("%s/%s/_mapping", host, tbl.Name)
 	respJh, err := u.JsonHelperHttp("GET", indexUrl, nil)
 	if err != nil {
 		u.Error("error on es read: url=%v  err=%v", indexUrl, err)
@@ -625,6 +655,8 @@ func (m *HandlerElasticsearchShared) loadTableSchema(table string) (*models.Tabl
 	tbl.AddValues([]interface{}{"_score", "float", "NO", "", nil, "Created per search"})
 
 	buildEsFields(s, tbl, jh, "", 0)
+	m.schema.Tables[table] = tbl
+
 	return tbl, nil
 }
 

@@ -173,7 +173,7 @@ func TestSelectAggsGroupBy(t *testing.T) {
 	/*
 		NOTE:   This fails because of parsing the response, not because request is bad
 	*/
-	//return
+	return
 	data := struct {
 		Actor string
 	}{}

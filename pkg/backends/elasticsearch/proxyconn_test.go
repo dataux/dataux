@@ -35,7 +35,8 @@ frontends [
 
 backends [
   {
-    name : node1 
+    name : node1
+    address : "http://localhost:9200"
   }
 ]
 
@@ -44,6 +45,7 @@ schemas : [
     db : es
     backends : ["node1"]
     backend_type : elasticsearch
+    address : "http://localhost:9200"
   }
 ]
 `

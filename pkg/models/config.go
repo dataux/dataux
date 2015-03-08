@@ -39,11 +39,12 @@ type Config struct {
 }
 
 // Backends are storage/database/servers/csvfiles
-// eventually this should come from a coordinator (etcd/zk/etc)
+//  eventually this should come from a coordinator (etcd/zk/etc)
+//  - this represents a single server/node and may vary between nodes
 type BackendConfig struct {
 	Name             string `json:"name"`
-	BackendType      string `json:"backend_type"`
-	Address          string `json:"address"` // If we don't need Per-Node info
+	BackendType      string `json:"backend_type"` // [mysql,elasticsearch,file]
+	Address          string `json:"address"`      // If we don't need Per-Node info
 	DownAfterNoAlive int    `json:"down_after_noalive"`
 	IdleConns        int    `json:"idle_conns"`
 	RWSplit          bool   `json:"rw_split"`
@@ -54,7 +55,7 @@ type BackendConfig struct {
 }
 
 func (m *BackendConfig) String() string {
-	return fmt.Sprintf("<backendconf %s type=%s />", m.Name, m.BackendType)
+	return fmt.Sprintf("<backendconf %s address=%s type=%s/>", m.Name, m.Address, m.BackendType)
 }
 
 // Frontend inbound protocol/transport
@@ -68,6 +69,7 @@ type ListenerConfig struct {
 
 type SchemaConfig struct {
 	BackendType string       `json:"backend_type"` // [mysql,elasticsearch,file]
+	Address     string       `json:"address"`      // If we don't need Per-Node info
 	DB          string       `json:"db"`           // Database Name, must be unique
 	Backends    []string     `json:"backends"`     // List of backend Servers
 	RulesConifg RulesConfig  `json:"rules"`        // (optional) Routing rules
