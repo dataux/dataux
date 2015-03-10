@@ -158,7 +158,7 @@ schemas : [
 		t.Fatal("schema must equal")
 	}
 
-	if conf.LogLevel != "error" || conf.User != "root" || conf.Password != "" || conf.Addr != "127.0.0.1:4000" {
+	if conf.LogLevel != "error" {
 		t.Fatal("Top Config not equal.")
 	}
 }

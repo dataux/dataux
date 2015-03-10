@@ -1,12 +1,10 @@
 package elasticsearch
 
 import (
-	//"encoding/json"
 	"fmt"
 	"strings"
 
 	u "github.com/araddon/gou"
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/value"
@@ -57,31 +55,36 @@ type Stmt interface {
 // Sql To Elasticsearch Request Object
 //   Map sql queries into Elasticsearch Json Requests
 type SqlToEs struct {
-	host    string
-	Table   *models.Table
-	sel     *expr.SqlSelect
-	schema  *models.Schema
-	ctx     *datasource.ContextSimple
-	filter  esMap
-	aggs    esMap
-	groupby esMap
-	innergb esMap // InnerMost Group By
-	sort    []esMap
+	//ctx            *datasource.ContextSimple
+	host           string
+	tbl            *models.Table
+	sel            *expr.SqlSelect
+	schema         *models.Schema
+	filter         esMap
+	aggs           esMap
+	groupby        esMap
+	innergb        esMap // InnerMost Group By
+	sort           []esMap
+	hasMultiValue  bool // Multi-Value vs Single-Value aggs
+	hasSingleValue bool // single value agg
 }
 
 func NewSqlToEs(table *models.Table) *SqlToEs {
-	return &SqlToEs{Table: table, host: "http://localhost:9200"}
+	return &SqlToEs{
+		tbl:  table,
+		host: "http://localhost:9200",
+	}
 }
 
 func (m *SqlToEs) Host() string {
-	return "http://localhost:9200"
+	u.Warnf("TODO:  replace hardcoded es host")
+	return m.host
 }
 
 func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 
 	var err error
 	m.sel = req
-	m.ctx = datasource.NewContextSimple()
 	if req.Limit == 0 {
 		req.Limit = DefaultLimit
 	}
@@ -133,11 +136,6 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	}
 	u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
 	if len(m.sel.OrderBy) > 0 {
-		/*
-			"sort" : [
-			    {"price" : {"order" : "asc", "mode" : "avg"}}
-			]
-		*/
 		m.sort = make([]esMap, len(m.sel.OrderBy))
 		esReq["sort"] = m.sort
 		for i, col := range m.sel.OrderBy {
@@ -153,7 +151,7 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	}
 
 	// TODO:  hostpool
-	query := fmt.Sprintf("%s/%s/_search?size=%d", m.Host(), m.Table.Name, req.Limit)
+	query := fmt.Sprintf("%s/%s/_search?size=%d", m.Host(), m.tbl.Name, req.Limit)
 
 	u.Infof("%v   filter=%v   \n\n%s", esReq, m.filter, u.JsonHelper(esReq).PrettyJson())
 	jhResp, err := u.JsonHelperHttp("POST", query, esReq)
@@ -165,7 +163,7 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 		return nil, fmt.Errorf("No response, error fetching elasticsearch query")
 	}
 
-	resp := NewResultRows(m)
+	resp := NewResultReader(m)
 	resp.Total = jhResp.Int("hits.total")
 	resp.Aggs = jhResp.Helper("aggregations")
 	if req.Where != nil {
@@ -181,7 +179,7 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	resp.Docs = jhResp.Helpers("hits.hits")
 
 	//u.Debugf("%s", jhResp.PrettyJson())
-	u.Debugf("%s", resp.Aggs.PrettyJson())
+	//u.Debugf("%s", resp.Aggs.PrettyJson())
 	u.Debugf("doc.ct = %v", len(resp.Docs))
 
 	// if scrollId, ok := jhResp.StringSafe("_scroll_id"); !ok {
@@ -190,6 +188,7 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	// } else {
 	// 	resp.ScrollId = scrollId
 	// }
+	resp.Finalize()
 
 	return resp, nil
 }
@@ -248,7 +247,7 @@ func (m *SqlToEs) WalkSelectList() error {
 //
 func (m *SqlToEs) WalkGroupBy() error {
 
-	for _, col := range m.sel.GroupBy {
+	for i, col := range m.sel.GroupBy {
 		if col.Tree != nil {
 			node := col.Tree.Root
 			if node != nil {
@@ -261,7 +260,7 @@ func (m *SqlToEs) WalkGroupBy() error {
 					u.Infof("gb: %s  %s", fld, u.JsonHelper(esm).PrettyJson())
 					if err == nil {
 						if len(m.innergb) > 0 {
-							esm["aggs"] = esMap{"group_by": m.innergb}
+							esm["aggs"] = esMap{fmt.Sprintf("group_by_%d", i): m.innergb}
 							// esm["aggs"] = esMap{"group_by_" + fld: m.innergb}
 						} else {
 							esm = esm
@@ -363,8 +362,8 @@ func (m *SqlToEs) walkFilterTri(node *expr.TriNode, q *esMap) (value.Value, erro
 
 	arg1val, aok := vm.Eval(nil, node.Args[0])
 	//u.Debugf("arg1? %v  ok?%v", arg1val, aok)
-	arg2val, bok := vm.Eval(m.ctx, node.Args[1])
-	arg3val, cok := vm.Eval(m.ctx, node.Args[2])
+	arg2val, bok := vm.Eval(nil, node.Args[1])
+	arg3val, cok := vm.Eval(nil, node.Args[2])
 	u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
 	if !aok || !bok || !cok {
 		return nil, fmt.Errorf("Could not evaluate args: %v", node.StringAST())
@@ -403,7 +402,7 @@ func (m *SqlToEs) walkMultiFilter(node *expr.MultiArgNode, q *esMap) (value.Valu
 		*q = esMap{"terms": esMap{fldName: terms}}
 		for i := 1; i < len(node.Args); i++ {
 			// Do we eval here?
-			v, ok := vm.Eval(m.ctx, node.Args[i])
+			v, ok := vm.Eval(nil, node.Args[i])
 			if ok {
 				u.Debugf("in? %T %v value=%v", v, v, v.Value())
 				terms[i-1] = v.Value()
@@ -559,6 +558,7 @@ func (m *SqlToEs) walkFilterFunc(node *expr.FuncNode, q *esMap) (value.Value, er
 func (m *SqlToEs) walkAggFunc(node *expr.FuncNode) (q esMap, _ error) {
 	switch funcName := strings.ToLower(node.Name); funcName {
 	case "max", "min", "avg", "sum", "cardinality":
+		m.hasSingleValue = true
 		if len(node.Args) != 1 {
 			return nil, fmt.Errorf("Invalid func")
 		}
@@ -569,7 +569,7 @@ func (m *SqlToEs) walkAggFunc(node *expr.FuncNode) (q esMap, _ error) {
 		// "min_price" : { "min" : { "field" : "price" } }
 		q = esMap{funcName: esMap{"field": val.ToString()}}
 	case "terms":
-
+		m.hasMultiValue = true
 		// "products" : { "terms" : {"field" : "product", "size" : 5 }}
 
 		if len(node.Args) == 0 || len(node.Args) > 2 {
@@ -592,6 +592,7 @@ func (m *SqlToEs) walkAggFunc(node *expr.FuncNode) (q esMap, _ error) {
 		}
 
 	case "count":
+		m.hasSingleValue = true
 		u.Debugf("how do we want to use count(*)?  hit.hits?   or exists()?")
 		val, ok := eval(node.Args[0])
 		if !ok {

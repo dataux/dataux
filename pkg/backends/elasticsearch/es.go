@@ -3,17 +3,17 @@ package elasticsearch
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/araddon/qlbridge/lex"
-	"github.com/kr/pretty"
 	"sort"
 	"strings"
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/expr"
+	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/models"
 	"github.com/dataux/dataux/vendor/mixer/mysql"
 	"github.com/dataux/dataux/vendor/mixer/proxy"
+	"github.com/kr/pretty"
 )
 
 /*
@@ -260,209 +260,18 @@ func (m *HandlerElasticsearch) handleSelect(sql string, req *expr.SqlSelect, arg
 		return err
 	}
 
-	rw := NewMysqlResultWriter(m.conn, req, resp, tbl, m.schema, resp)
+	rw := NewMysqlResultWriter(m.conn, req, resp, es)
 	// Lets write out Column Headers if this
 	// resultWriter needs it
 	if err := rw.WriteHeaders(); err != nil {
 		return err
 	}
 
-	// This all needs to be factored into some lib
-	rs := rw.rs
-	if req.Star {
-
-	} else if req.CountStar() {
-		// Count *
-		vals := make([]interface{}, 1)
-		vals[0] = resp.Total
-		rs.AddRowValues(vals)
-		return m.conn.WriteResultset(m.conn.Status, rs)
-	} else if len(resp.Aggs) > 0 {
-		// Aggregates have two types:   Single Value, and Multi-Value.   We should return an error if we inter-mix them
-		hasSingleValue, hasMultiValue := false, false
-		for _, col := range req.Columns {
-			//fldName := col.Key()
-			switch fnexpr := col.Tree.Root.(type) {
-			case *expr.FuncNode:
-				switch fnexpr.Name {
-				case "terms":
-					hasMultiValue = true
-				case "min", "max", "avg", "sum":
-					hasSingleValue = true
-				case "count", "cardinality":
-					hasSingleValue = true
-				}
-				u.Debugf("field: %v", col.As)
-			}
-		}
-		if hasMultiValue && hasSingleValue {
-			return fmt.Errorf("Must not mix single value and multi-value aggs")
-		}
-		if hasSingleValue {
-			vals := make([]interface{}, len(req.Columns))
-			for i, col := range req.Columns {
-				fldName := col.Key()
-				if col.Tree != nil && col.Tree.Root != nil {
-					u.Debugf("col: %v", col.Tree.Root.StringAST())
-				}
-
-				if col.CountStar() {
-					u.Debugf("found count star")
-					vals[i] = resp.Total
-				} else {
-					u.Debugf("looking for col: %v %v %v", fldName, resp.Aggs.Get(fldName+"/value"))
-					vals[i] = resp.Aggs.Get(fldName + "/value")
-				}
-
-			}
-			u.Debugf("write result: %v", vals)
-			rs.AddRowValues(vals)
-		} else if hasMultiValue {
-			// MultiValue returns are resultsets that have multiple rows for a single expression, ie top 10 terms for this field, etc
-
-			if len(req.GroupBy) > 0 {
-				//for i, col := range req.Columns {
-				for i, _ := range req.GroupBy {
-					fldName := fmt.Sprintf("group_by_%d", i)
-					u.Debugf("looking for col: %v  %v", fldName, resp.Aggs.Get(fldName+"/results"))
-					results := resp.Aggs.Helpers(fldName + "/buckets")
-					for _, result := range results {
-						vals := make([]interface{}, 3)
-						vals[0] = fldName
-						vals[1] = result.String("key")
-						vals[2] = result.Int("doc_count")
-						rs.AddRowValues(vals)
-					}
-					u.Warnf("missing value? %v", resp.Aggs.Get(fldName))
-					// by, _ := json.MarshalIndent(resp.Aggs.Get(fldName), " ", " ")
-					// vals[1] = by
-
-				}
-			} else {
-				// MultiValue are generally aggregates
-				for _, col := range req.Columns {
-					fldName := col.As
-					u.Debugf("looking for col: %v  %v", fldName, resp.Aggs.Get(fldName+"/results"))
-					results := resp.Aggs.Helpers(fldName + "/buckets")
-					for _, result := range results {
-						vals := make([]interface{}, 3)
-						vals[0] = fldName
-						vals[1] = result.String("key")
-						vals[2] = result.Int("doc_count")
-						rs.AddRowValues(vals)
-					}
-				}
-			}
-		}
-
-		return m.conn.WriteResultset(m.conn.Status, rs)
+	if err := rw.Finalize(); err != nil {
+		u.Error(err)
+		return err
 	}
-
-	metaFields := map[string]byte{"_id": 1, "_type": 1, "_score": 1}
-
-	for _, doc := range resp.Docs {
-		if len(doc) > 0 {
-			//by, _ := json.MarshalIndent(doc, " ", " ")
-			//u.Debugf("doc: %v", string(by))
-			vals := make([]interface{}, len(rs.Fields))
-			for fldI, fld := range rs.Fields {
-				key := "_source." + fld.FieldName
-				if _, ok := metaFields[fld.FieldName]; ok {
-					key = fld.FieldName
-				}
-				//u.Debugf("field: %s type=%v key='%s' %v", fld.Name, mysql.TypeString(fld.Type), key, doc.String(key))
-				switch fld.Type {
-				case mysql.MYSQL_TYPE_STRING:
-					vals[fldI] = doc.String(key)
-				case mysql.MYSQL_TYPE_DATETIME:
-					vals[fldI] = doc.String(key)
-				case mysql.MYSQL_TYPE_LONG:
-					vals[fldI] = doc.Int64(key)
-				case mysql.MYSQL_TYPE_FLOAT:
-					vals[fldI] = doc.Float64(key)
-				case mysql.MYSQL_TYPE_BLOB:
-					u.Debugf("blob?  %v", key)
-					if docVal := doc.Get(key); docVal != nil {
-						by, _ := json.Marshal(docVal)
-						vals[fldI] = string(by)
-					}
-				default:
-					u.Warnf("unrecognized type: %v", fld.String())
-				}
-			}
-			rs.AddRowValues(vals)
-		}
-	}
-
-	return m.conn.WriteResultset(m.conn.Status, rs)
-}
-
-type MysqlResultWriter struct {
-	schema *models.Schema
-	tbl    *models.Table
-	resp   *ResultReader
-	rs     *mysql.Resultset
-	req    *expr.SqlSelect
-	res    ResultProvider
-	conn   *proxy.Conn
-}
-
-func NewMysqlResultWriter(conn *proxy.Conn, req *expr.SqlSelect, res ResultProvider,
-	tbl *models.Table, schema *models.Schema, resp *ResultReader) *MysqlResultWriter {
-	m := &MysqlResultWriter{req: req, res: res, conn: conn, tbl: tbl, schema: schema, resp: resp}
-	m.rs = mysql.NewResultSet()
-	return m
-}
-
-func (m *MysqlResultWriter) WriteHeaders() error {
-
-	if m.req.Star {
-		m.rs.Fields = m.tbl.Fields
-		m.rs.FieldNames = m.tbl.FieldNames()
-	} else if m.req.CountStar() {
-		// Count(*)
-		m.rs.FieldNames["count"] = 0
-		m.rs.Fields = append(m.rs.Fields, mysql.NewField("count", m.schema.Db, m.schema.Db, 32, mysql.MYSQL_TYPE_LONG))
-	} else if len(m.resp.Aggs) > 0 {
-		hasMultiValue := false
-		for _, col := range m.req.Columns {
-			switch fnexpr := col.Tree.Root.(type) {
-			case *expr.FuncNode:
-				switch fnexpr.Name {
-				case "terms":
-					hasMultiValue = true
-				case "min", "max", "avg", "sum":
-					m.rs.Fields = append(m.rs.Fields, mysql.NewField(col.As, m.schema.Db, m.schema.Db, 32, mysql.MYSQL_TYPE_FLOAT))
-				case "count", "cardinality":
-					m.rs.Fields = append(m.rs.Fields, mysql.NewField(col.As, m.schema.Db, m.schema.Db, 32, mysql.MYSQL_TYPE_LONG))
-				}
-			}
-		}
-		if hasMultiValue {
-			// MultiValue returns are resultsets that have multiple rows for a single expression, ie top 10 terms for this field, etc
-			m.rs.Fields = append(m.rs.Fields, mysql.NewField("field", m.schema.Db, m.schema.Db, 32, mysql.MYSQL_TYPE_STRING))
-			m.rs.Fields = append(m.rs.Fields, mysql.NewField("key", m.schema.Db, m.schema.Db, 500, mysql.MYSQL_TYPE_STRING))
-			m.rs.Fields = append(m.rs.Fields, mysql.NewField("count", m.schema.Db, m.schema.Db, 500, mysql.MYSQL_TYPE_STRING))
-		}
-	} else {
-		namePos := 0
-		for _, col := range m.req.Columns {
-			fldName := col.As
-			if fld, ok := m.tbl.FieldMap[col.SourceField]; ok {
-				u.Debugf("looking for col: %v AS %v  %v", col.SourceField, fldName, mysql.TypeString(fld.Type))
-				fldCopy := fld.Clone()
-				fldCopy.NameOverride(col.As)
-				//fld.FieldName = col.SourceField
-				m.rs.Fields = append(m.rs.Fields, fldCopy)
-				m.rs.FieldNames[fldName] = namePos
-				namePos++
-			} else {
-				u.Warnf("not found? '%#v' ", col)
-			}
-		}
-	}
-
-	return nil
+	return m.conn.WriteResultset(m.conn.Status, rw.rs)
 }
 
 func (m *HandlerElasticsearch) handleSelectSysVariable(sql string, stmt *expr.SqlSelect, sysVar string) error {
@@ -619,7 +428,7 @@ func (m *HandlerElasticsearchShared) loadTableSchema(table string) (*models.Tabl
 	if m.schema.Address == "" {
 		u.Errorf("missing address: %#v", m.schema)
 	}
-	tbl := models.NewTable(table)
+	tbl := models.NewTable(table, m.schema)
 
 	indexUrl := fmt.Sprintf("%s/%s/_mapping", host, tbl.Name)
 	respJh, err := u.JsonHelperHttp("GET", indexUrl, nil)
@@ -643,12 +452,15 @@ func (m *HandlerElasticsearchShared) loadTableSchema(table string) (*models.Tabl
 	}
 
 	jh := respJh.Helper(indexType)
-	u.Debugf("resp: %v", jh)
+	//u.Debugf("resp: %v", jh)
 	jh = jh.Helper("properties")
 
-	tbl.AddField(mysql.NewField("_id", s.Db, s.Db, 24, mysql.MYSQL_TYPE_STRING))
-	tbl.AddField(mysql.NewField("type", s.Db, s.Db, 24, mysql.MYSQL_TYPE_STRING))
-	tbl.AddField(mysql.NewField("_score", s.Db, s.Db, 24, mysql.MYSQL_TYPE_FLOAT))
+	// tbl.AddField(mysql.NewField("_id", s.Db, s.Db, 24, mysql.MYSQL_TYPE_STRING))
+	// tbl.AddField(mysql.NewField("type", s.Db, s.Db, 24, mysql.MYSQL_TYPE_STRING))
+	// tbl.AddField(mysql.NewField("_score", s.Db, s.Db, 24, mysql.MYSQL_TYPE_FLOAT))
+	tbl.AddField(models.NewField("_id", value.StringType, 24, "AUTOGEN"))
+	tbl.AddField(models.NewField("type", value.StringType, 24, "tbd"))
+	tbl.AddField(models.NewField("_score", value.NumberType, 24, "Created per Search By Elasticsearch"))
 
 	tbl.AddValues([]interface{}{"_id", "string", "NO", "PRI", "AUTOGEN", ""})
 	tbl.AddValues([]interface{}{"type", "string", "NO", "", nil, "tbd"})
@@ -667,27 +479,33 @@ func buildEsFields(s *models.Schema, tbl *models.Table, jh u.JsonHelper, prefix 
 			jb, _ := json.Marshal(h)
 			//jb, _ := json.MarshalIndent(h, " ", " ")
 			fieldName := prefix + field
-			var fld *mysql.Field
+			var fld *models.Field
 			//u.Infof("%v %v", fieldName, h)
 			switch esType := h.String("type"); esType {
 			case "boolean":
 				tbl.AddValues([]interface{}{fieldName, esType, "YES", "", nil, jb})
-				fld = mysql.NewField(fieldName, s.Db, s.Db, 1, mysql.MYSQL_TYPE_TINY)
+				//fld = mysql.NewField(fieldName, s.Db, s.Db, 1, mysql.MYSQL_TYPE_TINY)
+				fld = models.NewField(fieldName, value.BoolType, 1, string(jb))
 			case "string":
 				tbl.AddValues([]interface{}{fieldName, esType, "YES", "", nil, jb})
-				fld = mysql.NewField(fieldName, s.Db, s.Db, 512, mysql.MYSQL_TYPE_STRING)
+				//fld = mysql.NewField(fieldName, s.Db, s.Db, 512, mysql.MYSQL_TYPE_STRING)
+				fld = models.NewField(fieldName, value.StringType, 512, string(jb))
 			case "date":
 				tbl.AddValues([]interface{}{fieldName, esType, "YES", "", nil, jb})
-				fld = mysql.NewField(fieldName, s.Db, s.Db, 32, mysql.MYSQL_TYPE_DATETIME)
+				//fld = mysql.NewField(fieldName, s.Db, s.Db, 32, mysql.MYSQL_TYPE_DATETIME)
+				fld = models.NewField(fieldName, value.TimeType, 4, string(jb))
 			case "int", "long", "integer":
 				tbl.AddValues([]interface{}{fieldName, esType, "YES", "", nil, jb})
-				fld = mysql.NewField(fieldName, s.Db, s.Db, 64, mysql.MYSQL_TYPE_LONG)
+				//fld = mysql.NewField(fieldName, s.Db, s.Db, 64, mysql.MYSQL_TYPE_LONG)
+				fld = models.NewField(fieldName, value.IntType, 8, string(jb))
 			case "nested":
 				tbl.AddValues([]interface{}{fieldName, esType, "YES", "", nil, jb})
-				fld = mysql.NewField(fieldName, s.Db, s.Db, 2000, mysql.MYSQL_TYPE_BLOB)
+				//fld = mysql.NewField(fieldName, s.Db, s.Db, 2000, mysql.MYSQL_TYPE_BLOB)
+				fld = models.NewField(fieldName, value.StringType, 2000, string(jb))
 			default:
 				tbl.AddValues([]interface{}{fieldName, "object", "YES", "", nil, `{"type":"object"}`})
-				fld = mysql.NewField(fieldName, s.Db, s.Db, 2000, mysql.MYSQL_TYPE_BLOB)
+				//fld = mysql.NewField(fieldName, s.Db, s.Db, 2000, mysql.MYSQL_TYPE_BLOB)
+				fld = models.NewField(fieldName, value.StringType, 2000, `{"type":"object"}`)
 				props := h.Helper("properties")
 				if len(props) > 0 {
 					buildEsFields(s, tbl, props, fieldName+".", depth+1)
