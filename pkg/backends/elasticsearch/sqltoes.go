@@ -56,7 +56,6 @@ type Stmt interface {
 //   Map sql queries into Elasticsearch Json Requests
 type SqlToEs struct {
 	//ctx            *datasource.ContextSimple
-	host           string
 	tbl            *models.Table
 	sel            *expr.SqlSelect
 	schema         *models.Schema
@@ -71,14 +70,14 @@ type SqlToEs struct {
 
 func NewSqlToEs(table *models.Table) *SqlToEs {
 	return &SqlToEs{
-		tbl:  table,
-		host: "http://localhost:9200",
+		tbl:    table,
+		schema: table.Schema,
 	}
 }
 
 func (m *SqlToEs) Host() string {
-	u.Warnf("TODO:  replace hardcoded es host")
-	return m.host
+	//u.Warnf("TODO:  replace hardcoded es host")
+	return m.schema.ChooseBackend()
 }
 
 func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {

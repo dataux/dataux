@@ -53,7 +53,9 @@ func (m *MysqlResultWriter) WriteHeaders() error {
 
 	s := m.req.schema
 	tbl := m.req.tbl
-
+	if s == nil {
+		panic("no schema")
+	}
 	if m.sql.Star {
 		m.rs.Fields = tbl.FieldsMySql
 		m.rs.FieldNames = tbl.FieldPositions
@@ -98,7 +100,7 @@ func (m *MysqlResultWriter) WriteHeaders() error {
 			}
 		}
 	}
-	u.Warnf("writeheaders: %#v", m.rs.FieldNames)
+	u.Debugf("writeheaders: %#v", m.rs.FieldNames)
 	return nil
 }
 
@@ -141,6 +143,12 @@ type ValsMessage struct {
 func (m ValsMessage) Key() uint64       { return m.id }
 func (m ValsMessage) Body() interface{} { return m.vals }
 
+type ResultColumn struct {
+	Name string          // Original path/name for query field
+	Pos  int             // Ordinal position in sql statement
+	Type value.ValueType // Type
+}
+
 // Elasticsearch ResultReader
 // - driver.Rows
 // - ??  how do we get schema?
@@ -148,7 +156,7 @@ type ResultReader struct {
 	exit     <-chan bool
 	cursor   int
 	colnames []string
-	Cols     map[string]value.ValueType
+	Cols     []*ResultColumn
 	Docs     []u.JsonHelper
 	Vals     [][]interface{}
 	Total    int
@@ -167,40 +175,42 @@ func (m *ResultReader) Close() error      { return nil }
 func (m *ResultReader) Columns() []string { return m.colnames }
 func (m *ResultReader) buildColumns() {
 
-	m.Cols = make(map[string]value.ValueType)
+	m.Cols = make([]*ResultColumn, 0)
 	sql := m.Req.sel
 	if sql.Star {
 		// Select Each field, grab fields from Table Schema
 		for _, fld := range m.Req.tbl.Fields {
-			m.Cols[fld.Name] = fld.Type
+			m.Cols = append(m.Cols, &ResultColumn{fld.Name, len(m.Cols), fld.Type})
 		}
 	} else if sql.CountStar() {
 		// Count *
-		m.Cols["count"] = value.IntType
+		m.Cols = append(m.Cols, &ResultColumn{"count", len(m.Cols), value.IntType})
 	} else if len(m.Aggs) > 0 {
 		if m.Req.hasSingleValue {
 			for _, col := range sql.Columns {
 				if col.CountStar() {
-					m.Cols[col.Key()] = value.IntType
+					m.Cols = append(m.Cols, &ResultColumn{col.Key(), len(m.Cols), value.IntType})
 				} else {
-					m.Cols[col.Key()] = value.IntType
+					u.Debugf("why Aggs? %#v", col)
+					m.Cols = append(m.Cols, &ResultColumn{col.Key(), len(m.Cols), value.IntType})
 				}
 			}
 		} else if m.Req.hasMultiValue {
 			// MultiValue returns are resultsets that have multiple rows for a single expression, ie top 10 terms for this field, etc
 			// if len(sql.GroupBy) > 0 {
-			m.Cols["field_name"] = value.StringType // We store the Field Name Here
-			m.Cols["key"] = value.StringType        // the value of the field
-			m.Cols["count"] = value.IntType
+			// We store the Field Name Here
+			u.Debugf("why MultiValue Aggs? %#v", m.Req)
+			m.Cols = append(m.Cols, &ResultColumn{"field_name", len(m.Cols), value.StringType})
+			m.Cols = append(m.Cols, &ResultColumn{"key", len(m.Cols), value.StringType}) // the value of the field
+			m.Cols = append(m.Cols, &ResultColumn{"count", len(m.Cols), value.IntType})
 		}
 	} else {
 		for _, col := range m.Req.sel.Columns {
-
 			if fld, ok := m.Req.tbl.FieldMap[col.SourceField]; ok {
-				u.Infof("column: %#v", col)
-				m.Cols[col.Key()] = fld.Type
+				u.Debugf("column: %#v", col)
+				m.Cols = append(m.Cols, &ResultColumn{col.SourceField, len(m.Cols), fld.Type})
 			} else {
-				u.Warnf("Could not find: %v", col.String())
+				u.Debugf("Could not find: %v", col.String())
 			}
 		}
 	}
@@ -226,7 +236,7 @@ func (m *ResultReader) Finalize() error {
 	m.buildColumns()
 
 	defer func() {
-		u.Warnf("nice, finalize vals in ResultReader: %v", len(m.Vals))
+		u.Debugf("nice, finalize vals in ResultReader: %v", len(m.Vals))
 	}()
 
 	sql := m.Req.sel
@@ -281,7 +291,7 @@ func (m *ResultReader) Finalize() error {
 						vals[2] = result.Int("doc_count")
 						m.Vals = append(m.Vals, vals)
 					}
-					u.Warnf("missing value? %v", m.Aggs.Get(fldName))
+					u.Debugf("missing value? %v", m.Aggs.Get(fldName))
 					// by, _ := json.MarshalIndent(m.Aggs.Get(fldName), " ", " ")
 					// vals[1] = by
 
@@ -319,7 +329,7 @@ func (m *ResultReader) Finalize() error {
 			if len(m.Cols) == 0 {
 				u.Errorf("WTF?  no cols? %v", m.Cols)
 			}
-			for name, valueType := range m.Cols {
+			for _, col := range m.Cols {
 				// key := "_source." + fld.FieldName
 				// if _, ok := metaFields[fld.FieldName]; ok {
 				// 	key = fld.FieldName
@@ -343,12 +353,13 @@ func (m *ResultReader) Finalize() error {
 				// default:
 				// 	u.Warnf("unrecognized type: %v", fld.String())
 				// }
-				key := "_source." + name
-				if _, ok := metaFields[name]; ok {
-					key = name
+				key := "_source." + col.Name
+				if _, ok := metaFields[col.Name]; ok {
+					key = col.Name
+					u.Debugf("looking for? %v in %#v", key, doc)
 				}
-				u.Infof("field: %s type=%v key='%s' %v", name, valueType.String(), key, doc.String(key))
-				switch valueType {
+				u.Debugf("field: %s type=%v key='%s' %v", col.Name, col.Type.String(), key, doc.String(key))
+				switch col.Type {
 				case value.StringType:
 					vals[fldI] = doc.String(key)
 				case value.TimeType:
@@ -364,7 +375,7 @@ func (m *ResultReader) Finalize() error {
 						vals[fldI] = string(by)
 					}
 				default:
-					u.Warnf("unrecognized type: %v  %T", name, valueType)
+					u.Warnf("unrecognized type: %v  %T", col.Name, col.Type)
 				}
 				fldI++
 			}

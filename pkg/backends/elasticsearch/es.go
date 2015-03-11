@@ -166,7 +166,7 @@ func (m *HandlerElasticsearch) handleQuery(sql string) (err error) {
 
 	// Ensure it parses, right now we can't handle multiple statement (ie with semi-colons separating)
 	//sql = strings.TrimRight(sql, ";")
-	stmt, err := expr.ParseSql(sql)
+	stmt, err := expr.ParseSqlVm(sql)
 	if err != nil {
 		sql = strings.ToLower(sql)
 		switch {
@@ -231,10 +231,8 @@ func (m *HandlerElasticsearch) handleQuery(sql string) (err error) {
 
 func (m *HandlerElasticsearch) handleSelect(sql string, req *expr.SqlSelect, args []interface{}) error {
 
-	// UGH, this code is horrible, it was a spike to learn
-	// what is possible with sql -> es -> sql mapping
-	// now have a better idea on limitations, etc and can start to build out a
-	// better set of code
+	// UGH, this code is horrible, it was a spike to learn but needs to be
+	//  rewritten into qlbridge.exec interfaces
 	u.Debugf("handleSelect: \n\t%v", sql)
 	if m.schema == nil {
 		u.Warnf("missing schema?  ")
@@ -261,8 +259,6 @@ func (m *HandlerElasticsearch) handleSelect(sql string, req *expr.SqlSelect, arg
 	}
 
 	rw := NewMysqlResultWriter(m.conn, req, resp, es)
-	// Lets write out Column Headers if this
-	// resultWriter needs it
 	if err := rw.WriteHeaders(); err != nil {
 		return err
 	}
