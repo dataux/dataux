@@ -80,12 +80,6 @@ func (m *Field) ToMysql(s *Schema) *mysql.Field {
 	return nil
 }
 
-/*
-	// tbl.AddField(mysql.NewField("_id", s.Db, s.Db, 24, mysql.MYSQL_TYPE_STRING))
-	// tbl.AddField(mysql.NewField("type", s.Db, s.Db, 24, mysql.MYSQL_TYPE_STRING))
-	// tbl.AddField(mysql.NewField("_score", s.Db, s.Db, 24, mysql.MYSQL_TYPE_FLOAT))
-	tbl.AddField(models.NewField("_id", value.StringType, 24, "AUTOGEN"))
-*/
 // func (m *Schema) AddTable(name string, fields map[string]value.ValueType) {
 // 	name = strings.ToLower(name)
 // 	if _, ok := m.Tables[name]; ok {

@@ -17,7 +17,7 @@ var (
 	_ exec.Visitor = (*RoutePlanner)(nil)
 )
 
-//  TODO:   move to non-elasticsearch
+//  TODO:   move to non-elasticsearch pkg
 
 // Create Job made up of sub-tasks in DAG that is the
 //  plan for execution of this query/job

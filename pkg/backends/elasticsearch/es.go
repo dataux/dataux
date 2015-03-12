@@ -117,12 +117,10 @@ func (m *HandlerElasticsearch) chooseCommand(writer models.ResultWriter, req *mo
 
 	u.Debugf("chooseCommand: %v:%v", cmd, mysql.CommandString(cmd))
 	switch cmd {
-	case mysql.COM_QUERY:
+	case mysql.COM_QUERY, mysql.COM_STMT_PREPARE:
 		return m.handleQuery(string(req.Raw))
 	case mysql.COM_PING:
 		return m.writeOK(nil)
-	case mysql.COM_STMT_PREPARE:
-		return m.handleQuery(string(req.Raw))
 		//return m.handleStmtPrepare(string(req.Raw))
 	// case mysql.COM_STMT_EXECUTE:
 	// 	return m.handleStmtExecute(req.Raw)
@@ -166,7 +164,7 @@ func (m *HandlerElasticsearch) handleQuery(sql string) (err error) {
 
 	// Ensure it parses, right now we can't handle multiple statement (ie with semi-colons separating)
 	//sql = strings.TrimRight(sql, ";")
-	stmt, err := expr.ParseSqlVm(sql)
+	stmt, err := expr.ParseSql(sql)
 	if err != nil {
 		sql = strings.ToLower(sql)
 		switch {

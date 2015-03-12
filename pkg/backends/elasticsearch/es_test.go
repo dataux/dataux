@@ -202,7 +202,6 @@ func TestSelectAggsGroupBy(t *testing.T) {
 		},
 		RowData: &data2,
 	})
-
 }
 
 func TestSelectWhereEqual(t *testing.T) {

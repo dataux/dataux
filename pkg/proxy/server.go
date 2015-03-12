@@ -51,10 +51,10 @@ type Reason struct {
 }
 
 // Running a server consists of steps
-// - setup backend nodes
+// - start backend nodes
 // - setup schemas
 // - setup plugins/transforms
-// - start listeners
+// - start listener frontends
 func NewServer(conf *models.Config) (*Server, error) {
 
 	svr := &Server{conf: conf, stop: make(chan bool)}
