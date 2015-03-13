@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	//"database/sql/driver"
+	"database/sql/driver"
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
 	//"github.com/araddon/qlbridge/exec"
@@ -14,14 +14,6 @@ import (
 	"github.com/dataux/dataux/vendor/mixer/proxy"
 )
 
-/*
-TODO:
-- Refactor MysqlResultWriter to
-
-
-
-
-*/
 var (
 	_ ResultProvider = (*ResultReader)(nil)
 
@@ -29,10 +21,40 @@ var (
 	_ datasource.DataSource = (*ResultReader)(nil)
 )
 
-// ResultProvider is a Result Interface for reading rows
-//   also provides schema
+type ValsMessage struct {
+	vals []interface{}
+	id   uint64
+}
+
+func (m ValsMessage) Key() uint64       { return m.id }
+func (m ValsMessage) Body() interface{} { return m.vals }
+
+type ResultColumn struct {
+	Name string          // Original path/name for query field
+	Pos  int             // Ordinal position in sql statement
+	Type value.ValueType // Type
+}
+
+// ResultProvider is a Result Interface for bridging between backends/frontends
+//  - Next() same as database/sql driver interface for populating values
+//  - schema, we need col/data-types to write headers, typed interfaces
 type ResultProvider interface {
-	//driver.Rows
+	// Columns returns a definition for  column
+	Columns() []*ResultColumn
+
+	// Close closes the result provider
+	Close() error
+
+	// Next is called to populate the next row of data into
+	// the provided slice. The provided slice will be the same
+	// size as the Columns() are wide.
+	//
+	// The dest slice may be populated only with
+	// a driver Value type, but excluding string.
+	// All string values must be converted to []byte.
+	//
+	// Next should return io.EOF when there are no more rows.
+	Next(dest []driver.Value) error
 }
 
 type MysqlResultWriter struct {
@@ -130,24 +152,7 @@ Source ->  Where  -> GroupBy/Counts etc  -> Projection -> ResultWriter
 
 Source ->    Projection  -> ResultWriter
 
-
-
-
 */
-
-type ValsMessage struct {
-	vals []interface{}
-	id   uint64
-}
-
-func (m ValsMessage) Key() uint64       { return m.id }
-func (m ValsMessage) Body() interface{} { return m.vals }
-
-type ResultColumn struct {
-	Name string          // Original path/name for query field
-	Pos  int             // Ordinal position in sql statement
-	Type value.ValueType // Type
-}
 
 // Elasticsearch ResultReader
 // - driver.Rows
@@ -164,6 +169,9 @@ type ResultReader struct {
 	ScrollId string
 	Req      *SqlToEs
 }
+type ResultReaderNext struct {
+	*ResultReader
+}
 
 func NewResultReader(req *SqlToEs) *ResultReader {
 	m := &ResultReader{}
@@ -171,8 +179,8 @@ func NewResultReader(req *SqlToEs) *ResultReader {
 	return m
 }
 
-func (m *ResultReader) Close() error      { return nil }
-func (m *ResultReader) Columns() []string { return m.colnames }
+func (m *ResultReader) Close() error             { return nil }
+func (m *ResultReader) Columns() []*ResultColumn { return m.Cols }
 func (m *ResultReader) buildColumns() {
 
 	m.Cols = make([]*ResultColumn, 0)
@@ -222,7 +230,7 @@ func (m *ResultReader) Open(connInfo string) (datasource.DataSource, error) {
 }
 
 func (m *ResultReader) CreateIterator(filter expr.Node) datasource.Iterator {
-	return m
+	return &ResultReaderNext{m}
 }
 
 // Finalize maps the Es Documents/results into
@@ -386,20 +394,27 @@ func (m *ResultReader) Finalize() error {
 	return nil
 }
 
-func (m *ResultReader) Next() datasource.Message {
+func (m *ResultReader) Next(row []driver.Value) error {
+	if m.cursor >= len(m.Vals) {
+		return nil
+	}
+	m.cursor++
+	u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
+	for i, val := range m.Vals[m.cursor-1] {
+		row[i] = val
+	}
+	return nil
+}
+func (m *ResultReaderNext) Next() datasource.Message {
 	select {
 	case <-m.exit:
 		return nil
 	default:
-		for {
-
-			if m.cursor >= len(m.Vals) {
-				return nil
-			}
-			m.cursor++
-			u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
-			return ValsMessage{m.Vals[m.cursor-1], uint64(m.cursor)}
+		if m.cursor >= len(m.Vals) {
+			return nil
 		}
-
+		m.cursor++
+		u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
+		return ValsMessage{m.Vals[m.cursor-1], uint64(m.cursor)}
 	}
 }
