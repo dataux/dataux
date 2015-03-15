@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"database/sql/driver"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -568,7 +569,7 @@ func (c *Conn) readResultRows(result *mysql.Result, isBinary bool) (err error) {
 		result.RowDatas = append(result.RowDatas, data)
 	}
 
-	result.Values = make([][]interface{}, len(result.RowDatas))
+	result.Values = make([][]driver.Value, len(result.RowDatas))
 
 	for i := range result.Values {
 		result.Values[i], err = result.RowDatas[i].Parse(result.Fields, isBinary)

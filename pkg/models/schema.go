@@ -1,7 +1,7 @@
 package models
 
 import (
-	//"sort"
+	"database/sql/driver"
 	"strings"
 
 	u "github.com/araddon/gou"
@@ -21,7 +21,7 @@ type Table struct {
 	FieldMap       map[string]*Field       // List of Fields, in order
 	FieldsMySql    []*mysql.Field          // Mysql types
 	FieldMapMySql  map[string]*mysql.Field // shortcut for pre-build Mysql types
-	DescribeValues [][]interface{}         // The Values that will be output for Describe
+	DescribeValues [][]driver.Value        // The Values that will be output for Describe
 	Schema         *Schema                 // The schema this is member of
 	Charset        uint16                  // Character set, default = utf8
 }
@@ -122,7 +122,7 @@ func (m *Table) DescribeResultset() *mysql.Resultset {
 	return rs
 }
 
-func (m *Table) AddValues(values []interface{}) {
+func (m *Table) AddValues(values []driver.Value) {
 	m.DescribeValues = append(m.DescribeValues, values)
 	//rowData, _ := mysql.ValuesToRowData(values, r.Fields)
 	//r.RowDatas = append(r.RowDatas, rowData)

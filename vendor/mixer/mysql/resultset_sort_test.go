@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"database/sql/driver"
 	"fmt"
 	"reflect"
 	"sort"
@@ -11,10 +12,10 @@ func TestResultsetSort(t *testing.T) {
 	r1 := new(Resultset)
 	r2 := new(Resultset)
 
-	r1.Values = [][]interface{}{
-		[]interface{}{int64(1), "a", []byte("aa")},
-		[]interface{}{int64(2), "a", []byte("bb")},
-		[]interface{}{int64(3), "c", []byte("bb")},
+	r1.Values = [][]driver.Value{
+		[]driver.Value{int64(1), "a", []byte("aa")},
+		[]driver.Value{int64(2), "a", []byte("bb")},
+		[]driver.Value{int64(3), "c", []byte("bb")},
 	}
 
 	r1.RowDatas = []RowData{
@@ -33,10 +34,10 @@ func TestResultsetSort(t *testing.T) {
 
 	sort.Sort(s)
 
-	r2.Values = [][]interface{}{
-		[]interface{}{int64(3), "c", []byte("bb")},
-		[]interface{}{int64(2), "a", []byte("bb")},
-		[]interface{}{int64(1), "a", []byte("aa")},
+	r2.Values = [][]driver.Value{
+		[]driver.Value{int64(3), "c", []byte("bb")},
+		[]driver.Value{int64(2), "a", []byte("bb")},
+		[]driver.Value{int64(1), "a", []byte("aa")},
 	}
 
 	r2.RowDatas = []RowData{
@@ -56,10 +57,10 @@ func TestResultsetSort(t *testing.T) {
 
 	sort.Sort(s)
 
-	r2.Values = [][]interface{}{
-		[]interface{}{int64(2), "a", []byte("bb")},
-		[]interface{}{int64(1), "a", []byte("aa")},
-		[]interface{}{int64(3), "c", []byte("bb")},
+	r2.Values = [][]driver.Value{
+		[]driver.Value{int64(2), "a", []byte("bb")},
+		[]driver.Value{int64(1), "a", []byte("aa")},
+		[]driver.Value{int64(3), "c", []byte("bb")},
 	}
 
 	r2.RowDatas = []RowData{
@@ -79,10 +80,10 @@ func TestResultsetSort(t *testing.T) {
 
 	sort.Sort(s)
 
-	r2.Values = [][]interface{}{
-		[]interface{}{int64(1), "a", []byte("aa")},
-		[]interface{}{int64(2), "a", []byte("bb")},
-		[]interface{}{int64(3), "c", []byte("bb")},
+	r2.Values = [][]driver.Value{
+		[]driver.Value{int64(1), "a", []byte("aa")},
+		[]driver.Value{int64(2), "a", []byte("bb")},
+		[]driver.Value{int64(3), "c", []byte("bb")},
 	}
 
 	r2.RowDatas = []RowData{

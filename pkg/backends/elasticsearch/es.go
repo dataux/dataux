@@ -1,6 +1,7 @@
 package elasticsearch
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -29,7 +30,8 @@ Lets turn this into Three things
    job := newJobRunner(config, resultWriter)
    err := job.Accept(stmt)
 
-- MysqlResultWriter
+- ResultWriter interface{}
+  - implement MysqlResultWriter
 
 */
 
@@ -248,6 +250,7 @@ func (m *HandlerElasticsearch) handleSelect(sql string, req *expr.SqlSelect, arg
 		u.Errorf("error: %v", err)
 		return fmt.Errorf("Could not find table '%v' schema", tblName)
 	}
+
 	es := NewSqlToEs(tbl)
 	u.Debugf("sqltoes: %#v", es)
 	resp, err := es.Query(req)
@@ -256,15 +259,13 @@ func (m *HandlerElasticsearch) handleSelect(sql string, req *expr.SqlSelect, arg
 		return err
 	}
 
-	rw := NewMysqlResultWriter(m.conn, req, resp, es)
-	if err := rw.WriteHeaders(); err != nil {
-		return err
-	}
+	rw := NewMysqlResultWriter(m.conn, req, resp, tbl)
 
 	if err := rw.Finalize(); err != nil {
 		u.Error(err)
 		return err
 	}
+
 	return m.conn.WriteResultset(m.conn.Status, rw.rs)
 }
 
@@ -449,16 +450,13 @@ func (m *HandlerElasticsearchShared) loadTableSchema(table string) (*models.Tabl
 	//u.Debugf("resp: %v", jh)
 	jh = jh.Helper("properties")
 
-	// tbl.AddField(mysql.NewField("_id", s.Db, s.Db, 24, mysql.MYSQL_TYPE_STRING))
-	// tbl.AddField(mysql.NewField("type", s.Db, s.Db, 24, mysql.MYSQL_TYPE_STRING))
-	// tbl.AddField(mysql.NewField("_score", s.Db, s.Db, 24, mysql.MYSQL_TYPE_FLOAT))
 	tbl.AddField(models.NewField("_id", value.StringType, 24, "AUTOGEN"))
 	tbl.AddField(models.NewField("type", value.StringType, 24, "tbd"))
 	tbl.AddField(models.NewField("_score", value.NumberType, 24, "Created per Search By Elasticsearch"))
 
-	tbl.AddValues([]interface{}{"_id", "string", "NO", "PRI", "AUTOGEN", ""})
-	tbl.AddValues([]interface{}{"type", "string", "NO", "", nil, "tbd"})
-	tbl.AddValues([]interface{}{"_score", "float", "NO", "", nil, "Created per search"})
+	tbl.AddValues([]driver.Value{"_id", "string", "NO", "PRI", "AUTOGEN", ""})
+	tbl.AddValues([]driver.Value{"type", "string", "NO", "", nil, "tbd"})
+	tbl.AddValues([]driver.Value{"_score", "float", "NO", "", nil, "Created per search"})
 
 	buildEsFields(s, tbl, jh, "", 0)
 	m.schema.Tables[table] = tbl
@@ -477,27 +475,27 @@ func buildEsFields(s *models.Schema, tbl *models.Table, jh u.JsonHelper, prefix 
 			//u.Infof("%v %v", fieldName, h)
 			switch esType := h.String("type"); esType {
 			case "boolean":
-				tbl.AddValues([]interface{}{fieldName, esType, "YES", "", nil, jb})
+				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
 				//fld = mysql.NewField(fieldName, s.Db, s.Db, 1, mysql.MYSQL_TYPE_TINY)
 				fld = models.NewField(fieldName, value.BoolType, 1, string(jb))
 			case "string":
-				tbl.AddValues([]interface{}{fieldName, esType, "YES", "", nil, jb})
+				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
 				//fld = mysql.NewField(fieldName, s.Db, s.Db, 512, mysql.MYSQL_TYPE_STRING)
 				fld = models.NewField(fieldName, value.StringType, 512, string(jb))
 			case "date":
-				tbl.AddValues([]interface{}{fieldName, esType, "YES", "", nil, jb})
+				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
 				//fld = mysql.NewField(fieldName, s.Db, s.Db, 32, mysql.MYSQL_TYPE_DATETIME)
 				fld = models.NewField(fieldName, value.TimeType, 4, string(jb))
 			case "int", "long", "integer":
-				tbl.AddValues([]interface{}{fieldName, esType, "YES", "", nil, jb})
+				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
 				//fld = mysql.NewField(fieldName, s.Db, s.Db, 64, mysql.MYSQL_TYPE_LONG)
 				fld = models.NewField(fieldName, value.IntType, 8, string(jb))
 			case "nested":
-				tbl.AddValues([]interface{}{fieldName, esType, "YES", "", nil, jb})
+				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
 				//fld = mysql.NewField(fieldName, s.Db, s.Db, 2000, mysql.MYSQL_TYPE_BLOB)
 				fld = models.NewField(fieldName, value.StringType, 2000, string(jb))
 			default:
-				tbl.AddValues([]interface{}{fieldName, "object", "YES", "", nil, `{"type":"object"}`})
+				tbl.AddValues([]driver.Value{fieldName, "object", "YES", "", nil, `{"type":"object"}`})
 				//fld = mysql.NewField(fieldName, s.Db, s.Db, 2000, mysql.MYSQL_TYPE_BLOB)
 				fld = models.NewField(fieldName, value.StringType, 2000, `{"type":"object"}`)
 				props := h.Helper("properties")

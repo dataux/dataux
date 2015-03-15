@@ -1,45 +1,47 @@
 package elasticsearch
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"io"
 
-	"database/sql/driver"
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
 	//"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
-	"github.com/dataux/dataux/vendor/mixer/mysql"
-	"github.com/dataux/dataux/vendor/mixer/proxy"
 )
 
 var (
 	_ ResultProvider = (*ResultReader)(nil)
 
+	//_ exec.JobRunner = (*ResultReader)(nil)
 	// Ensure we implement datasource.DataSource
 	_ datasource.DataSource = (*ResultReader)(nil)
 )
 
-type ValsMessage struct {
-	vals []interface{}
-	id   uint64
+/*
+
+Source ->  Where  -> GroupBy/Counts etc  -> Projection -> ResultWriter
+
+- Since we don't really need the Where, GroupBy, etc
+
+Source ->    Projection  -> ResultWriter
+
+
+type JobRunner interface {
+	Run() error
+	Close() error
 }
 
-func (m ValsMessage) Key() uint64       { return m.id }
-func (m ValsMessage) Body() interface{} { return m.vals }
-
-type ResultColumn struct {
-	Name string          // Original path/name for query field
-	Pos  int             // Ordinal position in sql statement
-	Type value.ValueType // Type
-}
+*/
 
 // ResultProvider is a Result Interface for bridging between backends/frontends
 //  - Next() same as database/sql driver interface for populating values
 //  - schema, we need col/data-types to write headers, typed interfaces
 type ResultProvider interface {
-	// Columns returns a definition for  column
+	// Columns returns a definitions for columns in this result
 	Columns() []*ResultColumn
 
 	// Close closes the result provider
@@ -57,102 +59,24 @@ type ResultProvider interface {
 	Next(dest []driver.Value) error
 }
 
-type MysqlResultWriter struct {
-	resp *ResultReader
-	rs   *mysql.Resultset
-	sql  *expr.SqlSelect
-	req  *SqlToEs
-	conn *proxy.Conn
+// implement the exec Task interface?
+type ResultWriter interface {
 }
 
-func NewMysqlResultWriter(conn *proxy.Conn, sql *expr.SqlSelect, resp *ResultReader, sqlEs *SqlToEs) *MysqlResultWriter {
-	m := &MysqlResultWriter{sql: sql, conn: conn, resp: resp, req: sqlEs}
-	m.rs = mysql.NewResultSet()
-	return m
+type ValsMessage struct {
+	vals []driver.Value
+	id   uint64
 }
 
-func (m *MysqlResultWriter) WriteHeaders() error {
+func (m ValsMessage) Key() uint64       { return m.id }
+func (m ValsMessage) Body() interface{} { return m.vals }
 
-	s := m.req.schema
-	tbl := m.req.tbl
-	if s == nil {
-		panic("no schema")
-	}
-	if m.sql.Star {
-		m.rs.Fields = tbl.FieldsMySql
-		m.rs.FieldNames = tbl.FieldPositions
-	} else if m.sql.CountStar() {
-		// Count(*)
-		m.rs.FieldNames["count"] = 0
-		m.rs.Fields = append(m.rs.Fields, mysql.NewField("count", s.Db, s.Db, 32, mysql.MYSQL_TYPE_LONG))
-	} else if len(m.resp.Aggs) > 0 {
-		for _, col := range m.sql.Columns {
-			switch fnexpr := col.Tree.Root.(type) {
-			case *expr.FuncNode:
-				switch fnexpr.Name {
-				case "terms":
-					//
-				case "min", "max", "avg", "sum":
-					m.rs.Fields = append(m.rs.Fields, mysql.NewField(col.As, s.Db, s.Db, 32, mysql.MYSQL_TYPE_FLOAT))
-				case "count", "cardinality":
-					m.rs.Fields = append(m.rs.Fields, mysql.NewField(col.As, s.Db, s.Db, 32, mysql.MYSQL_TYPE_LONG))
-				}
-			}
-		}
-		if m.req.hasMultiValue {
-			// MultiValue returns are resultsets that have multiple rows for a single expression, ie top 10 terms for this field, etc
-			m.rs.Fields = append(m.rs.Fields, mysql.NewField("field", s.Db, s.Db, 32, mysql.MYSQL_TYPE_STRING))
-			m.rs.Fields = append(m.rs.Fields, mysql.NewField("key", s.Db, s.Db, 500, mysql.MYSQL_TYPE_STRING))
-			m.rs.Fields = append(m.rs.Fields, mysql.NewField("count", s.Db, s.Db, 500, mysql.MYSQL_TYPE_STRING))
-		}
-	} else {
-		namePos := 0
-		for _, col := range m.sql.Columns {
-			fldName := col.As
-			if fld, ok := tbl.FieldMapMySql[col.SourceField]; ok {
-				u.Debugf("looking for col: %v AS %v  %v", col.SourceField, fldName, mysql.TypeString(fld.Type))
-				fldCopy := fld.Clone()
-				fldCopy.NameOverride(col.As)
-				//fld.FieldName = col.SourceField
-				m.rs.Fields = append(m.rs.Fields, fldCopy)
-				m.rs.FieldNames[fldName] = namePos
-				namePos++
-			} else {
-				u.Warnf("not found? '%#v' ", col)
-			}
-		}
-	}
-	u.Debugf("writeheaders: %#v", m.rs.FieldNames)
-	return nil
+type ResultColumn struct {
+	Name   string          // Original path/name for query field
+	Pos    int             // Ordinal position in sql statement
+	SqlCol *expr.Column    // the original sql column
+	Type   value.ValueType // Type
 }
-
-func (m *MysqlResultWriter) Finalize() error {
-	iter := m.resp.CreateIterator(nil)
-	for {
-		msg := iter.Next()
-		if msg == nil {
-			break
-		}
-		if vals, ok := msg.Body().([]interface{}); ok {
-			u.Debugf("found vals: len(fields)=%v len(vals)=%v %#v    %#v", len(m.rs.Fields), len(vals), vals, msg)
-			m.rs.AddRowValues(vals)
-		} else {
-			return fmt.Errorf("Could not conver to []interface{}")
-		}
-	}
-
-	return nil
-}
-
-/*
-
-Source ->  Where  -> GroupBy/Counts etc  -> Projection -> ResultWriter
-
-- Since we don't really need the Where, GroupBy, etc
-
-Source ->    Projection  -> ResultWriter
-
-*/
 
 // Elasticsearch ResultReader
 // - driver.Rows
@@ -163,7 +87,7 @@ type ResultReader struct {
 	colnames []string
 	Cols     []*ResultColumn
 	Docs     []u.JsonHelper
-	Vals     [][]interface{}
+	Vals     [][]driver.Value
 	Total    int
 	Aggs     u.JsonHelper
 	ScrollId string
@@ -183,24 +107,27 @@ func (m *ResultReader) Close() error             { return nil }
 func (m *ResultReader) Columns() []*ResultColumn { return m.Cols }
 func (m *ResultReader) buildColumns() {
 
+	// TODO:
+	//   - add size to the resultcolumn
+	//   - add sql column to resultcolumn
 	m.Cols = make([]*ResultColumn, 0)
 	sql := m.Req.sel
 	if sql.Star {
 		// Select Each field, grab fields from Table Schema
 		for _, fld := range m.Req.tbl.Fields {
-			m.Cols = append(m.Cols, &ResultColumn{fld.Name, len(m.Cols), fld.Type})
+			m.Cols = append(m.Cols, &ResultColumn{fld.Name, len(m.Cols), nil, fld.Type})
 		}
 	} else if sql.CountStar() {
 		// Count *
-		m.Cols = append(m.Cols, &ResultColumn{"count", len(m.Cols), value.IntType})
+		m.Cols = append(m.Cols, &ResultColumn{"count", len(m.Cols), nil, value.IntType})
 	} else if len(m.Aggs) > 0 {
 		if m.Req.hasSingleValue {
 			for _, col := range sql.Columns {
 				if col.CountStar() {
-					m.Cols = append(m.Cols, &ResultColumn{col.Key(), len(m.Cols), value.IntType})
+					m.Cols = append(m.Cols, &ResultColumn{col.Key(), len(m.Cols), col, value.IntType})
 				} else {
 					u.Debugf("why Aggs? %#v", col)
-					m.Cols = append(m.Cols, &ResultColumn{col.Key(), len(m.Cols), value.IntType})
+					m.Cols = append(m.Cols, &ResultColumn{col.Key(), len(m.Cols), col, value.IntType})
 				}
 			}
 		} else if m.Req.hasMultiValue {
@@ -208,15 +135,15 @@ func (m *ResultReader) buildColumns() {
 			// if len(sql.GroupBy) > 0 {
 			// We store the Field Name Here
 			u.Debugf("why MultiValue Aggs? %#v", m.Req)
-			m.Cols = append(m.Cols, &ResultColumn{"field_name", len(m.Cols), value.StringType})
-			m.Cols = append(m.Cols, &ResultColumn{"key", len(m.Cols), value.StringType}) // the value of the field
-			m.Cols = append(m.Cols, &ResultColumn{"count", len(m.Cols), value.IntType})
+			m.Cols = append(m.Cols, &ResultColumn{"field_name", len(m.Cols), nil, value.StringType})
+			m.Cols = append(m.Cols, &ResultColumn{"key", len(m.Cols), nil, value.StringType}) // the value of the field
+			m.Cols = append(m.Cols, &ResultColumn{"count", len(m.Cols), nil, value.IntType})
 		}
 	} else {
 		for _, col := range m.Req.sel.Columns {
 			if fld, ok := m.Req.tbl.FieldMap[col.SourceField]; ok {
 				u.Debugf("column: %#v", col)
-				m.Cols = append(m.Cols, &ResultColumn{col.SourceField, len(m.Cols), fld.Type})
+				m.Cols = append(m.Cols, &ResultColumn{col.SourceField, len(m.Cols), col, fld.Type})
 			} else {
 				u.Debugf("Could not find: %v", col.String())
 			}
@@ -249,13 +176,13 @@ func (m *ResultReader) Finalize() error {
 
 	sql := m.Req.sel
 
-	m.Vals = make([][]interface{}, 0)
+	m.Vals = make([][]driver.Value, 0)
 
 	if sql.Star {
 		// ??
 	} else if sql.CountStar() {
 		// Count *
-		vals := make([]interface{}, 1)
+		vals := make([]driver.Value, 1)
 		vals[0] = m.Total
 		m.Vals = append(m.Vals, vals)
 		return nil
@@ -265,7 +192,7 @@ func (m *ResultReader) Finalize() error {
 			return fmt.Errorf("Must not mix single value and multi-value aggs")
 		}
 		if m.Req.hasSingleValue {
-			vals := make([]interface{}, len(sql.Columns))
+			vals := make([]driver.Value, len(sql.Columns))
 			for i, col := range sql.Columns {
 				fldName := col.Key()
 				if col.Tree != nil && col.Tree.Root != nil {
@@ -293,7 +220,7 @@ func (m *ResultReader) Finalize() error {
 					u.Debugf("looking for col: %v  %v", fldName, m.Aggs.Get(fldName+"/results"))
 					results := m.Aggs.Helpers(fldName + "/buckets")
 					for _, result := range results {
-						vals := make([]interface{}, 3)
+						vals := make([]driver.Value, 3)
 						vals[0] = fldName
 						vals[1] = result.String("key")
 						vals[2] = result.Int("doc_count")
@@ -311,7 +238,7 @@ func (m *ResultReader) Finalize() error {
 					u.Debugf("looking for col: %v  %v", fldName, m.Aggs.Get(fldName+"/results"))
 					results := m.Aggs.Helpers(fldName + "/buckets")
 					for _, result := range results {
-						vals := make([]interface{}, 3)
+						vals := make([]driver.Value, 3)
 						vals[0] = fldName
 						vals[1] = result.String("key")
 						vals[2] = result.Int("doc_count")
@@ -331,7 +258,7 @@ func (m *ResultReader) Finalize() error {
 		if len(doc) > 0 {
 			//by, _ := json.MarshalIndent(doc, " ", " ")
 			//u.Debugf("doc: %v", string(by))
-			vals := make([]interface{}, len(m.Cols))
+			vals := make([]driver.Value, len(m.Cols))
 			//for fldI, fld := range rs.Fields {
 			fldI := 0
 			if len(m.Cols) == 0 {
@@ -396,7 +323,7 @@ func (m *ResultReader) Finalize() error {
 
 func (m *ResultReader) Next(row []driver.Value) error {
 	if m.cursor >= len(m.Vals) {
-		return nil
+		return io.EOF
 	}
 	m.cursor++
 	u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))

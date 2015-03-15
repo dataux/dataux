@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"database/sql/driver"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -453,7 +454,7 @@ func (c *Conn) NewEmptyResultsetOLD(stmt *sqlparser.Select) *mysql.Resultset {
 		}
 	}
 
-	r.Values = make([][]interface{}, 0)
+	r.Values = make([][]driver.Value, 0)
 	r.RowDatas = make([]mysql.RowData, 0)
 
 	return r
@@ -481,7 +482,7 @@ func (c *Conn) NewEmptyResultset(stmt *expr.SqlSelect) *mysql.Resultset {
 		}
 	}
 
-	r.Values = make([][]interface{}, 0)
+	r.Values = make([][]driver.Value, 0)
 	r.RowDatas = make([]mysql.RowData, 0)
 
 	return r

@@ -20,7 +20,7 @@ var (
 //  TODO:   move to non-elasticsearch pkg
 
 // Create Job made up of sub-tasks in DAG that is the
-//  plan for execution of this query/job
+//   plan for execution of this query/job
 func BuildSqlJob(conf *models.Config, sqlText string) (*exec.SqlJob, error) {
 
 	stmt, err := expr.ParseSqlVm(sqlText)
@@ -61,6 +61,11 @@ func NewRoutePlanner(conf *models.Config) *RoutePlanner {
 func (m *RoutePlanner) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
 	u.Debugf("VisitSelect %+v", stmt)
 
+	if sysVar := stmt.SysVariable(); len(sysVar) > 0 {
+		return m.VisitSysVariable(stmt)
+	}
+	//return m.handleSelect(sql, stmtNode, nil)
+
 	tasks := make(exec.Tasks, 0)
 	/*
 		// Create our Datasource Reader
@@ -98,6 +103,11 @@ func (m *RoutePlanner) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
 	*/
 
 	return tasks, nil
+}
+
+func (m *RoutePlanner) VisitSysVariable(stmt *expr.SqlSelect) (interface{}, error) {
+	u.Debugf("VisitSysVariable %+v", stmt)
+	return nil, exec.ErrNotImplemented
 }
 
 func (m *RoutePlanner) VisitInsert(stmt *expr.SqlInsert) (interface{}, error) {

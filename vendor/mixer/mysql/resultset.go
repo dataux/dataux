@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"bytes"
+	"database/sql/driver"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -19,10 +20,10 @@ type Result struct {
 }
 
 type Resultset struct {
-	Fields     []*Field        // List of fields in this result set
-	FieldNames map[string]int  // List of name, to position in column list
-	Values     [][]interface{} // row-results
-	RowDatas   []RowData       // The serialized mysql byte value of a row
+	Fields     []*Field         // List of fields in this result set
+	FieldNames map[string]int   // List of name, to position in column list
+	Values     [][]driver.Value // row-results
+	RowDatas   []RowData        // The serialized mysql byte value of a row
 }
 
 func NewResultSet() *Resultset {
@@ -33,7 +34,7 @@ func NewResultSet() *Resultset {
 
 type RowData []byte
 
-func (p RowData) Parse(f []*Field, binary bool) ([]interface{}, error) {
+func (p RowData) Parse(f []*Field, binary bool) ([]driver.Value, error) {
 	if binary {
 		return p.ParseBinary(f)
 	} else {
@@ -41,7 +42,7 @@ func (p RowData) Parse(f []*Field, binary bool) ([]interface{}, error) {
 	}
 }
 
-func ValuesToRowData(values []interface{}, fields []*Field) (RowData, error) {
+func ValuesToRowData(values []driver.Value, fields []*Field) (RowData, error) {
 
 	var buf bytes.Buffer
 	var err error
@@ -100,8 +101,8 @@ func ValuesToRowData(values []interface{}, fields []*Field) (RowData, error) {
 	return RowData(buf.Bytes()), nil
 }
 
-func (p RowData) ParseText(f []*Field) ([]interface{}, error) {
-	data := make([]interface{}, len(f))
+func (p RowData) ParseText(f []*Field) ([]driver.Value, error) {
+	data := make([]driver.Value, len(f))
 
 	var err error
 	var v []byte
@@ -145,8 +146,8 @@ func (p RowData) ParseText(f []*Field) ([]interface{}, error) {
 	return data, nil
 }
 
-func (p RowData) ParseBinary(f []*Field) ([]interface{}, error) {
-	data := make([]interface{}, len(f))
+func (p RowData) ParseBinary(f []*Field) ([]driver.Value, error) {
+	data := make([]driver.Value, len(f))
 
 	if p[0] != OK_HEADER {
 		return nil, ErrMalformPacket
@@ -303,7 +304,7 @@ func (r *Resultset) RowNumber() int {
 	return len(r.Values)
 }
 
-func (r *Resultset) AddRowValues(values []interface{}) {
+func (r *Resultset) AddRowValues(values []driver.Value) {
 	r.Values = append(r.Values, values)
 	rowData, _ := ValuesToRowData(values, r.Fields)
 	r.RowDatas = append(r.RowDatas, rowData)
