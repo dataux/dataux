@@ -20,6 +20,11 @@ var (
 	testDB         *client.DB
 )
 
+func init() {
+	// We need to register our DataSource provider here
+	models.DataSourceRegister("elasticsearch", NewElasticsearchDataSource)
+}
+
 var testConfigData = `
 
 supress_recover: true
@@ -33,7 +38,7 @@ frontends [
   }
 ]
 
-backends [
+sources [
   {
     name : node1
     address : "http://localhost:9200"
@@ -43,8 +48,8 @@ backends [
 schemas : [
   {
     db : es
-    backends : ["node1"]
-    backend_type : elasticsearch
+    source_nodes : ["node1"]
+    source_type : elasticsearch
     address : "http://localhost:9200"
   }
 ]
@@ -59,7 +64,10 @@ func NewTestServer(t *testing.T) *TestListenerWraper {
 		conf, err := models.LoadConfig(testConfigData)
 		assert.Tf(t, err == nil, "must load config without err: %v", err)
 
-		handler, err := NewMySqlHandler(conf)
+		svr := models.NewServerCtx(conf)
+		svr.Init()
+
+		handler, err := NewMySqlHandler(svr)
 		assert.Tf(t, err == nil, "must create es handler without err: %v", err)
 
 		// Load our Frontend Listener's

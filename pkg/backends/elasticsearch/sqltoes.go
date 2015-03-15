@@ -18,16 +18,6 @@ var (
 
 type esMap map[string]interface{}
 
-/*
-
-database/sql/driver interface
-
-type Stmt interface {
-    Query(args []Value) (Rows, error)
-}
-
-*/
-
 // Sql To Elasticsearch Request Object
 //   Map sql queries into Elasticsearch Json Requests
 type SqlToEs struct {

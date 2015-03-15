@@ -2,6 +2,7 @@ package elasticsearch
 
 import (
 	"fmt"
+	"strings"
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/exec"
@@ -20,14 +21,14 @@ var (
 
 // Create Job made up of sub-tasks in DAG that is the
 //   plan for execution of this query/job
-func BuildSqlJob(conf *models.Config, writer models.ResultWriter, sqlText string) (*exec.SqlJob, error) {
+func BuildSqlJob(svr *models.ServerCtx, writer models.ResultWriter, schemaDb, sqlText string) (*exec.SqlJob, error) {
 
 	stmt, err := expr.ParseSql(sqlText)
 	if err != nil {
 		return nil, err
 	}
 
-	builder := NewBuilder(conf, writer)
+	builder := NewBuilder(svr, writer, schemaDb)
 	ex, err := stmt.Accept(builder)
 
 	if err != nil {
@@ -47,15 +48,17 @@ func BuildSqlJob(conf *models.Config, writer models.ResultWriter, sqlText string
 // This is a Sql Plan Builder that chooses backends
 //   and routes/manages Requests
 type Builder struct {
+	schema   *models.Schema
 	writer   models.ResultWriter
-	conf     *models.Config
+	svr      *models.ServerCtx
 	where    expr.Node
 	distinct bool
 	children exec.Tasks
 }
 
-func NewBuilder(conf *models.Config, writer models.ResultWriter) *Builder {
-	m := Builder{writer: writer}
+func NewBuilder(svr *models.ServerCtx, writer models.ResultWriter, db string) *Builder {
+	m := Builder{writer: writer, svr: svr}
+	m.schema = svr.Schema(db)
 	return &m
 }
 
@@ -65,7 +68,37 @@ func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
 	if sysVar := stmt.SysVariable(); len(sysVar) > 0 {
 		return m.VisitSysVariable(stmt)
 	}
-	//return m.handleSelect(sql, stmtNode, nil)
+
+	tblName := ""
+	if len(stmt.From) > 1 {
+		return nil, fmt.Errorf("join not implemented")
+	}
+	tblName = strings.ToLower(stmt.From[0].Name)
+
+	tbl, _ := m.schema.Table(tblName)
+	if tbl == nil {
+		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Db, tblName)
+		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, tblName)
+	}
+
+	es := NewSqlToEs(tbl)
+	u.Debugf("sqltoes: %#v", es)
+	resp, err := es.Query(stmt)
+	if err != nil {
+		u.Error(err)
+		return nil, err
+	}
+
+	//u.Debugf("found : %#v", resp)
+
+	//panic("here")
+	rw := NewMysqlResultWriter(stmt, resp, tbl)
+
+	if err := rw.Finalize(); err != nil {
+		u.Error(err)
+		return nil, err
+	}
+	return nil, m.writer.WriteResult(rw.rs)
 
 	tasks := make(exec.Tasks, 0)
 	/*

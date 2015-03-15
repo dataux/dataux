@@ -1050,18 +1050,18 @@ func (m *HandlerSharded) startBackends() error {
 
 	m.nodes = make(map[string]*Node)
 
-	for _, be := range m.conf.Backends {
-		if be.BackendType == "" {
+	for _, be := range m.conf.Sources {
+		if be.SourceType == "" {
 			for _, schemaConf := range m.conf.Schemas {
-				for _, bename := range schemaConf.Backends {
+				for _, bename := range schemaConf.Nodes {
 					if bename == be.Name {
-						u.Infof("setting backendtype: %v", be.Name)
-						be.BackendType = schemaConf.BackendType
+						u.Infof("setting SourceType: %v", be.Name)
+						be.SourceType = schemaConf.SourceType
 					}
 				}
 			}
 		}
-		if be.BackendType == ListenerType {
+		if be.SourceType == ListenerType {
 			if _, ok := m.nodes[be.Name]; ok {
 				return fmt.Errorf("duplicate node '%s'", be.Name)
 			}
@@ -1081,7 +1081,7 @@ func (m *HandlerSharded) startBackends() error {
 	return nil
 }
 
-func (m *HandlerSharded) startMysqlNode(beConf *models.BackendConfig) (*Node, error) {
+func (m *HandlerSharded) startMysqlNode(beConf *models.SourceConfig) (*Node, error) {
 
 	n := new(Node)
 	//n.listener = m
@@ -1117,18 +1117,18 @@ func (m *HandlerSharded) loadSchemasFromConfig() error {
 	m.schemas = make(map[string]*SchemaSharded)
 
 	for _, schemaConf := range m.conf.Schemas {
-		if schemaConf.BackendType == "mysql" {
+		if schemaConf.SourceType == "mysql" {
 			u.Infof("parse schemas: %v", schemaConf)
 			if _, ok := m.schemas[schemaConf.DB]; ok {
 				return fmt.Errorf("duplicate schema '%s'", schemaConf.DB)
 			}
-			if len(schemaConf.Backends) == 0 {
+			if len(schemaConf.Nodes) == 0 {
 				return fmt.Errorf("schema '%s' must have at least one node", schemaConf.DB)
 			}
 
 			//mysqlBackends := make(map[string]*models.Backend)
 			mysqlNodes := make(map[string]*Node)
-			for _, n := range schemaConf.Backends {
+			for _, n := range schemaConf.Nodes {
 				if m.getNode(n) == nil {
 					return fmt.Errorf("schema '%s' node '%s' config does not exist", schemaConf.DB, n)
 				}
@@ -1153,7 +1153,7 @@ func (m *HandlerSharded) loadSchemasFromConfig() error {
 			ss.rule = rule
 			m.schemas[schemaConf.DB] = ss
 		} else {
-			u.Infof("found schema not intended for this handler; %v", schemaConf.BackendType)
+			u.Infof("found schema not intended for this handler; %v", schemaConf.SourceType)
 		}
 	}
 

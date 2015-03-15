@@ -7,7 +7,6 @@ import (
 	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/models"
 	"github.com/dataux/dataux/vendor/mixer/mysql"
-	"github.com/dataux/dataux/vendor/mixer/proxy"
 	"io"
 )
 
@@ -21,12 +20,11 @@ type MysqlResultWriter struct {
 	rs           *mysql.Resultset
 	sql          *expr.SqlSelect
 	tbl          *models.Table
-	conn         *proxy.Conn
 	wroteHeaders bool
 }
 
-func NewMysqlResultWriter(conn *proxy.Conn, sql *expr.SqlSelect, resp ResultProvider, tbl *models.Table) *MysqlResultWriter {
-	m := &MysqlResultWriter{sql: sql, conn: conn, resp: resp}
+func NewMysqlResultWriter(sql *expr.SqlSelect, resp ResultProvider, tbl *models.Table) *MysqlResultWriter {
+	m := &MysqlResultWriter{sql: sql, resp: resp}
 	m.tbl = tbl
 	m.rs = mysql.NewResultSet()
 	return m
@@ -75,6 +73,7 @@ func (m *MysqlResultWriter) Finalize() error {
 			return err
 		}
 	}
+
 	vals := make([]driver.Value, len(m.resp.Columns()))
 	for {
 
@@ -87,7 +86,6 @@ func (m *MysqlResultWriter) Finalize() error {
 		}
 		u.Debugf("vals: %v", vals)
 		m.rs.AddRowValues(vals)
-
 	}
 
 	return nil

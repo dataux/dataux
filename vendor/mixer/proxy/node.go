@@ -21,7 +21,7 @@ const (
 type Node struct {
 	sync.Mutex
 
-	cfg *models.BackendConfig
+	cfg *models.SourceConfig
 
 	// client.DB's are connection managers
 	// each client.DB represents a server/address/database combo

@@ -24,7 +24,7 @@ func (c *RuleConfig) ParseRule(db string) (*Rule, error) {
 	r.Table = c.Table
 	r.Key = c.Key
 	r.Type = c.Type
-	r.Nodes = c.Backends
+	r.Nodes = c.Nodes
 
 	if err := c.parseShard(r); err != nil {
 		return nil, err
@@ -40,7 +40,7 @@ func (c *RuleConfig) parseNodes(r *Rule) error {
 		return err
 	}
 
-	ns := c.Backends // strings.Split(c.Nodes, ",")
+	ns := c.Nodes // strings.Split(c.Nodes, ",")
 
 	nodes := map[string]struct{}{}
 

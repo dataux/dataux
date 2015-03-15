@@ -34,17 +34,17 @@ type Config struct {
 	SupressRecover bool              `json:"supress_recover"` // do we recover?
 	LogLevel       string            `json:"log_level"`       // [debug,info,error,]
 	Frontends      []*ListenerConfig `json:"frontends"`       // tcp listener configs
-	Backends       []*BackendConfig  `json:"backends"`        // backend servers (es, mysql etc)
-	Schemas        []*SchemaConfig   `json:"schemas"`         // virtual schema
+	Sources        []*SourceConfig   `json:"sources"`         // backend servers/sources (es, mysql etc)
+	Schemas        []*SchemaConfig   `json:"schemas"`         // Schemas, each backend has 1 schema
 }
 
 // Backends are storage/database/servers/csvfiles
 //  eventually this should come from a coordinator (etcd/zk/etc)
 //  - this represents a single server/node and may vary between nodes
-type BackendConfig struct {
+type SourceConfig struct {
 	Name             string `json:"name"`
-	BackendType      string `json:"backend_type"` // [mysql,elasticsearch,file]
-	Address          string `json:"address"`      // If we don't need Per-Node info
+	SourceType       string `json:"source_type"` // [mysql,elasticsearch,file]
+	Address          string `json:"address"`     // If we don't need Per-Node info
 	DownAfterNoAlive int    `json:"down_after_noalive"`
 	IdleConns        int    `json:"idle_conns"`
 	RWSplit          bool   `json:"rw_split"`
@@ -52,10 +52,11 @@ type BackendConfig struct {
 	Password         string `json:"password"`
 	Master           string `json:"master"`
 	Slave            string `json:"slave"`
+	DataSource       DataSource
 }
 
-func (m *BackendConfig) String() string {
-	return fmt.Sprintf("<backendconf %s address=%s type=%s/>", m.Name, m.Address, m.BackendType)
+func (m *SourceConfig) String() string {
+	return fmt.Sprintf("<sourceconf %s address=%s type=%s/>", m.Name, m.Address, m.SourceType)
 }
 
 // Frontend inbound protocol/transport
@@ -67,17 +68,18 @@ type ListenerConfig struct {
 	Password string `json:"password"` // optional pwd for backend
 }
 
+//
 type SchemaConfig struct {
-	BackendType string       `json:"backend_type"` // [mysql,elasticsearch,file]
+	SourceType  string       `json:"source_type"`  // [mysql,elasticsearch,file]
 	Address     string       `json:"address"`      // If we don't need Per-Node info
 	DB          string       `json:"db"`           // Database Name, must be unique
-	Backends    []string     `json:"backends"`     // List of backend Servers
+	Nodes       []string     `json:"source_nodes"` // List of backend Servers
 	RulesConifg RulesConfig  `json:"rules"`        // (optional) Routing rules
 	Properties  u.JsonHelper `json:"properties"`   // Additional properties
 }
 
 func (m *SchemaConfig) String() string {
-	return fmt.Sprintf("<schemaconf db=%s type=%s backends=%v />", m.DB, m.BackendType, m.Backends)
+	return fmt.Sprintf("<schemaconf db=%s type=%s source_nodes=%v />", m.DB, m.SourceType, m.Nodes)
 }
 
 type RulesConfig struct {
@@ -86,9 +88,9 @@ type RulesConfig struct {
 }
 
 type ShardConfig struct {
-	Table    string   `json:"table"`
-	Key      string   `json:"key"`
-	Backends []string `json:"backends"`
-	Type     string   `json:"type"`
-	Range    string   `json:"range"`
+	Table string   `json:"table"`
+	Key   string   `json:"key"`
+	Nodes []string `json:"source_nodes"`
+	Type  string   `json:"type"`
+	Range string   `json:"range"`
 }

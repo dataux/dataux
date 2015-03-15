@@ -29,13 +29,14 @@ type Table struct {
 // Schema is a collection of tables/datatypes, servers to be
 //  a single schema.  Must be same BackendType (mysql, elasticsearch)
 type Schema struct {
-	Db          string
-	BackendType string `json:"backend_type"`
-	Address     string `json:"address"` // If you have don't need per node routing
-	Nodes       map[string]*BackendConfig
-	Conf        *SchemaConfig
-	Tables      map[string]*Table
-	TableNames  []string
+	Db         string
+	SourceType string `json:"source_type"`
+	Address    string `json:"address"` // If you have don't need per node routing
+	Nodes      map[string]*SourceConfig
+	Conf       *SchemaConfig
+	Tables     map[string]*Table
+	TableNames []string
+	DataSource DataSource
 }
 
 type FieldData []byte
@@ -99,6 +100,14 @@ func (m *Schema) ChooseBackend() string {
 	}
 	// ELSE:   round-robbin?   hostpool?
 	return m.Address
+}
+
+func (m *Schema) Table(tableName string) (*Table, error) {
+	tbl := m.Tables[tableName]
+	if tbl != nil {
+		return tbl, nil
+	}
+	return m.DataSource.Table(tableName)
 }
 
 func NewTable(table string, s *Schema) *Table {

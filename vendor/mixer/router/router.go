@@ -60,24 +60,24 @@ type Router struct {
 
 func NewRouter(schemaConfig *models.SchemaConfig) (*Router, error) {
 
-	if !includeNode(schemaConfig.Backends, schemaConfig.RulesConifg.Default) {
+	if !includeNode(schemaConfig.Nodes, schemaConfig.RulesConifg.Default) {
 		return nil, fmt.Errorf("default node[%s] not in the nodes list.",
 			schemaConfig.RulesConifg.Default)
 	}
 
 	rt := new(Router)
 	rt.DB = schemaConfig.DB
-	rt.nodes = schemaConfig.Backends
+	rt.nodes = schemaConfig.Nodes
 	rt.Rules = make(map[string]*Rule, len(schemaConfig.RulesConifg.ShardRule))
 	rt.DefaultRule = NewDefaultRule(rt.DB, schemaConfig.RulesConifg.Default)
 
 	for _, shard := range schemaConfig.RulesConifg.ShardRule {
 		u.Infof("shard: %v", shard)
 		rc := &RuleConfig{shard}
-		for _, node := range shard.Backends {
+		for _, node := range shard.Nodes {
 			if !includeNode(rt.nodes, node) {
 				return nil, fmt.Errorf("shard table[%s] node[%s] not in the schema.nodes list:[%s].",
-					shard.Table, node, strings.Join(shard.Backends, ","))
+					shard.Table, node, strings.Join(shard.Nodes, ","))
 			}
 		}
 		rule, err := rc.ParseRule(rt.DB)
