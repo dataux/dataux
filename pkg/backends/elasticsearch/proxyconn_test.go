@@ -59,7 +59,7 @@ func NewTestServer(t *testing.T) *TestListenerWraper {
 		conf, err := models.LoadConfig(testConfigData)
 		assert.Tf(t, err == nil, "must load config without err: %v", err)
 
-		handler, err := NewHandlerElasticsearch(conf)
+		handler, err := NewMySqlHandler(conf)
 		assert.Tf(t, err == nil, "must create es handler without err: %v", err)
 
 		// Load our Frontend Listener's

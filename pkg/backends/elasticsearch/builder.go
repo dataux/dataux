@@ -4,38 +4,38 @@ import (
 	"fmt"
 
 	u "github.com/araddon/gou"
-	//"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/dataux/dataux/pkg/models"
+	"github.com/dataux/dataux/vendor/mixer/proxy"
 )
 
 var (
 	_ = u.EMPTY
 
 	// Ensure that we implement the Exec Visitor interface
-	_ exec.Visitor = (*RoutePlanner)(nil)
+	_ exec.Visitor = (*Builder)(nil)
+	//_ exec.JobRunner = (*Builder)(nil)
 )
-
-//  TODO:   move to non-elasticsearch pkg
 
 // Create Job made up of sub-tasks in DAG that is the
 //   plan for execution of this query/job
-func BuildSqlJob(conf *models.Config, sqlText string) (*exec.SqlJob, error) {
+func BuildSqlJob(conf *models.Config, writer models.ResultWriter, sqlText string) (*exec.SqlJob, error) {
 
-	stmt, err := expr.ParseSqlVm(sqlText)
+	stmt, err := expr.ParseSql(sqlText)
 	if err != nil {
 		return nil, err
 	}
 
-	planner := NewRoutePlanner(conf)
-	ex, err := stmt.Accept(planner)
+	builder := NewBuilder(conf, writer)
+	ex, err := stmt.Accept(builder)
 
 	if err != nil {
 		return nil, err
 	}
 	if ex == nil {
-		return nil, fmt.Errorf("No job runner? %v", sqlText)
+		// If No Error, and no Exec Tasks, then we already wrote results
+		return nil, nil
 	}
 	tasks, ok := ex.(exec.Tasks)
 	if !ok {
@@ -45,20 +45,21 @@ func BuildSqlJob(conf *models.Config, sqlText string) (*exec.SqlJob, error) {
 }
 
 // This is a Sql Plan Builder that chooses backends
-//   and routes/manages REquests
-type RoutePlanner struct {
+//   and routes/manages Requests
+type Builder struct {
+	writer   models.ResultWriter
 	conf     *models.Config
 	where    expr.Node
 	distinct bool
 	children exec.Tasks
 }
 
-func NewRoutePlanner(conf *models.Config) *RoutePlanner {
-	m := RoutePlanner{}
+func NewBuilder(conf *models.Config, writer models.ResultWriter) *Builder {
+	m := Builder{writer: writer}
 	return &m
 }
 
-func (m *RoutePlanner) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
+func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
 	u.Debugf("VisitSelect %+v", stmt)
 
 	if sysVar := stmt.SysVariable(); len(sysVar) > 0 {
@@ -105,36 +106,50 @@ func (m *RoutePlanner) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
 	return tasks, nil
 }
 
-func (m *RoutePlanner) VisitSysVariable(stmt *expr.SqlSelect) (interface{}, error) {
+func (m *Builder) VisitSysVariable(stmt *expr.SqlSelect) (interface{}, error) {
 	u.Debugf("VisitSysVariable %+v", stmt)
+	switch sysVar := stmt.SysVariable(); sysVar {
+	case "@@max_allowed_packet":
+		r, _ := proxy.BuildSimpleSelectResult(MaxAllowedPacket, []byte(sysVar), nil)
+		return nil, m.writer.WriteResult(r)
+	default:
+		u.Errorf("unknown var: %v", sysVar)
+		return nil, fmt.Errorf("Unrecognized System Variable: %v", sysVar)
+	}
 	return nil, exec.ErrNotImplemented
 }
 
-func (m *RoutePlanner) VisitInsert(stmt *expr.SqlInsert) (interface{}, error) {
+func (m *Builder) VisitInsert(stmt *expr.SqlInsert) (interface{}, error) {
 	u.Debugf("VisitInsert %+v", stmt)
 	return nil, exec.ErrNotImplemented
 }
 
-func (m *RoutePlanner) VisitDelete(stmt *expr.SqlDelete) (interface{}, error) {
+func (m *Builder) VisitUpsert(stmt *expr.SqlUpsert) (interface{}, error) {
+	u.Debugf("VisitUpsert %+v", stmt)
+	return nil, exec.ErrNotImplemented
+}
+
+func (m *Builder) VisitDelete(stmt *expr.SqlDelete) (interface{}, error) {
 	u.Debugf("VisitDelete %+v", stmt)
 	return nil, exec.ErrNotImplemented
 }
 
-func (m *RoutePlanner) VisitUpdate(stmt *expr.SqlUpdate) (interface{}, error) {
+func (m *Builder) VisitUpdate(stmt *expr.SqlUpdate) (interface{}, error) {
 	u.Debugf("VisitUpdate %+v", stmt)
 	return nil, exec.ErrNotImplemented
 }
 
-func (m *RoutePlanner) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
+func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 	u.Debugf("VisitShow %+v", stmt)
 	return nil, exec.ErrNotImplemented
 }
 
-func (m *RoutePlanner) VisitDescribe(stmt *expr.SqlDescribe) (interface{}, error) {
+func (m *Builder) VisitDescribe(stmt *expr.SqlDescribe) (interface{}, error) {
 	u.Debugf("VisitDescribe %+v", stmt)
 	return nil, exec.ErrNotImplemented
 }
-func (m *RoutePlanner) VisitPreparedStmt(stmt *expr.PreparedStatement) (interface{}, error) {
+
+func (m *Builder) VisitPreparedStmt(stmt *expr.PreparedStatement) (interface{}, error) {
 	u.Debugf("VisitPreparedStmt %+v", stmt)
 	return nil, exec.ErrNotImplemented
 }

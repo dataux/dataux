@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	u "github.com/araddon/gou"
+	//"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/value"
@@ -19,12 +20,15 @@ import (
 
 /*
 
-Lets turn this into Three things
+Lets turn this into 4 pieces
 
 - FrontEnd:
   - stmt := stmt.Parse(txt)
   - myresults := NewMysqlResultWriter(stmt)
   - err := NewHandler(myresults, stmt)
+
+- SchemaManager:
+  - schemagfind(stmt)
 
 - Handler(resultWriter, stmt):
    job := newJobRunner(config, resultWriter)
@@ -35,20 +39,24 @@ Lets turn this into Three things
 
 */
 
-var _ = value.ErrValue
-var _ = u.EMPTY
-var _ = pretty.Diff
-
-const ListenerType = "elasticsearch"
+const (
+	ListenerType     = "elasticsearch"
+	MaxAllowedPacket = 1024 * 1024
+)
 
 var (
-	_ models.HandlerSession = (*HandlerElasticsearch)(nil)
-	_ models.Handler        = (*HandlerElasticsearch)(nil)
+	_ = value.ErrValue
+	_ = u.EMPTY
+	_ = pretty.Diff
+
+	// Ensure we meet our interfaces
+	_ models.HandlerSession = (*MySqlHandler)(nil)
+	_ models.Handler        = (*MySqlHandler)(nil)
 )
 
 // Handle request splitting, a single connection session
 // not threadsafe, not shared
-type HandlerElasticsearchShared struct {
+type MySqlHandlerShared struct {
 	conf    *models.Config
 	nodes   map[string]*models.BackendConfig // List of servers
 	schemas map[string]*models.Schema        // List of Schemas
@@ -57,19 +65,19 @@ type HandlerElasticsearchShared struct {
 
 // Handle request splitting, a single connection session
 // not threadsafe, not shared
-type HandlerElasticsearch struct {
-	*HandlerElasticsearchShared
+type MySqlHandler struct {
+	*MySqlHandlerShared
 	conn *proxy.Conn
 }
 
-func NewHandlerElasticsearch(conf *models.Config) (models.Handler, error) {
-	handler := &HandlerElasticsearchShared{conf: conf}
-	err := handler.Init()
-	connHandler := &HandlerElasticsearch{HandlerElasticsearchShared: handler}
+func NewMySqlHandler(conf *models.Config) (models.Handler, error) {
+	sharedHandler := &MySqlHandlerShared{conf: conf}
+	err := sharedHandler.Init()
+	connHandler := &MySqlHandler{MySqlHandlerShared: sharedHandler}
 	return connHandler, err
 }
 
-func (m *HandlerElasticsearchShared) Init() error {
+func (m *MySqlHandlerShared) Init() error {
 
 	u.Debugf("Init()")
 	if err := m.findEsNodes(); err != nil {
@@ -82,9 +90,9 @@ func (m *HandlerElasticsearchShared) Init() error {
 	return nil
 }
 
-func (m *HandlerElasticsearch) Clone(connI interface{}) models.Handler {
+func (m *MySqlHandler) Clone(connI interface{}) models.Handler {
 
-	handler := HandlerElasticsearch{HandlerElasticsearchShared: m.HandlerElasticsearchShared}
+	handler := MySqlHandler{MySqlHandlerShared: m.MySqlHandlerShared}
 	if conn, ok := connI.(*proxy.Conn); ok {
 		u.Debugf("Cloning shared handler %v", conn)
 		handler.conn = conn
@@ -93,15 +101,15 @@ func (m *HandlerElasticsearch) Clone(connI interface{}) models.Handler {
 	panic("not cloneable")
 }
 
-func (m *HandlerElasticsearch) Close() error {
+func (m *MySqlHandler) Close() error {
 	return m.conn.Close()
 }
 
-func (m *HandlerElasticsearch) Handle(writer models.ResultWriter, req *models.Request) error {
+func (m *MySqlHandler) Handle(writer models.ResultWriter, req *models.Request) error {
 	return m.chooseCommand(writer, req)
 }
 
-func (m *HandlerElasticsearch) SchemaUse(db string) *models.Schema {
+func (m *MySqlHandler) SchemaUse(db string) *models.Schema {
 	schema, ok := m.schemas[db]
 	if ok {
 		m.schema = schema
@@ -112,7 +120,7 @@ func (m *HandlerElasticsearch) SchemaUse(db string) *models.Schema {
 	return schema
 }
 
-func (m *HandlerElasticsearch) chooseCommand(writer models.ResultWriter, req *models.Request) error {
+func (m *MySqlHandler) chooseCommand(writer models.ResultWriter, req *models.Request) error {
 
 	cmd := req.Raw[0]
 	req.Raw = req.Raw[1:]
@@ -120,7 +128,7 @@ func (m *HandlerElasticsearch) chooseCommand(writer models.ResultWriter, req *mo
 	u.Debugf("chooseCommand: %v:%v", cmd, mysql.CommandString(cmd))
 	switch cmd {
 	case mysql.COM_QUERY, mysql.COM_STMT_PREPARE:
-		return m.handleQuery(string(req.Raw))
+		return m.handleQuery(writer, string(req.Raw))
 	case mysql.COM_PING:
 		return m.writeOK(nil)
 		//return m.handleStmtPrepare(string(req.Raw))
@@ -151,7 +159,7 @@ func (m *HandlerElasticsearch) chooseCommand(writer models.ResultWriter, req *mo
 	return nil
 }
 
-func (m *HandlerElasticsearch) handleQuery(sql string) (err error) {
+func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err error) {
 	u.Debugf("handleQuery: %v", sql)
 	if !m.conf.SupressRecover {
 		//u.Debugf("running recovery? ")
@@ -165,9 +173,11 @@ func (m *HandlerElasticsearch) handleQuery(sql string) (err error) {
 	}
 
 	// Ensure it parses, right now we can't handle multiple statement (ie with semi-colons separating)
-	//sql = strings.TrimRight(sql, ";")
-	stmt, err := expr.ParseSql(sql)
+	// sql = strings.TrimRight(sql, ";")
+	job, err := BuildSqlJob(m.conf, writer, sql)
+	//stmt, err := expr.ParseSql(sql)
 	if err != nil {
+		u.Warnf("error? %v", err)
 		sql = strings.ToLower(sql)
 		switch {
 		case strings.Contains(sql, "set autocommit"):
@@ -179,28 +189,49 @@ func (m *HandlerElasticsearch) handleQuery(sql string) (err error) {
 		u.Debugf("error on parse sql statement: %v", err)
 		return err
 	}
+	if job == nil {
+		// we are done, already wrote results
+		return nil
+	}
 
-	//u.Debugf("handleQuery: %T %#v", stmt, stmt)
-	switch stmtNode := stmt.(type) {
+	// resultWriter := NewResultRows(sqlSelect.Columns.FieldNames())
+	// job.Tasks.Add(resultWriter)
+
+	job.Setup()
+	go func() {
+		//u.Debugf("Start Job.Run")
+		err = job.Run()
+		//u.Debugf("After job.Run()")
+		if err != nil {
+			u.Errorf("error on Query.Run(): %v", err)
+			//resultWriter.ErrChan() <- err
+			//job.Close()
+		}
+		//job.Close()
+		//u.Debugf("exiting Background Query")
+	}()
+	return nil
+
+	switch stmtNode := job.Stmt.(type) {
 	case *expr.SqlDescribe:
 		switch {
 		case stmtNode.Identity != "":
-			//u.Warnf("describe not supported?  %v  %T", v, stmt)
-			//return fmt.Errorf("Describe not supported yet")
 			return m.handleDescribeTable(sql, stmtNode)
 		case stmtNode.Stmt != nil && stmtNode.Stmt.Keyword() == lex.TokenSelect:
-			u.Infof("describe/explain: %#v", stmtNode)
+			u.Infof("describe/explain Not Implemented: %#v", stmtNode)
 		default:
 			u.Warnf("unrecognized describe/explain: %#v", stmtNode)
 		}
 		return fmt.Errorf("describe/explain not yet supported: %#v", stmtNode)
-	// case *sqlparser.SimpleSelect:
-	// 		return m.handleSimpleSelect(sql, stmtNode)
 	case *expr.SqlSelect:
 		if sysVar := stmtNode.SysVariable(); len(sysVar) > 0 {
-			return m.handleSelectSysVariable(sql, stmtNode, sysVar)
+			return m.handleSelectSysVariable(writer, stmtNode, sysVar)
 		}
-		return m.handleSelect(sql, stmtNode, nil)
+		return m.handleSelect(writer, sql, stmtNode, nil)
+	case *expr.SqlShow:
+		return m.handleShow(sql, stmtNode)
+	// case *sqlparser.SimpleSelect:
+	// 		return m.handleSimpleSelect(sql, stmtNode)
 	// case *sqlparser.Insert:
 	// 	return m.handleExec(stmt, sql, nil)
 	// case *sqlparser.Update:
@@ -217,22 +248,18 @@ func (m *HandlerElasticsearch) handleQuery(sql string) (err error) {
 	// 	return m.handleCommit()
 	// case *sqlparser.Rollback:
 	// 	return m.handleRollback()
-	case *expr.SqlShow:
-		return m.handleShow(sql, stmtNode)
 	// case *sqlparser.Admin:
 	// 	return m.handleAdmin(stmtNode)
 	default:
 		u.Warnf("sql not supported?  %v  %T", stmtNode, stmtNode)
-		return fmt.Errorf("statement %T not support now", stmtNode)
+		return fmt.Errorf("statement type %T not supported", stmtNode)
 	}
 
 	return nil
 }
 
-func (m *HandlerElasticsearch) handleSelect(sql string, req *expr.SqlSelect, args []interface{}) error {
+func (m *MySqlHandler) handleSelect(writer models.ResultWriter, sql string, stmt *expr.SqlSelect, args []interface{}) error {
 
-	// UGH, this code is horrible, it was a spike to learn but needs to be
-	//  rewritten into qlbridge.exec interfaces
 	u.Debugf("handleSelect: \n\t%v", sql)
 	if m.schema == nil {
 		u.Warnf("missing schema?  ")
@@ -240,10 +267,10 @@ func (m *HandlerElasticsearch) handleSelect(sql string, req *expr.SqlSelect, arg
 	}
 
 	tblName := ""
-	if len(req.From) > 1 {
+	if len(stmt.From) > 1 {
 		return fmt.Errorf("join not implemented")
 	}
-	tblName = strings.ToLower(req.From[0].Name)
+	tblName = strings.ToLower(stmt.From[0].Name)
 
 	tbl, err := m.loadTableSchema(tblName)
 	if err != nil {
@@ -253,33 +280,35 @@ func (m *HandlerElasticsearch) handleSelect(sql string, req *expr.SqlSelect, arg
 
 	es := NewSqlToEs(tbl)
 	u.Debugf("sqltoes: %#v", es)
-	resp, err := es.Query(req)
+	resp, err := es.Query(stmt)
 	if err != nil {
 		u.Error(err)
 		return err
 	}
 
-	rw := NewMysqlResultWriter(m.conn, req, resp, tbl)
+	rw := NewMysqlResultWriter(m.conn, stmt, resp, tbl)
 
 	if err := rw.Finalize(); err != nil {
 		u.Error(err)
 		return err
 	}
+	return writer.WriteResult(rw.rs)
 
-	return m.conn.WriteResultset(m.conn.Status, rw.rs)
+	//return m.conn.WriteResultset(m.conn.Status, rw.rs)
 }
 
-func (m *HandlerElasticsearch) handleSelectSysVariable(sql string, stmt *expr.SqlSelect, sysVar string) error {
+func (m *MySqlHandler) handleSelectSysVariable(writer models.ResultWriter, stmt *expr.SqlSelect, sysVar string) error {
 	switch sysVar {
 	case "@@max_allowed_packet":
-
+		r, _ := proxy.BuildSimpleSelectResult(MaxAllowedPacket, []byte(sysVar), nil)
+		return writer.WriteResult(r)
+	default:
+		u.Errorf("unknown var: %v", sysVar)
+		return fmt.Errorf("Unrecognized System Variable: %v", sysVar)
 	}
-	//r, _ := m.conn.BuildSimpleShowResultset(values, fmt.Sprintf("%v", 1024*1024))
-	r, _ := proxy.BuildSimpleSelectResult(1024*1024, []byte(sysVar), nil)
-	return m.conn.WriteResultset(m.conn.Status, r)
 }
 
-func (m *HandlerElasticsearch) handleDescribeTable(sql string, req *expr.SqlDescribe) error {
+func (m *MySqlHandler) handleDescribeTable(sql string, req *expr.SqlDescribe) error {
 
 	s := m.schema
 	if s == nil {
@@ -295,7 +324,7 @@ func (m *HandlerElasticsearch) handleDescribeTable(sql string, req *expr.SqlDesc
 	return m.conn.WriteResultset(m.conn.Status, tbl.DescribeResultset())
 }
 
-func (m *HandlerElasticsearch) handleShow(sql string, stmt *expr.SqlShow) error {
+func (m *MySqlHandler) handleShow(sql string, stmt *expr.SqlShow) error {
 	var err error
 	var r *mysql.Resultset
 	switch strings.ToLower(stmt.Identity) {
@@ -316,7 +345,7 @@ func (m *HandlerElasticsearch) handleShow(sql string, stmt *expr.SqlShow) error 
 	return m.conn.WriteResultset(m.conn.Status, r)
 }
 
-func (m *HandlerElasticsearch) handleShowDatabases() (*mysql.Resultset, error) {
+func (m *MySqlHandler) handleShowDatabases() (*mysql.Resultset, error) {
 	dbs := make([]interface{}, 0, len(m.schemas))
 	for key := range m.schemas {
 		dbs = append(dbs, key)
@@ -325,7 +354,7 @@ func (m *HandlerElasticsearch) handleShowDatabases() (*mysql.Resultset, error) {
 	return m.conn.BuildSimpleShowResultset(dbs, "Database")
 }
 
-func (m *HandlerElasticsearch) handleShowTables(sql string, stmt *expr.SqlShow) (*mysql.Resultset, error) {
+func (m *MySqlHandler) handleShowTables(sql string, stmt *expr.SqlShow) (*mysql.Resultset, error) {
 	s := m.schema
 	if stmt.From != "" {
 		s = m.getSchema(strings.ToLower(stmt.From))
@@ -348,7 +377,7 @@ func (m *HandlerElasticsearch) handleShowTables(sql string, stmt *expr.SqlShow) 
 	return m.conn.BuildSimpleShowResultset(values, fmt.Sprintf("Tables_in_%s", s.Db))
 }
 
-func (m *HandlerElasticsearchShared) loadSchemasFromConfig() error {
+func (m *MySqlHandlerShared) loadSchemasFromConfig() error {
 
 	m.schemas = make(map[string]*models.Schema)
 
@@ -384,7 +413,7 @@ func (m *HandlerElasticsearchShared) loadSchemasFromConfig() error {
 	return nil
 }
 
-func (m *HandlerElasticsearchShared) loadTables() error {
+func (m *MySqlHandlerShared) loadTables() error {
 
 	jh, err := u.JsonHelperHttp("GET", "http://localhost:9200/_aliases", nil)
 	if err != nil {
@@ -408,7 +437,7 @@ func (m *HandlerElasticsearchShared) loadTables() error {
 	return nil
 }
 
-func (m *HandlerElasticsearchShared) loadTableSchema(table string) (*models.Table, error) {
+func (m *MySqlHandlerShared) loadTableSchema(table string) (*models.Table, error) {
 
 	if m.schema == nil {
 		return nil, fmt.Errorf("no schema in use")
@@ -514,12 +543,12 @@ func buildEsFields(s *models.Schema, tbl *models.Table, jh u.JsonHelper, prefix 
 	}
 }
 
-func (m *HandlerElasticsearchShared) getSchema(db string) *models.Schema {
+func (m *MySqlHandlerShared) getSchema(db string) *models.Schema {
 	u.Debugf("get schema for %s", db)
 	return m.schemas[db]
 }
 
-func (m *HandlerElasticsearchShared) findEsNodes() error {
+func (m *MySqlHandlerShared) findEsNodes() error {
 
 	//m.nodes = make(map[string]*Node)
 
@@ -551,7 +580,7 @@ func (m *HandlerElasticsearchShared) findEsNodes() error {
 	return nil
 }
 
-func (m *HandlerElasticsearch) writeOK(r *mysql.Result) error {
+func (m *MySqlHandler) writeOK(r *mysql.Result) error {
 	return m.conn.WriteOK(r)
 }
 

@@ -59,10 +59,6 @@ type ResultProvider interface {
 	Next(dest []driver.Value) error
 }
 
-// implement the exec Task interface?
-type ResultWriter interface {
-}
-
 type ValsMessage struct {
 	vals []driver.Value
 	id   uint64

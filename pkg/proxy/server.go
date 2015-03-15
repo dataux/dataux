@@ -22,20 +22,23 @@ func banner() string {
 	return strings.Replace(asciiIntro, "*", "`", -1)
 }
 
-// Server is the main DataUx server, it is responsible for
+// Server is the main DataUx server, the running process and responsible for:
 //  1) starting *listeners* - network transports/protocols (mysql,mongo,redis)
-//  2) sending requests through *Handlers*(plugins) which
-//      filtering, transform, log, etc
-//  3) routing to backend-transports which return results
+//  2) routing requests through *Handlers*(plugins) which
+//      filter, transform, log, etc
+//  3) managing backend-transport connections
+//  4) executing statements amongst backends with results
 type Server struct {
 	conf *models.Config
 
 	// Frontend listener is a Listener Protocol handler
 	// to listen on specific port such as mysql
 	frontends []models.Listener
-	handlers  []models.Handler
 
-	// backends/servers
+	// any handlers/transforms etc
+	handlers []models.Handler
+
+	// backends
 	backends map[string]*models.BackendConfig
 
 	// schemas
@@ -50,11 +53,6 @@ type Reason struct {
 	Message string
 }
 
-// Running a server consists of steps
-// - start backend nodes
-// - setup schemas
-// - setup plugins/transforms
-// - start listener frontends
 func NewServer(conf *models.Config) (*Server, error) {
 
 	svr := &Server{conf: conf, stop: make(chan bool)}
@@ -101,7 +99,7 @@ func (m *Server) Run() {
 		}()
 	}
 
-	// block
+	// block forever
 	<-m.stop
 	// after shutdown, ensure they are all closed
 	for _, frontend := range m.frontends {

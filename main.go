@@ -50,7 +50,7 @@ func main() {
 			os.Exit(1)
 		}
 	case "elasticsearch":
-		handler, err = elasticsearch.NewHandlerElasticsearch(conf)
+		handler, err = elasticsearch.NewMySqlHandler(conf)
 		if err != nil {
 			u.Errorf("Could not create handlers: %v", err)
 			os.Exit(1)

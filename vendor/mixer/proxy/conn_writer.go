@@ -106,10 +106,14 @@ func buildResultset(names []string, values [][]interface{}) (*mysql.Resultset, e
 }
 
 func (c *Conn) WriteResult(r models.Result) error {
-	if mysqlRes, ok := r.(*mysql.Result); ok {
-		return c.WriteHandlerResult(mysqlRes.Status, mysqlRes.Resultset)
+	//u.Warnf("in WriteResult():  ?")
+	switch resVal := r.(type) {
+	case *mysql.Resultset:
+		return c.WriteHandlerResult(c.Status, resVal)
+	case *mysql.Result:
+		return c.WriteHandlerResult(resVal.Status, resVal.Resultset)
 	}
-	u.Errorf("unknown type?:  T:%T   v:%v", r, r)
+	u.Errorf("unknown result type?:  T:%T   v:%v", r, r)
 	return fmt.Errorf("Unknown result type: %T", r)
 }
 

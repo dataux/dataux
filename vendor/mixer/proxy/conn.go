@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -96,38 +95,35 @@ func newConn(m *MysqlListener, co net.Conn) *Conn {
 	return c
 }
 
-// Run is a blocking command PER client connection it is called
-// AFTER Handshake()
+// Run is a blocking command PER client connection it is called AFTER Handshake()
+//
+//   ->   listener.go:onConn()
+//             conn.go:onConn()
+//                   <- handshake ->
+//                   conn.go:Run()
+//                        request/reply
 func (c *Conn) Run() {
 
 	if !c.noRecover {
 		u.Debugf("running recovery? %v", !c.noRecover)
 		defer func() {
-			r := recover()
-			if err, ok := r.(error); ok {
-				const size = 4096
-				buf := make([]byte, size)
-				buf = buf[:runtime.Stack(buf, false)]
-
-				u.Errorf("%v, %s", err, buf)
+			if r := recover(); r != nil {
+				u.LogTracef(u.ERROR, "conn.Run() recover:%v", r)
 			}
-
 			c.Close()
 		}()
-	} else {
-		u.Debugf("Suppressing recovery? %v", !c.noRecover)
 	}
 
 	for {
-		data, err := c.readPacket()
 
+		data, err := c.readPacket()
 		if err != nil {
 			return
 		}
 
 		u.Debugf("Run() -> handler.Handle(): %v", string(data))
 		if err := c.handler.Handle(c, &models.Request{Raw: data}); err != nil {
-			u.Debugf("dispatch error %v", err)
+			u.Warnf("Handler() error %v", err)
 			if err != mysql.ErrBadConn {
 				c.WriteError(err)
 			}
