@@ -5,11 +5,37 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/models"
 )
+
+var (
+	// Ensure our ElasticsearchDataSource is a SourceTask type
+	_ models.DataSource = (*ElasticsearchDataSource)(nil)
+
+	esFeatures = &datasource.SourceFeatures{
+		Scan:         true,
+		Seek:         true,
+		Where:        true,
+		GroupBy:      true,
+		Sort:         true,
+		Aggregations: true,
+	}
+)
+
+const (
+	ListenerType = "elasticsearch"
+)
+
+func init() {
+	// We need to register our DataSource provider here
+	models.DataSourceRegister("elasticsearch", NewElasticsearchDataSource)
+}
 
 // Provide a DataSource provider,
 //  - provide schema info
@@ -44,7 +70,35 @@ func (m *ElasticsearchDataSource) Init() error {
 	return nil
 }
 
-func (m *ElasticsearchDataSource) Close() error { return nil }
+func (m *ElasticsearchDataSource) SourceTask(stmt *expr.SqlSelect, writer models.ResultWriter) (models.SourceTask, error) {
+	u.Debugf("get sourceTask for %v", stmt)
+	tblName := strings.ToLower(stmt.From[0].Name)
+
+	tbl, _ := m.schema.Table(tblName)
+	if tbl == nil {
+		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Db, tblName)
+		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, tblName)
+	}
+
+	es := NewSqlToEs(tbl)
+	u.Debugf("sqltoes: %#v", es)
+	resp, err := es.Query(stmt)
+	if err != nil {
+		u.Error(err)
+		return nil, err
+	}
+
+	rw := NewMysqlResultWriter(stmt, resp, tbl)
+
+	if err := rw.Finalize(); err != nil {
+		u.Error(err)
+		return nil, err
+	}
+	return es, writer.WriteResult(rw.rs)
+}
+
+func (m *ElasticsearchDataSource) Features() *datasource.SourceFeatures { return esFeatures }
+func (m *ElasticsearchDataSource) Close() error                         { return nil }
 
 func (m *ElasticsearchDataSource) Table(table string) (*models.Table, error) {
 	u.Debugf("get table for %s", table)

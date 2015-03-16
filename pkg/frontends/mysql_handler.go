@@ -1,4 +1,4 @@
-package elasticsearch
+package frontends
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/value"
+	"github.com/dataux/dataux/pkg/backends"
 	"github.com/dataux/dataux/pkg/models"
 	"github.com/dataux/dataux/vendor/mixer/mysql"
 	"github.com/dataux/dataux/vendor/mixer/proxy"
@@ -36,7 +37,6 @@ Lets turn this into 4 pieces
 */
 
 const (
-	ListenerType     = "elasticsearch"
 	MaxAllowedPacket = 1024 * 1024
 )
 
@@ -175,7 +175,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 
 	// Ensure it parses, right now we can't handle multiple statement (ie with semi-colons separating)
 	// sql = strings.TrimRight(sql, ";")
-	job, err := BuildSqlJob(m.svr, writer, m.schema.Db, sql)
+	job, err := backends.BuildSqlJob(m.svr, writer, m.schema.Db, sql)
 	//stmt, err := expr.ParseSql(sql)
 	if err != nil {
 		u.Warnf("error? %v", err)
@@ -224,11 +224,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 			u.Warnf("unrecognized describe/explain: %#v", stmtNode)
 		}
 		return fmt.Errorf("describe/explain not yet supported: %#v", stmtNode)
-	case *expr.SqlSelect:
-		if sysVar := stmtNode.SysVariable(); len(sysVar) > 0 {
-			return m.handleSelectSysVariable(writer, stmtNode, sysVar)
-		}
-		return m.handleSelect(writer, sql, stmtNode, nil)
+	//case *expr.SqlSelect:
 	case *expr.SqlShow:
 		return m.handleShow(sql, stmtNode)
 	// case *sqlparser.SimpleSelect:
@@ -257,58 +253,6 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	}
 
 	return nil
-}
-
-func (m *MySqlHandler) handleSelect(writer models.ResultWriter, sql string, stmt *expr.SqlSelect, args []interface{}) error {
-	/*
-		u.Debugf("handleSelect: \n\t%v", sql)
-		if m.schema == nil {
-			u.Warnf("missing schema?  ")
-			return fmt.Errorf("no schema in use")
-		}
-
-		tblName := ""
-		if len(stmt.From) > 1 {
-			return fmt.Errorf("join not implemented")
-		}
-		tblName = strings.ToLower(stmt.From[0].Name)
-
-		tbl, err := m.loadTableSchema(tblName)
-		if err != nil {
-			u.Errorf("error: %v", err)
-			return fmt.Errorf("Could not find table '%v' schema", tblName)
-		}
-
-		es := NewSqlToEs(tbl)
-		u.Debugf("sqltoes: %#v", es)
-		resp, err := es.Query(stmt)
-		if err != nil {
-			u.Error(err)
-			return err
-		}
-
-		rw := NewMysqlResultWriter(m.conn, stmt, resp, tbl)
-
-		if err := rw.Finalize(); err != nil {
-			u.Error(err)
-			return err
-		}
-		return writer.WriteResult(rw.rs)
-	*/
-
-	//return m.conn.WriteResultset(m.conn.Status, rw.rs)
-	return nil
-}
-
-func (m *MySqlHandler) handleSelectSysVariable(writer models.ResultWriter, stmt *expr.SqlSelect, sysVar string) error {
-	switch sysVar {
-	case "@@max_allowed_packet":
-		r, _ := proxy.BuildSimpleSelectResult(MaxAllowedPacket, []byte(sysVar), nil)
-		return writer.WriteResult(r)
-	default:
-		u.Errorf("unknown var: %v", sysVar)
-		return fmt.Errorf("Unrecognized System Variable: %v", sysVar)
-	}
 }
 
 func (m *MySqlHandler) handleDescribeTable(sql string, req *expr.SqlDescribe) error {

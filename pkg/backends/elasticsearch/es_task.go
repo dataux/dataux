@@ -10,6 +10,18 @@ import (
 	"github.com/araddon/qlbridge/expr"
 )
 
+/*
+
+- This is currently Not used, but want to break out the actual Task from
+    SqlToEs into this so it is stubbed out
+
+
+
+
+
+
+*/
+
 type EsTask struct {
 	*exec.TaskBase
 	Req *SqlToEs

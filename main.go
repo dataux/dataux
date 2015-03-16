@@ -9,7 +9,8 @@ import (
 	"syscall"
 
 	u "github.com/araddon/gou"
-	"github.com/dataux/dataux/pkg/backends/elasticsearch"
+	_ "github.com/dataux/dataux/pkg/backends/elasticsearch"
+	"github.com/dataux/dataux/pkg/frontends"
 	"github.com/dataux/dataux/pkg/models"
 	"github.com/dataux/dataux/pkg/proxy"
 	mysqlproxy "github.com/dataux/dataux/vendor/mixer/proxy"
@@ -18,7 +19,6 @@ import (
 var (
 	configFile *string = flag.String("config", "dataux.conf", "dataux proxy config file")
 	logLevel   *string = flag.String("loglevel", "debug", "log level [debug|info|warn|error]")
-	backend    *string = flag.String("handler", "elasticsearch", "handler/backend [mysql,elasticsearch] ")
 )
 
 func main() {
@@ -40,34 +40,24 @@ func main() {
 		u.Errorf("Could not load config: %v", err)
 		os.Exit(1)
 	}
+	// Make Server Context
+	svrCtx := models.NewServerCtx(conf)
+	svrCtx.Init()
 
-	var handler models.Handler
-	switch *backend {
-	case "mysql":
-		handler, err = mysqlproxy.NewHandlerSharded(conf)
-		if err != nil {
-			u.Errorf("Could not create handlers: %v", err)
-			os.Exit(1)
-		}
-	case "elasticsearch":
-		handler, err = elasticsearch.NewMySqlHandler(conf)
-		if err != nil {
-			u.Errorf("Could not create handlers: %v", err)
-			os.Exit(1)
-		}
-	default:
-		u.Errorf("Invalid handler: %v", *backend)
+	mysqlHandler, err := frontends.NewMySqlHandler(svrCtx)
+	if err != nil {
+		u.Errorf("Could not create handlers: %v", err)
 		os.Exit(1)
 	}
 
 	// Load our Frontend Listener's
 	models.ListenerRegister(mysqlproxy.ListenerType,
 		mysqlproxy.ListenerInit,
-		handler,
+		mysqlHandler,
 	)
 
 	var svr *proxy.Server
-	svr, err = proxy.NewServer(conf)
+	svr, err = proxy.NewServer(svrCtx)
 	if err != nil {
 		u.Errorf("%v", err)
 		return

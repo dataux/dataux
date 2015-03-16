@@ -1,9 +1,13 @@
 package models
 
 import (
-	u "github.com/araddon/gou"
 	"strings"
 	"sync"
+
+	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/exec"
+	"github.com/araddon/qlbridge/expr"
 )
 
 var (
@@ -17,8 +21,13 @@ var (
 type DataSource interface {
 	Init() error
 	Close() error
-	//Schema(db string) (*Schema, error)
+	Features() *datasource.SourceFeatures
 	Table(table string) (*Table, error)
+	SourceTask(stmt *expr.SqlSelect, writer ResultWriter) (SourceTask, error)
+}
+
+type SourceTask interface {
+	exec.TaskRunner
 }
 
 type DataSourceCreator func(*Schema, *Config) DataSource

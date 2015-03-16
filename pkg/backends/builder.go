@@ -1,8 +1,8 @@
-package elasticsearch
+package backends
 
 import (
 	"fmt"
-	"strings"
+	//"strings"
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/exec"
@@ -17,6 +17,10 @@ var (
 	// Ensure that we implement the Exec Visitor interface
 	_ exec.Visitor = (*Builder)(nil)
 	//_ exec.JobRunner = (*Builder)(nil)
+)
+
+const (
+	MaxAllowedPacket = 1024 * 1024
 )
 
 // Create Job made up of sub-tasks in DAG that is the
@@ -69,38 +73,44 @@ func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
 		return m.VisitSysVariable(stmt)
 	}
 
-	tblName := ""
+	tasks := make(exec.Tasks, 0)
+
 	if len(stmt.From) > 1 {
 		return nil, fmt.Errorf("join not implemented")
 	}
-	tblName = strings.ToLower(stmt.From[0].Name)
 
-	tbl, _ := m.schema.Table(tblName)
-	if tbl == nil {
-		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Db, tblName)
-		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, tblName)
-	}
-
-	es := NewSqlToEs(tbl)
-	u.Debugf("sqltoes: %#v", es)
-	resp, err := es.Query(stmt)
+	task, err := m.schema.DataSource.SourceTask(stmt, m.writer)
 	if err != nil {
-		u.Error(err)
 		return nil, err
 	}
+	tasks = append(tasks, task)
 
-	//u.Debugf("found : %#v", resp)
+	/*
+		tblName := strings.ToLower(stmt.From[0].Name)
 
-	//panic("here")
-	rw := NewMysqlResultWriter(stmt, resp, tbl)
+		tbl, _ := m.schema.Table(tblName)
+		if tbl == nil {
+			u.Errorf("Could not find table for '%s'.'%s'", m.schema.Db, tblName)
+			return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, tblName)
+		}
 
-	if err := rw.Finalize(); err != nil {
-		u.Error(err)
-		return nil, err
-	}
-	return nil, m.writer.WriteResult(rw.rs)
+		es := NewSqlToEs(tbl)
+		u.Debugf("sqltoes: %#v", es)
+		resp, err := es.Query(stmt)
+		if err != nil {
+			u.Error(err)
+			return nil, err
+		}
 
-	tasks := make(exec.Tasks, 0)
+		rw := NewMysqlResultWriter(stmt, resp, tbl)
+
+		if err := rw.Finalize(); err != nil {
+			u.Error(err)
+			return nil, err
+		}
+		return nil, m.writer.WriteResult(rw.rs)
+	*/
+
 	/*
 		// Create our Datasource Reader
 		var source datasource.DataSource

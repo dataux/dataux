@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
+	"github.com/dataux/dataux/pkg/frontends/testmysql"
 	"github.com/dataux/dataux/pkg/testutil"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
@@ -51,7 +52,7 @@ func validateQuery(t *testing.T, querySql string, expectCols []string, expectCol
 }
 
 func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
-	RunTestServer(t)
+	testmysql.RunTestServer(t)
 
 	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:4000)/es")
 	assert.Tf(t, err == nil, "%v", err)
@@ -105,7 +106,7 @@ func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 }
 
 func TestInvalidQuery(t *testing.T) {
-	RunTestServer(t)
+	testmysql.RunTestServer(t)
 	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:4000)/es")
 	assert.T(t, err == nil)
 	// It is parsing the SQL on server side (proxy)

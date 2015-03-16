@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/value"
@@ -14,6 +15,8 @@ import (
 
 var (
 	DefaultLimit = 20
+	// Ensure our SqlToEs is a SourceTask type
+	_ models.SourceTask = (*SqlToEs)(nil)
 )
 
 type esMap map[string]interface{}
@@ -21,7 +24,7 @@ type esMap map[string]interface{}
 // Sql To Elasticsearch Request Object
 //   Map sql queries into Elasticsearch Json Requests
 type SqlToEs struct {
-	//ctx            *datasource.ContextSimple
+	*exec.TaskBase
 	tbl            *models.Table
 	sel            *expr.SqlSelect
 	schema         *models.Schema
@@ -36,8 +39,9 @@ type SqlToEs struct {
 
 func NewSqlToEs(table *models.Table) *SqlToEs {
 	return &SqlToEs{
-		tbl:    table,
-		schema: table.Schema,
+		tbl:      table,
+		schema:   table.Schema,
+		TaskBase: exec.NewTaskBase("SqlToEs"),
 	}
 }
 

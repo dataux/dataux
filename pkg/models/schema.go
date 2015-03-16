@@ -9,7 +9,9 @@ import (
 	"github.com/dataux/dataux/vendor/mixer/mysql"
 )
 
-var _ = u.EMPTY
+var (
+	_ = u.EMPTY
+)
 
 // Table represents traditional definition of Database Table
 //   It belongs to a Schema and can be used to
@@ -80,18 +82,6 @@ func (m *Field) ToMysql(s *Schema) *mysql.Field {
 
 	return nil
 }
-
-// func (m *Schema) AddTable(name string, fields map[string]value.ValueType) {
-// 	name = strings.ToLower(name)
-// 	if _, ok := m.Tables[name]; ok {
-// 		u.Warnf("Already had table: %v", name)
-// 	} else {
-// 		m.TableNames = append(m.TableNames, name)
-// 		sort.Strings(m.TableNames)
-// 	}
-// 	t := Table{Fields: fields, Schema: m}
-// 	m.Tables[name] = &t
-// }
 
 // Get a backend to fulfill a request
 func (m *Schema) ChooseBackend() string {

@@ -422,7 +422,7 @@ func (m *HandlerSharded) handleShowDatabases() (*mysql.Resultset, error) {
 		dbs = append(dbs, key)
 	}
 
-	return m.conn.BuildSimpleShowResultset(dbs, "Database")
+	return BuildSimpleShowResultset(dbs, "Database")
 }
 
 func (m *HandlerSharded) handleShowTables(sql string, stmt *sqlparser.Show) (*mysql.Resultset, error) {
@@ -470,7 +470,7 @@ func (m *HandlerSharded) handleShowTables(sql string, stmt *sqlparser.Show) (*my
 		values[i] = tables[i]
 	}
 
-	return m.conn.BuildSimpleShowResultset(values, fmt.Sprintf("Tables_in_%s", s.Db))
+	return BuildSimpleShowResultset(values, fmt.Sprintf("Tables_in_%s", s.Db))
 }
 
 func (m *HandlerSharded) handleDescribe(sql string, req *expr.SqlDescribe) error {

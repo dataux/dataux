@@ -58,12 +58,12 @@ func (m *ServerCtx) loadSchemasFromConfig() error {
 		m.schemas[schemaConf.DB] = schema
 		sourceFunc := DataSourceCreatorGet(schemaConf.SourceType)
 		if sourceFunc == nil {
-			panic("Data source Not found for source_type: " + schemaConf.SourceType)
+			//panic("Data source Not found for source_type: " + schemaConf.SourceType)
+			u.Warnf("Data source Not found for source_type: " + schemaConf.SourceType)
+		} else {
+			schema.DataSource = sourceFunc(schema, m.Config)
+			schema.DataSource.Init()
 		}
-		schema.DataSource = sourceFunc(schema, m.Config)
-		schema.DataSource.Init()
-		//m.schema = schema
-
 	}
 
 	return nil

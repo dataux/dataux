@@ -5,7 +5,7 @@ import (
 	"github.com/dataux/dataux/vendor/mixer/mysql"
 )
 
-func (c *Conn) BuildSimpleShowResultset(values []interface{}, name string) (*mysql.Resultset, error) {
+func BuildSimpleShowResultset(values []interface{}, name string) (*mysql.Resultset, error) {
 
 	r := new(mysql.Resultset)
 

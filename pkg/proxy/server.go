@@ -4,7 +4,6 @@ import (
 	u "github.com/araddon/gou"
 	"github.com/dataux/dataux/pkg/models"
 
-	"fmt"
 	"strings"
 )
 
@@ -30,6 +29,7 @@ func banner() string {
 //  4) executing statements amongst backends with results
 type Server struct {
 	conf *models.Config
+	ctx  *models.ServerCtx
 
 	// Frontend listener is a Listener Protocol handler
 	// to listen on specific port such as mysql
@@ -37,12 +37,6 @@ type Server struct {
 
 	// any handlers/transforms etc
 	handlers []models.Handler
-
-	// backends
-	backends map[string]*models.BackendConfig
-
-	// schemas
-	schemas map[string]*models.Schema
 
 	stop chan bool
 }
@@ -53,20 +47,9 @@ type Reason struct {
 	Message string
 }
 
-func NewServer(conf *models.Config) (*Server, error) {
+func NewServer(ctx *models.ServerCtx) (*Server, error) {
 
-	svr := &Server{conf: conf, stop: make(chan bool)}
-
-	svr.backends = make(map[string]*models.BackendConfig)
-
-	if err := svr.setupBackends(); err != nil {
-		return nil, err
-	}
-
-	if err := setupSchemas(svr); err != nil {
-		u.Errorf("schema: %v", err)
-		return nil, err
-	}
+	svr := &Server{conf: ctx.Config, ctx: ctx, stop: make(chan bool)}
 
 	if err := svr.loadFrontends(); err != nil {
 		return nil, err
@@ -137,96 +120,4 @@ func (m *Server) loadFrontends() error {
 // Shutdown listeners and close down
 func (m *Server) Shutdown(reason Reason) {
 	m.stop <- true
-}
-
-//Find and setup/validate backend nodes
-func (m *Server) setupBackends() error {
-
-	for _, beConf := range m.conf.Backends {
-		err := m.AddBackend(beConf)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// Given a backend server config, add it to server/proxy
-//  find the backend runner (starts network for backend)
-//
-func (m *Server) AddBackend(beConf *models.BackendConfig) error {
-
-	beConf.Name = strings.ToLower(beConf.Name)
-
-	if _, ok := m.backends[beConf.Name]; ok {
-		return fmt.Errorf("duplicate backend [%s].", beConf.Name)
-	}
-
-	if beConf.BackendType == "" {
-		for _, schemaConf := range m.conf.Schemas {
-			for _, schemaBe := range schemaConf.Backends {
-				if schemaBe == beConf.Name {
-					beConf.BackendType = schemaConf.BackendType
-				}
-			}
-		}
-		if beConf.BackendType == "" {
-			u.Warnf("no backendtype found from schemas for %s", beConf.Name)
-		}
-	}
-
-	m.backends[beConf.Name] = beConf
-
-	return nil
-}
-
-func (m *Server) BackendFind(serverName string) *models.BackendConfig {
-	return m.backends[serverName]
-}
-
-func setupSchemas(s *Server) error {
-
-	s.schemas = make(map[string]*models.Schema)
-
-	for _, schemaConf := range s.conf.Schemas {
-		if schemaConf.BackendType == "" {
-			return fmt.Errorf("Must have backend_type %s", schemaConf)
-		}
-		if _, ok := s.schemas[schemaConf.DB]; ok {
-			return fmt.Errorf("duplicate schema `%s`", schemaConf.DB)
-		}
-		if len(schemaConf.Backends) == 0 {
-			u.Warnf("schema '%s' should have a node?", schemaConf.DB)
-			//return fmt.Errorf("schema '%s' must have a node", schemaConf.DB)
-		}
-
-		nodes := make(map[string]*models.BackendConfig)
-		for _, serverName := range schemaConf.Backends {
-
-			be := s.BackendFind(serverName)
-			if be == nil {
-				return fmt.Errorf("schema '%s' node '%s' config is not exists.", schemaConf.DB, serverName)
-			}
-
-			if _, ok := nodes[serverName]; ok {
-				return fmt.Errorf("schema '%s' node '%s' duplicate.", schemaConf.DB, serverName)
-			}
-
-			nodes[serverName] = be
-		}
-
-		s.schemas[schemaConf.DB] = &models.Schema{
-			Db:    schemaConf.DB,
-			Nodes: nodes,
-		}
-		u.Debugf("found schema:  %v", schemaConf.String())
-		// rule:  rule,
-	}
-
-	return nil
-}
-
-func (s *Server) getSchema(db string) *models.Schema {
-	return s.schemas[db]
 }

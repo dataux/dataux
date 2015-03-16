@@ -1,4 +1,4 @@
-package elasticsearch
+package testmysql
 
 import (
 	"sync"
@@ -7,6 +7,7 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
+	"github.com/dataux/dataux/pkg/frontends"
 	"github.com/dataux/dataux/pkg/models"
 	"github.com/dataux/dataux/vendor/mixer/client"
 	mysqlproxy "github.com/dataux/dataux/vendor/mixer/proxy"
@@ -19,11 +20,6 @@ var (
 	testDBOnce     sync.Once
 	testDB         *client.DB
 )
-
-func init() {
-	// We need to register our DataSource provider here
-	models.DataSourceRegister("elasticsearch", NewElasticsearchDataSource)
-}
 
 var testConfigData = `
 
@@ -67,7 +63,7 @@ func NewTestServer(t *testing.T) *TestListenerWraper {
 		svr := models.NewServerCtx(conf)
 		svr.Init()
 
-		handler, err := NewMySqlHandler(svr)
+		handler, err := frontends.NewMySqlHandler(svr)
 		assert.Tf(t, err == nil, "must create es handler without err: %v", err)
 
 		// Load our Frontend Listener's
