@@ -2,13 +2,14 @@ package backends
 
 import (
 	"fmt"
+	"github.com/araddon/qlbridge/value"
 	//"strings"
 
 	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/dataux/dataux/pkg/models"
-	"github.com/dataux/dataux/vendor/mixer/proxy"
 )
 
 var (
@@ -23,19 +24,37 @@ const (
 	MaxAllowedPacket = 1024 * 1024
 )
 
+/*
+
+Source ->  Where  -> GroupBy/Counts etc  -> Projection -> ResultWriter
+
+- Since we don't really need the Where, GroupBy, etc
+
+Source ->    Projection  -> ResultWriter
+
+
+type JobRunner interface {
+	Run() error
+	Close() error
+}
+
+*/
+
 // Create Job made up of sub-tasks in DAG that is the
 //   plan for execution of this query/job
-func BuildSqlJob(svr *models.ServerCtx, writer models.ResultWriter, schemaDb, sqlText string) (*exec.SqlJob, error) {
+func BuildSqlJob(svr *models.ServerCtx, schemaDb, sqlText string) (*Builder, error) {
 
 	stmt, err := expr.ParseSql(sqlText)
 	if err != nil {
+		u.Errorf("Could not parse: %v", err)
 		return nil, err
 	}
 
-	builder := NewBuilder(svr, writer, schemaDb)
+	builder := NewBuilder(svr, schemaDb)
 	ex, err := stmt.Accept(builder)
 
 	if err != nil {
+		u.Errorf("Could not build %v", err)
 		return nil, err
 	}
 	if ex == nil {
@@ -46,22 +65,24 @@ func BuildSqlJob(svr *models.ServerCtx, writer models.ResultWriter, schemaDb, sq
 	if !ok {
 		return nil, fmt.Errorf("expected tasks but got: %T", ex)
 	}
-	return &exec.SqlJob{tasks, stmt}, nil
+	builder.Job = &exec.SqlJob{tasks, stmt}
+	return builder, nil
 }
 
 // This is a Sql Plan Builder that chooses backends
 //   and routes/manages Requests
 type Builder struct {
-	schema   *models.Schema
-	writer   models.ResultWriter
-	svr      *models.ServerCtx
-	where    expr.Node
-	distinct bool
-	children exec.Tasks
+	schema     *models.Schema
+	svr        *models.ServerCtx
+	Projection *expr.Projection
+	Job        *exec.SqlJob
+	//where      expr.Node
+	//children exec.Tasks
+	//writer   models.ResultWriter
 }
 
-func NewBuilder(svr *models.ServerCtx, writer models.ResultWriter, db string) *Builder {
-	m := Builder{writer: writer, svr: svr}
+func NewBuilder(svr *models.ServerCtx, db string) *Builder {
+	m := Builder{svr: svr}
 	m.schema = svr.Schema(db)
 	return &m
 }
@@ -78,92 +99,45 @@ func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
 	if len(stmt.From) > 1 {
 		return nil, fmt.Errorf("join not implemented")
 	}
+	from := stmt.From[0]
 
-	sourceTask, err := m.schema.DataSource.SourceTask(stmt)
+	// source is of type qlbridge.datasource.DataSource
+	source, err := m.schema.DataSource.SourceTask(stmt)
 	if err != nil {
 		return nil, err
 	}
-
-	rw := NewMysqlResultWriter(stmt, resp)
-
-	if err := rw.Finalize(); err != nil {
-		u.Error(err)
-		return nil, err
-	}
-	writer.WriteResult(rw.Rs)
-
-	tasks = append(tasks, task)
-
-	/*
-		tblName := strings.ToLower(stmt.From[0].Name)
-
-		tbl, _ := m.schema.Table(tblName)
-		if tbl == nil {
-			u.Errorf("Could not find table for '%s'.'%s'", m.schema.Db, tblName)
-			return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, tblName)
-		}
-
-		es := NewSqlToEs(tbl)
-		u.Debugf("sqltoes: %#v", es)
-		resp, err := es.Query(stmt)
+	// Some data sources provide their own projections
+	if projector, ok := source.(models.SourceProjection); ok {
+		m.Projection, err = projector.Projection()
 		if err != nil {
-			u.Error(err)
+			u.Errorf("could not build projection %v", err)
 			return nil, err
 		}
-
-		rw := NewMysqlResultWriter(stmt, resp, tbl)
-
-		if err := rw.Finalize(); err != nil {
-			u.Error(err)
-			return nil, err
-		}
-		return nil, m.writer.WriteResult(rw.rs)
-	*/
-
-	/*
-		// Create our Datasource Reader
-		var source datasource.DataSource
-		if len(stmt.From) == 1 {
-			from := stmt.From[0]
-			if from.Name != "" && from.Source == nil {
-				source = m.conf.DataSource(m.connInfo, from.Name)
-				//u.Debugf("source: %T", source)
-				in := NewSourceScanner(from.Name, source)
-				tasks.Add(in)
-			}
-
-		} else {
-			// if we have a join?
-		}
-
-		u.Debugf("has where? %v", stmt.Where != nil)
-		if stmt.Where != nil {
-			switch {
-			case stmt.Where.Source != nil:
-				u.Warnf("Found un-supported subquery: %#v", stmt.Where)
-			case stmt.Where.Expr != nil:
-				where := NewWhere(stmt.Where.Expr)
-				tasks.Add(where)
-			default:
-				u.Warnf("Found un-supported where type: %#v", stmt.Where)
-			}
-
-		}
-
-		// Add a Projection
-		projection := NewProjection(stmt)
-		tasks.Add(projection)
-	*/
-
+	} else {
+		panic("must implement projection")
+	}
+	if scanner, ok := source.(datasource.Scanner); !ok {
+		return nil, fmt.Errorf("Must Implement Scanner")
+	} else {
+		sourceTask := exec.NewSourceScanner(from.Name, scanner)
+		tasks.Add(sourceTask)
+	}
 	return tasks, nil
 }
 
 func (m *Builder) VisitSysVariable(stmt *expr.SqlSelect) (interface{}, error) {
 	u.Debugf("VisitSysVariable %+v", stmt)
+	tasks := make(exec.Tasks, 0)
 	switch sysVar := stmt.SysVariable(); sysVar {
 	case "@@max_allowed_packet":
-		r, _ := proxy.BuildSimpleSelectResult(MaxAllowedPacket, []byte(sysVar), nil)
-		return nil, m.writer.WriteResult(r)
+		// TODO:   build a simple Result Task
+		static := datasource.NewStaticDataValue(MaxAllowedPacket, sysVar)
+		sourceTask := exec.NewSourceScanner("system", static)
+		m.Projection = StaticProjection(sysVar, value.IntType)
+		tasks.Add(sourceTask)
+		return tasks, nil
+		// r, _ := proxy.BuildSimpleSelectResult(MaxAllowedPacket, []byte(sysVar), nil)
+		// return nil, m.writer.WriteResult(r)
 	default:
 		u.Errorf("unknown var: %v", sysVar)
 		return nil, fmt.Errorf("Unrecognized System Variable: %v", sysVar)
@@ -171,6 +145,11 @@ func (m *Builder) VisitSysVariable(stmt *expr.SqlSelect) (interface{}, error) {
 	return nil, exec.ErrNotImplemented
 }
 
+func StaticProjection(name string, vt value.ValueType) *expr.Projection {
+	p := expr.NewProjection()
+	p.AddColumnShort(name, vt)
+	return p
+}
 func (m *Builder) VisitInsert(stmt *expr.SqlInsert) (interface{}, error) {
 	u.Debugf("VisitInsert %+v", stmt)
 	return nil, exec.ErrNotImplemented

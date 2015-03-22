@@ -15,8 +15,6 @@ import (
 
 var (
 	DefaultLimit = 20
-	// Ensure our SqlToEs is a SourceTask type
-	_ models.SourceTask = (*SqlToEs)(nil)
 )
 
 type esMap map[string]interface{}

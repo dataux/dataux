@@ -1,4 +1,4 @@
-package elasticsearch
+package elasticsearch_test
 
 import (
 	"flag"

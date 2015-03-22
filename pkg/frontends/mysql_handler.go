@@ -6,7 +6,7 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/expr"
-	"github.com/araddon/qlbridge/lex"
+	//"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/backends"
 	"github.com/dataux/dataux/pkg/models"
@@ -175,8 +175,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 
 	// Ensure it parses, right now we can't handle multiple statement (ie with semi-colons separating)
 	// sql = strings.TrimRight(sql, ";")
-	job, err := backends.BuildSqlJob(m.svr, writer, m.schema.Db, sql)
-	//stmt, err := expr.ParseSql(sql)
+	builder, err := backends.BuildSqlJob(m.svr, m.schema.Db, sql)
 	if err != nil {
 		u.Warnf("error? %v", err)
 		sql = strings.ToLower(sql)
@@ -190,45 +189,41 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		u.Debugf("error on parse sql statement: %v", err)
 		return err
 	}
-	if job == nil {
+	if builder == nil {
 		// we are done, already wrote results
 		return nil
 	}
 
-	// resultWriter := NewResultRows(sqlSelect.Columns.FieldNames())
-	// job.Tasks.Add(resultWriter)
+	switch stmt := builder.Job.Stmt.(type) {
+	// case *expr.SqlDescribe:
+	// 	switch {
+	// 	case stmt.Identity != "":
+	// 		return m.handleDescribeTable(sql, stmt)
+	// 	case stmt.Stmt != nil && stmt.Stmt.Keyword() == lex.TokenSelect:
+	// 		u.Infof("describe/explain Not Implemented: %#v", stmt)
+	// 	default:
+	// 		u.Warnf("unrecognized describe/explain: %#v", stmt)
+	// 	}
+	// 	return fmt.Errorf("describe/explain not yet supported: %#v", stmt)
+	case *expr.SqlSelect:
+		// resultWriter := NewResultRows(sqlSelect.Columns.FieldNames())
+		// job.Tasks.Add(resultWriter)
 
-	job.Setup()
-	go func() {
-		u.Debugf("Start Job.Run")
-		err = job.Run()
-		u.Debugf("After job.Run()")
-		if err != nil {
-			u.Errorf("error on Query.Run(): %v", err)
-			//resultWriter.ErrChan() <- err
-			//job.Close()
-		}
-		//job.Close()
-		//u.Debugf("exiting Background Query")
-	}()
-	return nil
+		// We need a result describer, to say which columns to expect?
+		// this is projection right?
+		u.Debugf("adding mysql result writer")
+		resultWriter := NewMysqlResultWriter(writer, builder.Projection, m.schema)
+		builder.Job.Tasks.Add(resultWriter)
 
-	switch stmtNode := job.Stmt.(type) {
-	case *expr.SqlDescribe:
-		switch {
-		case stmtNode.Identity != "":
-			return m.handleDescribeTable(sql, stmtNode)
-		case stmtNode.Stmt != nil && stmtNode.Stmt.Keyword() == lex.TokenSelect:
-			u.Infof("describe/explain Not Implemented: %#v", stmtNode)
-		default:
-			u.Warnf("unrecognized describe/explain: %#v", stmtNode)
-		}
-		return fmt.Errorf("describe/explain not yet supported: %#v", stmtNode)
-	//case *expr.SqlSelect:
-	case *expr.SqlShow:
-		return m.handleShow(sql, stmtNode)
+		// if err := rw.Finalize(); err != nil {
+		// 	u.Error(err)
+		// 	return err
+		// }
+		// writer.WriteResult(rw.Rs)
+	//case *expr.SqlShow:
+	//	return m.handleShow(sql, stmt)
 	// case *sqlparser.SimpleSelect:
-	// 		return m.handleSimpleSelect(sql, stmtNode)
+	// 		return m.handleSimpleSelect(sql, stmt)
 	// case *sqlparser.Insert:
 	// 	return m.handleExec(stmt, sql, nil)
 	// case *sqlparser.Update:
@@ -238,7 +233,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	// case *sqlparser.Replace:
 	// 	return m.handleExec(stmt, sql, nil)
 	// case *sqlparser.Set:
-	// 	return m.handleSet(stmtNode)
+	// 	return m.handleSet(stmt)
 	// case *sqlparser.Begin:
 	// 	return m.handleBegin()
 	//case *sqlparser.Commit:
@@ -246,13 +241,27 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	// case *sqlparser.Rollback:
 	// 	return m.handleRollback()
 	// case *sqlparser.Admin:
-	// 	return m.handleAdmin(stmtNode)
+	// 	return m.handleAdmin(stmt)
 	default:
-		u.Warnf("sql not supported?  %v  %T", stmtNode, stmtNode)
-		return fmt.Errorf("statement type %T not supported", stmtNode)
+		u.Warnf("sql not supported?  %v  %T", stmt, stmt)
+		return fmt.Errorf("statement type %T not supported", stmt)
 	}
 
+	builder.Job.Setup()
+	//go func() {
+	u.Debugf("Start Job.Run")
+	err = builder.Job.Run()
+	u.Debugf("After job.Run()")
+	if err != nil {
+		u.Errorf("error on Query.Run(): %v", err)
+		//resultWriter.ErrChan() <- err
+		//job.Close()
+	}
+	builder.Job.Close()
+	u.Debugf("exiting Background Query")
+	//}()
 	return nil
+
 }
 
 func (m *MySqlHandler) handleDescribeTable(sql string, req *expr.SqlDescribe) error {

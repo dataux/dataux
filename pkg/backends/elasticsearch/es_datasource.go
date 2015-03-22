@@ -11,7 +11,6 @@ import (
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
-	"github.com/dataux/dataux/pkg/backends"
 	"github.com/dataux/dataux/pkg/models"
 )
 
@@ -37,10 +36,6 @@ func init() {
 	// We need to register our DataSource provider here
 	models.DataSourceRegister("elasticsearch", NewElasticsearchDataSource)
 }
-
-// Provide a DataSource provider,
-//  - provide schema info
-//  - connection manager
 
 type ElasticsearchDataSource struct {
 	schema     *models.Schema
@@ -99,7 +94,7 @@ func (m *ElasticsearchDataSource) SourceTask(stmt *expr.SqlSelect) (models.Sourc
 		}
 		return es, writer.WriteResult(rw.Rs)
 	*/
-	return es, nil
+	return resp, nil
 }
 
 func (m *ElasticsearchDataSource) Features() *datasource.SourceFeatures { return esFeatures }

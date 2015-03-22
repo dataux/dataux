@@ -4,13 +4,13 @@ import (
 	"database/sql/driver"
 
 	//u "github.com/araddon/gou"
-	"github.com/araddon/qlbridge/expr"
-	"github.com/araddon/qlbridge/value"
+	//"github.com/araddon/qlbridge/expr"
+	//"github.com/araddon/qlbridge/value"
 )
 
-type ResultSession interface {
-	ResultProvider() ResultProvider
-}
+// type ResultSession interface {
+// 	ResultProvider() ResultProvider
+// }
 
 type ResultWriter interface {
 	WriteResult(Result) error
@@ -23,9 +23,9 @@ type Result interface{}
 //  - schema, we need col/data-types to write headers, typed interfaces
 type ResultProvider interface {
 	// The underlying schema
-	Schema() *Schema
+	//Schema() *Schema
 	// Columns returns a definition for columns in this result
-	Columns() []*ResultColumn
+	//Columns() []*ResultColumn
 
 	// Close closes the result provider
 	Close() error
@@ -50,9 +50,9 @@ type ValsMessage struct {
 func (m ValsMessage) Key() uint64       { return m.Id }
 func (m ValsMessage) Body() interface{} { return m.Vals }
 
-type ResultColumn struct {
-	Name   string          // Original path/name for query field
-	Pos    int             // Ordinal position in sql statement
-	SqlCol *expr.Column    // the original sql column
-	Type   value.ValueType // Type
-}
+// type ResultColumn struct {
+// 	Name   string          // Original path/name for query field
+// 	Pos    int             // Ordinal position in sql statement
+// 	SqlCol *expr.Column    // the original sql column
+// 	Type   value.ValueType // Type
+// }

@@ -18,43 +18,32 @@ import (
 var (
 	_ models.ResultProvider = (*ResultReader)(nil)
 
-	//_ exec.JobRunner = (*ResultReader)(nil)
 	// Ensure we implement datasource.DataSource, Scanner
 	_ datasource.DataSource = (*ResultReader)(nil)
 	_ datasource.Scanner    = (*ResultReader)(nil)
 )
 
-/*
-
-Source ->  Where  -> GroupBy/Counts etc  -> Projection -> ResultWriter
-
-- Since we don't really need the Where, GroupBy, etc
-
-Source ->    Projection  -> ResultWriter
-
-
-type JobRunner interface {
-	Run() error
-	Close() error
-}
-
-*/
-
-// Elasticsearch ResultReader
+// Elasticsearch ResultProvider
 // - driver.Rows
 // - ??  how do we get schema?
 type ResultReader struct {
-	exit     <-chan bool
-	cursor   int
-	colnames []string
-	Cols     []*models.ResultColumn
-	Docs     []u.JsonHelper
-	Vals     [][]driver.Value
-	Total    int
-	Aggs     u.JsonHelper
-	ScrollId string
-	Req      *SqlToEs
+	exit          <-chan bool
+	finalized     bool
+	hasprojection bool
+	cursor        int
+	proj          *expr.Projection
+	Docs          []u.JsonHelper
+	Vals          [][]driver.Value
+	Total         int
+	Aggs          u.JsonHelper
+	ScrollId      string
+	Req           *SqlToEs
+	//colnames      []string
+	//Cols          []*models.ResultColumn
 }
+
+// A wrapper, allowing us to implement sql/driver Next() interface
+//   which is different than qlbridge/datasource Next()
 type ResultReaderNext struct {
 	*ResultReader
 }
@@ -65,31 +54,34 @@ func NewResultReader(req *SqlToEs) *ResultReader {
 	return m
 }
 
-func (m *ResultReader) Close() error                    { return nil }
-func (m *ResultReader) Columns() []*models.ResultColumn { return m.Cols }
-func (m *ResultReader) buildColumns() {
+func (m *ResultReader) Close() error { return nil }
 
-	// TODO:
-	//   - add size to the resultcolumn
-	//   - add sql column to resultcolumn
-	m.Cols = make([]*models.ResultColumn, 0)
+//func (m *ResultReader) Columns() []*models.ResultColumn { return cols }
+func (m *ResultReader) buildProjection() {
+
+	if m.hasprojection {
+		return
+	}
+	m.hasprojection = true
+	m.proj = expr.NewProjection()
+	cols := m.proj.Columns
 	sql := m.Req.sel
 	if sql.Star {
 		// Select Each field, grab fields from Table Schema
 		for _, fld := range m.Req.tbl.Fields {
-			m.Cols = append(m.Cols, &models.ResultColumn{fld.Name, len(m.Cols), nil, fld.Type})
+			cols = append(cols, expr.NewResultColumn(fld.Name, len(cols), nil, fld.Type))
 		}
 	} else if sql.CountStar() {
 		// Count *
-		m.Cols = append(m.Cols, &models.ResultColumn{"count", len(m.Cols), nil, value.IntType})
+		cols = append(cols, expr.NewResultColumn("count", len(cols), nil, value.IntType))
 	} else if len(m.Aggs) > 0 {
 		if m.Req.hasSingleValue {
 			for _, col := range sql.Columns {
 				if col.CountStar() {
-					m.Cols = append(m.Cols, &models.ResultColumn{col.Key(), len(m.Cols), col, value.IntType})
+					cols = append(cols, expr.NewResultColumn(col.Key(), len(cols), col, value.IntType))
 				} else {
 					u.Debugf("why Aggs? %#v", col)
-					m.Cols = append(m.Cols, &models.ResultColumn{col.Key(), len(m.Cols), col, value.IntType})
+					cols = append(cols, expr.NewResultColumn(col.Key(), len(cols), col, value.IntType))
 				}
 			}
 		} else if m.Req.hasMultiValue {
@@ -97,20 +89,33 @@ func (m *ResultReader) buildColumns() {
 			// if len(sql.GroupBy) > 0 {
 			// We store the Field Name Here
 			u.Debugf("why MultiValue Aggs? %#v", m.Req)
-			m.Cols = append(m.Cols, &models.ResultColumn{"field_name", len(m.Cols), nil, value.StringType})
-			m.Cols = append(m.Cols, &models.ResultColumn{"key", len(m.Cols), nil, value.StringType}) // the value of the field
-			m.Cols = append(m.Cols, &models.ResultColumn{"count", len(m.Cols), nil, value.IntType})
+			cols = append(cols, expr.NewResultColumn("field_name", len(cols), nil, value.StringType))
+			cols = append(cols, expr.NewResultColumn("key", len(cols), nil, value.StringType)) // the value of the field
+			cols = append(cols, expr.NewResultColumn("count", len(cols), nil, value.IntType))
 		}
 	} else {
 		for _, col := range m.Req.sel.Columns {
 			if fld, ok := m.Req.tbl.FieldMap[col.SourceField]; ok {
 				u.Debugf("column: %#v", col)
-				m.Cols = append(m.Cols, &models.ResultColumn{col.SourceField, len(m.Cols), col, fld.Type})
+				cols = append(cols, expr.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
 			} else {
 				u.Debugf("Could not find: %v", col.String())
 			}
 		}
 	}
+	m.proj.Columns = cols
+	u.Warnf("leaving Columns:  %v", len(m.proj.Columns))
+}
+
+/*
+
+	// Describe the Columns etc
+	Projection() *expr.Projection
+
+*/
+func (m *ResultReader) Projection() (*expr.Projection, error) {
+	m.buildProjection()
+	return m.proj, nil
 }
 
 func (m *ResultReader) Open(connInfo string) (datasource.DataSource, error) {
@@ -134,7 +139,8 @@ func (m *ResultReader) CreateIterator(filter expr.Node) datasource.Iterator {
 //   response, we build out values in advance
 func (m *ResultReader) Finalize() error {
 
-	m.buildColumns()
+	m.finalized = true
+	m.buildProjection()
 
 	defer func() {
 		u.Debugf("nice, finalize vals in ResultReader: %v", len(m.Vals))
@@ -220,17 +226,20 @@ func (m *ResultReader) Finalize() error {
 
 	metaFields := map[string]byte{"_id": 1, "_type": 1, "_score": 1}
 
+	cols := m.proj.Columns
+	if len(cols) == 0 {
+		u.Errorf("WTF?  no cols? %v", cols)
+	}
 	for _, doc := range m.Docs {
 		if len(doc) > 0 {
 			//by, _ := json.MarshalIndent(doc, " ", " ")
 			//u.Debugf("doc: %v", string(by))
-			vals := make([]driver.Value, len(m.Cols))
+
+			vals := make([]driver.Value, len(m.proj.Columns))
 			//for fldI, fld := range rs.Fields {
 			fldI := 0
-			if len(m.Cols) == 0 {
-				u.Errorf("WTF?  no cols? %v", m.Cols)
-			}
-			for _, col := range m.Cols {
+
+			for _, col := range cols {
 				// key := "_source." + fld.FieldName
 				// if _, ok := metaFields[fld.FieldName]; ok {
 				// 	key = fld.FieldName
@@ -287,6 +296,7 @@ func (m *ResultReader) Finalize() error {
 	return nil
 }
 
+// Implement sql/driver Rows Next() interface
 func (m *ResultReader) Next(row []driver.Value) error {
 	if m.cursor >= len(m.Vals) {
 		return io.EOF
@@ -298,11 +308,18 @@ func (m *ResultReader) Next(row []driver.Value) error {
 	}
 	return nil
 }
+
 func (m *ResultReaderNext) Next() datasource.Message {
 	select {
 	case <-m.exit:
 		return nil
 	default:
+		if !m.finalized {
+			if err := m.Finalize(); err != nil {
+				u.Errorf("Could not finalize: %v", err)
+				return nil
+			}
+		}
 		if m.cursor >= len(m.Vals) {
 			return nil
 		}
