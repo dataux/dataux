@@ -11,14 +11,17 @@ import (
 	//"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
+	//"github.com/dataux/dataux/pkg/backends"
+	"github.com/dataux/dataux/pkg/models"
 )
 
 var (
-	_ ResultProvider = (*ResultReader)(nil)
+	_ models.ResultProvider = (*ResultReader)(nil)
 
 	//_ exec.JobRunner = (*ResultReader)(nil)
-	// Ensure we implement datasource.DataSource
+	// Ensure we implement datasource.DataSource, Scanner
 	_ datasource.DataSource = (*ResultReader)(nil)
+	_ datasource.Scanner    = (*ResultReader)(nil)
 )
 
 /*
@@ -37,43 +40,6 @@ type JobRunner interface {
 
 */
 
-// ResultProvider is a Result Interface for bridging between backends/frontends
-//  - Next() same as database/sql driver interface for populating values
-//  - schema, we need col/data-types to write headers, typed interfaces
-type ResultProvider interface {
-	// Columns returns a definitions for columns in this result
-	Columns() []*ResultColumn
-
-	// Close closes the result provider
-	Close() error
-
-	// Next is called to populate the next row of data into
-	// the provided slice. The provided slice will be the same
-	// size as the Columns() are wide.
-	//
-	// The dest slice may be populated only with
-	// a driver Value type, but excluding string.
-	// All string values must be converted to []byte.
-	//
-	// Next should return io.EOF when there are no more rows.
-	Next(dest []driver.Value) error
-}
-
-type ValsMessage struct {
-	vals []driver.Value
-	id   uint64
-}
-
-func (m ValsMessage) Key() uint64       { return m.id }
-func (m ValsMessage) Body() interface{} { return m.vals }
-
-type ResultColumn struct {
-	Name   string          // Original path/name for query field
-	Pos    int             // Ordinal position in sql statement
-	SqlCol *expr.Column    // the original sql column
-	Type   value.ValueType // Type
-}
-
 // Elasticsearch ResultReader
 // - driver.Rows
 // - ??  how do we get schema?
@@ -81,7 +47,7 @@ type ResultReader struct {
 	exit     <-chan bool
 	cursor   int
 	colnames []string
-	Cols     []*ResultColumn
+	Cols     []*models.ResultColumn
 	Docs     []u.JsonHelper
 	Vals     [][]driver.Value
 	Total    int
@@ -99,31 +65,31 @@ func NewResultReader(req *SqlToEs) *ResultReader {
 	return m
 }
 
-func (m *ResultReader) Close() error             { return nil }
-func (m *ResultReader) Columns() []*ResultColumn { return m.Cols }
+func (m *ResultReader) Close() error                    { return nil }
+func (m *ResultReader) Columns() []*models.ResultColumn { return m.Cols }
 func (m *ResultReader) buildColumns() {
 
 	// TODO:
 	//   - add size to the resultcolumn
 	//   - add sql column to resultcolumn
-	m.Cols = make([]*ResultColumn, 0)
+	m.Cols = make([]*models.ResultColumn, 0)
 	sql := m.Req.sel
 	if sql.Star {
 		// Select Each field, grab fields from Table Schema
 		for _, fld := range m.Req.tbl.Fields {
-			m.Cols = append(m.Cols, &ResultColumn{fld.Name, len(m.Cols), nil, fld.Type})
+			m.Cols = append(m.Cols, &models.ResultColumn{fld.Name, len(m.Cols), nil, fld.Type})
 		}
 	} else if sql.CountStar() {
 		// Count *
-		m.Cols = append(m.Cols, &ResultColumn{"count", len(m.Cols), nil, value.IntType})
+		m.Cols = append(m.Cols, &models.ResultColumn{"count", len(m.Cols), nil, value.IntType})
 	} else if len(m.Aggs) > 0 {
 		if m.Req.hasSingleValue {
 			for _, col := range sql.Columns {
 				if col.CountStar() {
-					m.Cols = append(m.Cols, &ResultColumn{col.Key(), len(m.Cols), col, value.IntType})
+					m.Cols = append(m.Cols, &models.ResultColumn{col.Key(), len(m.Cols), col, value.IntType})
 				} else {
 					u.Debugf("why Aggs? %#v", col)
-					m.Cols = append(m.Cols, &ResultColumn{col.Key(), len(m.Cols), col, value.IntType})
+					m.Cols = append(m.Cols, &models.ResultColumn{col.Key(), len(m.Cols), col, value.IntType})
 				}
 			}
 		} else if m.Req.hasMultiValue {
@@ -131,15 +97,15 @@ func (m *ResultReader) buildColumns() {
 			// if len(sql.GroupBy) > 0 {
 			// We store the Field Name Here
 			u.Debugf("why MultiValue Aggs? %#v", m.Req)
-			m.Cols = append(m.Cols, &ResultColumn{"field_name", len(m.Cols), nil, value.StringType})
-			m.Cols = append(m.Cols, &ResultColumn{"key", len(m.Cols), nil, value.StringType}) // the value of the field
-			m.Cols = append(m.Cols, &ResultColumn{"count", len(m.Cols), nil, value.IntType})
+			m.Cols = append(m.Cols, &models.ResultColumn{"field_name", len(m.Cols), nil, value.StringType})
+			m.Cols = append(m.Cols, &models.ResultColumn{"key", len(m.Cols), nil, value.StringType}) // the value of the field
+			m.Cols = append(m.Cols, &models.ResultColumn{"count", len(m.Cols), nil, value.IntType})
 		}
 	} else {
 		for _, col := range m.Req.sel.Columns {
 			if fld, ok := m.Req.tbl.FieldMap[col.SourceField]; ok {
 				u.Debugf("column: %#v", col)
-				m.Cols = append(m.Cols, &ResultColumn{col.SourceField, len(m.Cols), col, fld.Type})
+				m.Cols = append(m.Cols, &models.ResultColumn{col.SourceField, len(m.Cols), col, fld.Type})
 			} else {
 				u.Debugf("Could not find: %v", col.String())
 			}
@@ -150,6 +116,10 @@ func (m *ResultReader) buildColumns() {
 func (m *ResultReader) Open(connInfo string) (datasource.DataSource, error) {
 	panic("Not implemented")
 	return m, nil
+}
+
+func (m *ResultReader) Schema() *models.Schema {
+	return m.Req.tbl.Schema
 }
 
 func (m *ResultReader) CreateIterator(filter expr.Node) datasource.Iterator {
@@ -338,6 +308,6 @@ func (m *ResultReaderNext) Next() datasource.Message {
 		}
 		m.cursor++
 		u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
-		return ValsMessage{m.Vals[m.cursor-1], uint64(m.cursor)}
+		return models.ValsMessage{m.Vals[m.cursor-1], uint64(m.cursor)}
 	}
 }

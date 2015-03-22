@@ -11,6 +11,7 @@ import (
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
+	"github.com/dataux/dataux/pkg/backends"
 	"github.com/dataux/dataux/pkg/models"
 )
 
@@ -70,7 +71,8 @@ func (m *ElasticsearchDataSource) Init() error {
 	return nil
 }
 
-func (m *ElasticsearchDataSource) SourceTask(stmt *expr.SqlSelect, writer models.ResultWriter) (models.SourceTask, error) {
+func (m *ElasticsearchDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, error) {
+
 	u.Debugf("get sourceTask for %v", stmt)
 	tblName := strings.ToLower(stmt.From[0].Name)
 
@@ -88,13 +90,16 @@ func (m *ElasticsearchDataSource) SourceTask(stmt *expr.SqlSelect, writer models
 		return nil, err
 	}
 
-	rw := NewMysqlResultWriter(stmt, resp, tbl)
+	/*
+		rw := backends.NewMysqlResultWriter(stmt, resp)
 
-	if err := rw.Finalize(); err != nil {
-		u.Error(err)
-		return nil, err
-	}
-	return es, writer.WriteResult(rw.rs)
+		if err := rw.Finalize(); err != nil {
+			u.Error(err)
+			return nil, err
+		}
+		return es, writer.WriteResult(rw.Rs)
+	*/
+	return es, nil
 }
 
 func (m *ElasticsearchDataSource) Features() *datasource.SourceFeatures { return esFeatures }

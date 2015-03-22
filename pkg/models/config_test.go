@@ -20,7 +20,7 @@ user : root
 # password : ""
 log_level : error
 
-backends [
+sources [
   {
     name : node1 
     down_after_noalive : 300
@@ -50,8 +50,8 @@ backends [
 schemas : [
   {
     db : mixer
-    backends : ["node1", "node2", "node3"]
-    backend_type : mysql
+    source_nodes : ["node1", "node2", "node3"]
+    source_type : mysql
     # list of rules
     rules : {
       default : node1
@@ -60,14 +60,14 @@ schemas : [
         {
           table : mixer_test_shard_hash
           key : id
-          backends: ["node1", "node2", "node3"]
+          source_nodes: ["node1", "node2", "node3"]
           type : hash
         },
         {
           table: mixer_test_shard_range
           key: id
           type: range
-          backends: [ node2, node3 ]
+          source_nodes: [ node2, node3 ]
           range: "-10000-"
         }
       ]
@@ -79,15 +79,15 @@ schemas : [
 	conf, err := LoadConfig(configData)
 	assert.Tf(t, err == nil && conf != nil, "Must not error on parse of config: %v", err)
 
-	if len(conf.Backends) != 3 {
-		t.Fatal(len(conf.Backends))
+	if len(conf.Sources) != 3 {
+		t.Fatal(len(conf.Sources))
 	}
 
 	if len(conf.Schemas) != 1 {
 		t.Fatal(len(conf.Schemas))
 	}
 
-	testNode := BackendConfig{
+	testNode := SourceConfig{
 		Name:             "node1",
 		DownAfterNoAlive: 300,
 		IdleConns:        16,
@@ -100,36 +100,36 @@ schemas : [
 		Slave:  "127.0.0.1:4306",
 	}
 
-	if !reflect.DeepEqual(conf.Backends[0], &testNode) {
-		t.Fatalf("node1 must equal %v", fmt.Sprintf("%v\n", conf.Backends[0]))
+	if !reflect.DeepEqual(conf.Sources[0], &testNode) {
+		t.Fatalf("node1 must equal %v", fmt.Sprintf("%v\n", conf.Sources[0]))
 	}
 
-	testNode_2 := BackendConfig{
+	testNode_2 := SourceConfig{
 		Name:   "node2",
 		User:   "root",
 		Master: "127.0.0.1:3307",
 	}
 
-	if !reflect.DeepEqual(conf.Backends[1], &testNode_2) {
+	if !reflect.DeepEqual(conf.Sources[1], &testNode_2) {
 		t.Fatal("node2 must equal")
 	}
 
 	testShard_1 := ShardConfig{
-		Table:    "mixer_test_shard_hash",
-		Key:      "id",
-		Backends: []string{"node1", "node2", "node3"},
-		Type:     "hash",
+		Table: "mixer_test_shard_hash",
+		Key:   "id",
+		Nodes: []string{"node1", "node2", "node3"},
+		Type:  "hash",
 	}
 	if !reflect.DeepEqual(conf.Schemas[0].RulesConifg.ShardRule[0], testShard_1) {
 		t.Fatal("ShardConfig0 must equal")
 	}
 
 	testShard_2 := ShardConfig{
-		Table:    "mixer_test_shard_range",
-		Key:      "id",
-		Backends: []string{"node2", "node3"},
-		Type:     "range",
-		Range:    "-10000-",
+		Table: "mixer_test_shard_range",
+		Key:   "id",
+		Nodes: []string{"node2", "node3"},
+		Type:  "range",
+		Range: "-10000-",
 	}
 	if !reflect.DeepEqual(conf.Schemas[0].RulesConifg.ShardRule[1], testShard_2) {
 		t.Fatal("ShardConfig1 must equal")
@@ -149,8 +149,8 @@ schemas : [
 
 	testSchema := SchemaConfig{
 		DB:          "mixer",
-		BackendType: "mysql",
-		Backends:    []string{"node1", "node2", "node3"},
+		SourceType:  "mysql",
+		Nodes:       []string{"node1", "node2", "node3"},
 		RulesConifg: testRules,
 	}
 

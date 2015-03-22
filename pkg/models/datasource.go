@@ -23,7 +23,7 @@ type DataSource interface {
 	Close() error
 	Features() *datasource.SourceFeatures
 	Table(table string) (*Table, error)
-	SourceTask(stmt *expr.SqlSelect, writer ResultWriter) (SourceTask, error)
+	SourceTask(stmt *expr.SqlSelect) (SourceTask, error)
 }
 
 type SourceTask interface {

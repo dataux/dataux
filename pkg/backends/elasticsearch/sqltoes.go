@@ -25,6 +25,7 @@ type esMap map[string]interface{}
 //   Map sql queries into Elasticsearch Json Requests
 type SqlToEs struct {
 	*exec.TaskBase
+	resp           *ResultReader
 	tbl            *models.Table
 	sel            *expr.SqlSelect
 	schema         *models.Schema
@@ -133,6 +134,7 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	}
 
 	resp := NewResultReader(m)
+	m.resp = resp
 	resp.Total = jhResp.Int("hits.total")
 	resp.Aggs = jhResp.Helper("aggregations")
 	if req.Where != nil {

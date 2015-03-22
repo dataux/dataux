@@ -79,10 +79,19 @@ func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
 		return nil, fmt.Errorf("join not implemented")
 	}
 
-	task, err := m.schema.DataSource.SourceTask(stmt, m.writer)
+	sourceTask, err := m.schema.DataSource.SourceTask(stmt)
 	if err != nil {
 		return nil, err
 	}
+
+	rw := NewMysqlResultWriter(stmt, resp)
+
+	if err := rw.Finalize(); err != nil {
+		u.Error(err)
+		return nil, err
+	}
+	writer.WriteResult(rw.Rs)
+
 	tasks = append(tasks, task)
 
 	/*
