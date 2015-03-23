@@ -1,4 +1,4 @@
-package elasticsearch
+package mongo
 
 import (
 	"database/sql/driver"
@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
+
+	"gopkg.in/mgo.v2"
+	//"gopkg.in/mgo.v2/bson"
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
@@ -14,11 +18,17 @@ import (
 	"github.com/dataux/dataux/pkg/models"
 )
 
-var (
-	// Ensure our ElasticsearchDataSource is a SourceTask type
-	_ models.DataSource = (*ElasticsearchDataSource)(nil)
+/*
+TODO:
+ - This is not rorating amongst backends
 
-	esFeatures = &datasource.SourceFeatures{
+
+*/
+var (
+	// Ensure our MongoDataSource is a datasource.DataSource type
+	_ models.DataSource = (*MongoDataSource)(nil)
+
+	features = &datasource.SourceFeatures{
 		Scan:         true,
 		Seek:         true,
 		Where:        true,
@@ -29,47 +39,110 @@ var (
 )
 
 const (
-	ListenerType = "elasticsearch"
+	ListenerType = "mongo"
 )
 
 func init() {
 	// We need to register our DataSource provider here
-	models.DataSourceRegister("elasticsearch", NewElasticsearchDataSource)
+	models.DataSourceRegister("mongo", NewMongoDataSource)
 }
 
-type ElasticsearchDataSource struct {
+type MongoDataSource struct {
 	schema     *models.Schema
 	conf       *models.Config
 	schemaConf *models.SchemaConfig
+	mu         sync.Mutex
+	sess       *mgo.Session
+	closed     bool
 }
 
-func NewElasticsearchDataSource(schema *models.Schema, conf *models.Config) models.DataSource {
-	es := ElasticsearchDataSource{}
-	es.schema = schema
-	es.schemaConf = schema.Conf
-	es.conf = conf
-	return &es
+func NewMongoDataSource(schema *models.Schema, conf *models.Config) models.DataSource {
+	m := MongoDataSource{}
+	m.schema = schema
+	m.schemaConf = schema.Conf
+	m.conf = conf
+	return &m
 }
 
-func (m *ElasticsearchDataSource) Init() error {
+func (m *MongoDataSource) Init() error {
 
-	u.Debugf("Init() Eleasticsearch schema P=%p", m.schema)
-	if err := m.findEsNodes(); err != nil {
-		u.Errorf("could not init es: %v", err)
+	u.Infof("Init:  %#v", m.schemaConf)
+	if m.schemaConf == nil {
+		return fmt.Errorf("Schema conf not found")
+	}
+
+	if err := m.connect(); err != nil {
+		return err
+	}
+	u.Debugf("Init() mongo schema P=%p", m.schema)
+	if err := m.findMongoNodes(); err != nil {
+		u.Errorf("could not init mgo: %v", err)
 		return err
 	}
 
 	if err := m.loadTableNames(); err != nil {
-		u.Errorf("could not load es tables: %v", err)
+		u.Errorf("could not load mgo tables: %v", err)
 		return err
 	}
 	if m.schema != nil {
-		u.Debugf("Post Init() Eleasticsearch schema P=%p tblct=%d", m.schema, len(m.schema.Tables))
+		u.Debugf("Post Init() mongo schema P=%p tblct=%d", m.schema, len(m.schema.Tables))
 	}
 	return nil
 }
 
-func (m *ElasticsearchDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, error) {
+func (m *MongoDataSource) Close() error {
+	u.Infof("Closing MongoDataSource %p", m)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.closed && m.sess != nil {
+		u.Infof("Closing MongoDataSource %p session %p", m, m.sess)
+		m.sess.Close()
+	} else {
+		u.Infof("Told to close mgomodelstore %p but session=%p closed=%t", m, m.closed)
+	}
+	m.closed = true
+	return nil
+}
+
+func (m *MongoDataSource) connect() error {
+	u.Infof("connecting MongoDataSource to host: %v: db: %v", m.schemaConf.Address, m.schemaConf.DB)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// TODO
+	//host := s.ChooseBackend()
+	sess, err := mgo.Dial(m.schemaConf.Address)
+	if err != nil {
+		u.Errorf("Could not connect to mongo: %v", err)
+		return err
+	}
+
+	// We depend on read-your-own-writes consistency in several places
+	sess.SetMode(mgo.Strong, true)
+
+	// Unbelievably, you have to actually enable error checking
+	sess.SetSafe(&mgo.Safe{}) // copied from the mgo package docs
+
+	sess.SetPoolLimit(1024)
+
+	// Close the existing session if there is one
+	if m.sess != nil {
+		u.Infof("reconnecting MongoDataSource %p (closing old session)", m)
+		m.sess.Close()
+	}
+
+	u.Infof("old session %p -> new session %p", m.sess, sess)
+	m.sess = sess
+
+	db := sess.DB(m.schemaConf.DB)
+	if db == nil {
+		return fmt.Errorf("Database %v not found", m.schemaConf.DB)
+	}
+
+	return nil
+}
+
+func (m *MongoDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, error) {
 
 	u.Debugf("get sourceTask for %v", stmt)
 	tblName := strings.ToLower(stmt.From[0].Name)
@@ -80,8 +153,8 @@ func (m *ElasticsearchDataSource) SourceTask(stmt *expr.SqlSelect) (models.Sourc
 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, tblName)
 	}
 
-	es := NewSqlToEs(tbl)
-	u.Debugf("sqltoes: %#v", es)
+	es := NewSqlToMgo(tbl)
+	u.Debugf("SqlToMgo: %#v", es)
 	resp, err := es.Query(stmt)
 	if err != nil {
 		u.Error(err)
@@ -91,43 +164,28 @@ func (m *ElasticsearchDataSource) SourceTask(stmt *expr.SqlSelect) (models.Sourc
 	return resp, nil
 }
 
-func (m *ElasticsearchDataSource) Features() *datasource.SourceFeatures { return esFeatures }
-func (m *ElasticsearchDataSource) Close() error                         { return nil }
+func (m *MongoDataSource) Features() *datasource.SourceFeatures { return features }
 
-func (m *ElasticsearchDataSource) Table(table string) (*models.Table, error) {
+func (m *MongoDataSource) Table(table string) (*models.Table, error) {
 	u.Debugf("get table for %s", table)
 	return m.loadTableSchema(table)
 }
 
 // Load only table names, not full schema
-func (m *ElasticsearchDataSource) loadTableNames() error {
+func (m *MongoDataSource) loadTableNames() error {
 
-	jh, err := u.JsonHelperHttp("GET", "http://localhost:9200/_aliases", nil)
+	tables, err := m.sess.DatabaseNames()
 	if err != nil {
-		u.Error("error on es read: %v", err)
 		return err
 	}
-	//u.Debugf("resp: %v", jh)
-	tables := []string{}
-	for alias, _ := range jh {
-		tables = append(tables, alias)
-	}
 	sort.Strings(tables)
-
-	// move this to an initial load?
-	if m.schema == nil {
-		u.Infof("no schema? %v")
-	}
 	m.schema.TableNames = tables
-	// for _, table := range tables {
-	// 	m.loadTableSchema(table)
-	// }
 	u.Debugf("found tables: %v", m.schema.TableNames)
 
 	return nil
 }
 
-func (m *ElasticsearchDataSource) loadTableSchema(table string) (*models.Table, error) {
+func (m *MongoDataSource) loadTableSchema(table string) (*models.Table, error) {
 
 	if m.schema == nil {
 		return nil, fmt.Errorf("no schema in use")
@@ -138,52 +196,32 @@ func (m *ElasticsearchDataSource) loadTableSchema(table string) (*models.Table, 
 	}
 
 	s := m.schema
-	host := s.ChooseBackend()
-	if m.schema.Address == "" {
-		u.Errorf("missing address: %#v", m.schema)
-	}
-	tbl := models.NewTable(table, m.schema)
+	tbl := models.NewTable(table, s)
 
-	indexUrl := fmt.Sprintf("%s/%s/_mapping", host, tbl.Name)
-	respJh, err := u.JsonHelperHttp("GET", indexUrl, nil)
-	if err != nil {
-		u.Error("error on es read: url=%v  err=%v", indexUrl, err)
+	coll := m.sess.DB(m.schemaConf.DB).C(table)
+	var dataType []map[string]interface{}
+	if err := coll.Find(nil).All(&dataType); err != nil {
+		u.Errorf("could not query collection")
 	}
-	u.Debugf("url: %v", indexUrl)
-	respJh = respJh.Helper(table + ".mappings")
-	respKeys := respJh.Keys()
-	//u.Infof("keys:%v  resp:%v", respKeys, respJh)
-	if len(respKeys) < 1 {
-		u.Errorf("could not get data? %v   %v", indexUrl, respJh)
-		return nil, fmt.Errorf("Could not process desribe")
-	}
-	indexType := "user"
-	for _, key := range respKeys {
-		if key != "_default_" {
-			indexType = key
-			break
-		}
+	for _, dt := range dataType {
+		u.Debugf("found col: %#v", dt)
 	}
 
-	jh := respJh.Helper(indexType)
-	//u.Debugf("resp: %v", jh)
-	jh = jh.Helper("properties")
+	// tbl.AddField(models.NewField("_id", value.StringType, 24, "AUTOGEN"))
+	// tbl.AddField(models.NewField("type", value.StringType, 24, "tbd"))
+	// tbl.AddField(models.NewField("_score", value.NumberType, 24, "Created per Search By Elasticsearch"))
 
-	tbl.AddField(models.NewField("_id", value.StringType, 24, "AUTOGEN"))
-	tbl.AddField(models.NewField("type", value.StringType, 24, "tbd"))
-	tbl.AddField(models.NewField("_score", value.NumberType, 24, "Created per Search By Elasticsearch"))
+	// tbl.AddValues([]driver.Value{"_id", "string", "NO", "PRI", "AUTOGEN", ""})
+	// tbl.AddValues([]driver.Value{"type", "string", "NO", "", nil, "tbd"})
+	// tbl.AddValues([]driver.Value{"_score", "float", "NO", "", nil, "Created per search"})
 
-	tbl.AddValues([]driver.Value{"_id", "string", "NO", "PRI", "AUTOGEN", ""})
-	tbl.AddValues([]driver.Value{"type", "string", "NO", "", nil, "tbd"})
-	tbl.AddValues([]driver.Value{"_score", "float", "NO", "", nil, "Created per search"})
-
-	buildEsFields(s, tbl, jh, "", 0)
+	// buildMongoFields(s, tbl, jh, "", 0)
 	m.schema.Tables[table] = tbl
 
 	return tbl, nil
 }
 
-func buildEsFields(s *models.Schema, tbl *models.Table, jh u.JsonHelper, prefix string, depth int) {
+func buildMongoFields(s *models.Schema, tbl *models.Table, jh u.JsonHelper, prefix string, depth int) {
 	for field, _ := range jh {
 
 		if h := jh.Helper(field); len(h) > 0 {
@@ -219,7 +257,7 @@ func buildEsFields(s *models.Schema, tbl *models.Table, jh u.JsonHelper, prefix 
 				fld = models.NewField(fieldName, value.StringType, 2000, `{"type":"object"}`)
 				props := h.Helper("properties")
 				if len(props) > 0 {
-					buildEsFields(s, tbl, props, fieldName+".", depth+1)
+					buildMongoFields(s, tbl, props, fieldName+".", depth+1)
 				} else {
 					u.Debugf("unknown type: %v", string(jb))
 				}
@@ -233,7 +271,7 @@ func buildEsFields(s *models.Schema, tbl *models.Table, jh u.JsonHelper, prefix 
 	}
 }
 
-func (m *ElasticsearchDataSource) findEsNodes() error {
+func (m *MongoDataSource) findMongoNodes() error {
 
 	//m.nodes = make(map[string]*Node)
 
@@ -248,15 +286,6 @@ func (m *ElasticsearchDataSource) findEsNodes() error {
 			}
 		}
 		if be.SourceType == ListenerType {
-			// if _, ok := m.nodes[be.Name]; ok {
-			// 	return fmt.Errorf("duplicate node '%s'", be.Name)
-			// }
-
-			// n, err := m.startMysqlNode(be)
-			// if err != nil {
-			// 	return err
-			// }
-
 			u.Debugf("adding node: %s", be.String())
 			//m.nodes[be.Name] = n
 		}

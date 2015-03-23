@@ -19,7 +19,16 @@ var (
 	testListener   *TestListenerWraper
 	testDBOnce     sync.Once
 	testDB         *client.DB
+	Conf           *models.Config
 )
+
+func init() {
+	conf, err := models.LoadConfig(testConfigData)
+	if err != nil {
+		panic("must load confiig")
+	}
+	Conf = conf
+}
 
 var testConfigData = `
 
@@ -38,6 +47,10 @@ sources [
   {
     name : node1
     address : "http://localhost:9200"
+  },
+  {
+    name : mgo1
+    address : "localhost"
   }
 ]
 
@@ -47,6 +60,12 @@ schemas : [
     source_nodes : ["node1"]
     source_type : elasticsearch
     address : "http://localhost:9200"
+  },
+  {
+    db : mgo_datauxtest
+    source_nodes : ["mgo1"]
+    source_type : mongo
+    address : "localhost"
   }
 ]
 `
@@ -57,10 +76,10 @@ type TestListenerWraper struct {
 
 func NewTestServer(t *testing.T) *TestListenerWraper {
 	f := func() {
-		conf, err := models.LoadConfig(testConfigData)
-		assert.Tf(t, err == nil, "must load config without err: %v", err)
 
-		svr := models.NewServerCtx(conf)
+		assert.Tf(t, Conf != nil, "must load config without err: %v", Conf)
+
+		svr := models.NewServerCtx(Conf)
 		svr.Init()
 
 		handler, err := frontends.NewMySqlHandler(svr)
@@ -72,7 +91,7 @@ func NewTestServer(t *testing.T) *TestListenerWraper {
 			handler,
 		)
 
-		myl, err := mysqlproxy.NewMysqlListener(conf.Frontends[0], conf)
+		myl, err := mysqlproxy.NewMysqlListener(Conf.Frontends[0], Conf)
 		assert.Tf(t, err == nil, "must create listener without err: %v", err)
 
 		testListener = &TestListenerWraper{myl}

@@ -15,27 +15,6 @@ import (
 	"github.com/kr/pretty"
 )
 
-/*
-
-Lets turn this into 4 pieces
-
-- FrontEnd:
-  - stmt := stmt.Parse(txt)
-  - myresults := NewMysqlResultWriter(stmt)
-  - err := NewHandler(myresults, stmt)
-
-- SchemaManager:
-  - schemagfind(stmt)
-
-- Handler(resultWriter, stmt):
-   job := newJobRunner(config, resultWriter)
-   err := job.Accept(stmt)
-
-- ResultWriter interface{}
-  - implement MysqlResultWriter
-
-*/
-
 const (
 	MaxAllowedPacket = 1024 * 1024
 )

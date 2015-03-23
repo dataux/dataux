@@ -1,4 +1,4 @@
-package elasticsearch
+package mongo
 
 import (
 	"database/sql/driver"
@@ -23,9 +23,8 @@ var (
 	_ datasource.Scanner    = (*ResultReader)(nil)
 )
 
-// Elasticsearch ResultProvider, adapts the elasticsearch http json
-//   to dataux/driver values
-//
+// Mongo ResultProvider
+// - driver.Rows
 type ResultReader struct {
 	exit          <-chan bool
 	finalized     bool
@@ -37,7 +36,7 @@ type ResultReader struct {
 	Total         int
 	Aggs          u.JsonHelper
 	ScrollId      string
-	Req           *SqlToEs
+	Req           *SqlToMgo
 }
 
 // A wrapper, allowing us to implement sql/driver Next() interface
@@ -46,7 +45,7 @@ type ResultReaderNext struct {
 	*ResultReader
 }
 
-func NewResultReader(req *SqlToEs) *ResultReader {
+func NewResultReader(req *SqlToMgo) *ResultReader {
 	m := &ResultReader{}
 	m.Req = req
 	return m

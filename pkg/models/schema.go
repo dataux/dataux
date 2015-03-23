@@ -125,7 +125,7 @@ func (m *Schema) ShowTables() (*datasource.StaticDataSource, *expr.Projection) {
 			//u.Infof("found table: %v   vals=%v", tbl, vals[idx])
 			idx++
 		}
-		m.showTableVals = datasource.NewStaticDataSource(vals, []string{"table"})
+		m.showTableVals = datasource.NewStaticDataSource(vals, []string{"Table"})
 		p := expr.NewProjection()
 		p.AddColumnShort("Table", value.StringType)
 		m.showTableProjection = p

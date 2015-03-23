@@ -1,10 +1,13 @@
-package elasticsearch
+package mongo
 
 import (
 	"fmt"
 	"strings"
 
+	"gopkg.in/mgo.v2/bson"
+
 	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/value"
@@ -16,37 +19,37 @@ var (
 	DefaultLimit = 20
 )
 
-type esMap map[string]interface{}
-
 // Sql To Elasticsearch Request Object
 //   Map sql queries into Elasticsearch Json Requests
-type SqlToEs struct {
+type SqlToMgo struct {
+	*exec.TaskBase
 	resp           *ResultReader
 	tbl            *models.Table
 	sel            *expr.SqlSelect
 	schema         *models.Schema
-	filter         esMap
-	aggs           esMap
-	groupby        esMap
-	innergb        esMap // InnerMost Group By
-	sort           []esMap
+	filter         bson.M
+	aggs           bson.M
+	groupby        bson.M
+	innergb        bson.M // InnerMost Group By
+	sort           []bson.M
 	hasMultiValue  bool // Multi-Value vs Single-Value aggs
 	hasSingleValue bool // single value agg
 }
 
-func NewSqlToEs(table *models.Table) *SqlToEs {
-	return &SqlToEs{
-		tbl:    table,
-		schema: table.Schema,
+func NewSqlToMgo(table *models.Table) *SqlToMgo {
+	return &SqlToMgo{
+		tbl:      table,
+		schema:   table.Schema,
+		TaskBase: exec.NewTaskBase("SqlToMgo"),
 	}
 }
 
-func (m *SqlToEs) Host() string {
+func (m *SqlToMgo) Host() string {
 	//u.Warnf("TODO:  replace hardcoded es host")
 	return m.schema.ChooseBackend()
 }
 
-func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
+func (m *SqlToMgo) Query(req *expr.SqlSelect) (*ResultReader, error) {
 
 	var err error
 	m.sel = req
@@ -55,7 +58,7 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	}
 
 	if req.Where != nil {
-		m.filter = esMap{}
+		m.filter = bson.M{}
 		_, err = m.WalkNode(req.Where.Expr, &m.filter)
 		if err != nil {
 			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.StringAST(), err)
@@ -78,10 +81,10 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 
 	if len(m.aggs) > 0 && len(m.filter) > 0 {
 		u.Debugf("adding filter to aggs: %v", m.filter)
-		m.aggs = esMap{"where": esMap{"aggs": m.aggs, "filter": m.filter}}
+		m.aggs = bson.M{"where": bson.M{"aggs": m.aggs, "filter": m.filter}}
 	}
 
-	esReq := esMap{}
+	esReq := bson.M{}
 	//esPointer := esReq
 	if len(m.groupby) > 0 {
 		esReq = m.groupby
@@ -92,25 +95,25 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 			m.innergb["aggs"] = m.aggs
 		}
 	} else if len(m.aggs) > 0 {
-		esReq = esMap{"aggs": m.aggs, "size": 0}
+		esReq = bson.M{"aggs": m.aggs, "size": 0}
 		req.Limit = 0
 		u.Debugf("setting limit: %v", req.Limit)
 	} else if len(m.filter) > 0 {
 		//u.Infof("in else: %v", esReq)
-		esReq = esMap{"filter": m.filter}
+		esReq = bson.M{"filter": m.filter}
 	}
 	u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
 	if len(m.sel.OrderBy) > 0 {
-		m.sort = make([]esMap, len(m.sel.OrderBy))
+		m.sort = make([]bson.M, len(m.sel.OrderBy))
 		esReq["sort"] = m.sort
 		for i, col := range m.sel.OrderBy {
 			// We really need to look at any funcs?   walk this out
 			switch col.Order {
 			case "ASC", "DESC":
-				m.sort[i] = esMap{col.As: esMap{"order": strings.ToLower(col.Order)}}
+				m.sort[i] = bson.M{col.As: bson.M{"order": strings.ToLower(col.Order)}}
 			default:
 				// default sorder order = ?
-				m.sort[i] = esMap{col.As: esMap{"order": "asc"}}
+				m.sort[i] = bson.M{col.As: bson.M{"order": "asc"}}
 			}
 		}
 	}
@@ -163,9 +166,9 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 //
 //    SELECT <select_list> FROM ... WHERE
 //
-func (m *SqlToEs) WalkSelectList() error {
+func (m *SqlToMgo) WalkSelectList() error {
 
-	m.aggs = esMap{}
+	m.aggs = bson.M{}
 	for i := len(m.sel.Columns) - 1; i >= 0; i-- {
 		col := m.sel.Columns[i]
 		u.Debugf("i=%d of %d  %v %#v ", i, len(m.sel.Columns), col.Key(), col)
@@ -211,7 +214,7 @@ func (m *SqlToEs) WalkSelectList() error {
 //
 //    WHERE .. GROUP BY x,y,z
 //
-func (m *SqlToEs) WalkGroupBy() error {
+func (m *SqlToMgo) WalkGroupBy() error {
 
 	for i, col := range m.sel.GroupBy {
 		if col.Tree != nil {
@@ -220,14 +223,14 @@ func (m *SqlToEs) WalkGroupBy() error {
 				u.Infof("Walk group by %s  %T", node.StringAST(), node)
 				switch col.Tree.Root.(type) {
 				case *expr.IdentityNode, *expr.FuncNode:
-					esm := esMap{}
+					esm := bson.M{}
 					_, err := m.WalkNode(node, &esm)
 					fld := strings.Replace(expr.FindIdentityField(node), ".", "", -1)
 					u.Infof("gb: %s  %s", fld, u.JsonHelper(esm).PrettyJson())
 					if err == nil {
 						if len(m.innergb) > 0 {
-							esm["aggs"] = esMap{fmt.Sprintf("group_by_%d", i): m.innergb}
-							// esm["aggs"] = esMap{"group_by_" + fld: m.innergb}
+							esm["aggs"] = bson.M{fmt.Sprintf("group_by_%d", i): m.innergb}
+							// esm["aggs"] = bson.M{"group_by_" + fld: m.innergb}
 						} else {
 							esm = esm
 						}
@@ -244,14 +247,14 @@ func (m *SqlToEs) WalkGroupBy() error {
 		}
 	}
 
-	m.groupby = esMap{"aggs": esMap{"group_by": m.innergb}}
+	m.groupby = bson.M{"aggs": bson.M{"group_by": m.innergb}}
 	return nil
 }
 
 // WalkAggs() aggregate expressions when used ast part of <select_list>
 //  - For Aggregates (functions) it builds aggs
 //  - For Projectsion (non-functions) it does nothing, that will be done later during projection
-func (m *SqlToEs) WalkAggs(cur expr.Node) (q esMap, _ error) {
+func (m *SqlToMgo) WalkAggs(cur expr.Node) (q bson.M, _ error) {
 	switch curNode := cur.(type) {
 	// case *expr.NumberNode:
 	// 	return nil, value.NewNumberValue(curNode.Float64), nil
@@ -275,7 +278,7 @@ func (m *SqlToEs) WalkAggs(cur expr.Node) (q esMap, _ error) {
 		//panic("Unrecognized node type")
 	}
 	// if cur.Negate {
-	// 	q = esMap{"not": q}
+	// 	q = bson.M{"not": q}
 	// }
 	return q, nil
 }
@@ -284,8 +287,8 @@ func (m *SqlToEs) WalkAggs(cur expr.Node) (q esMap, _ error) {
 //  nested json document for elasticsearch queries
 //
 //  TODO:  think we need to separate Value Nodes from those that return es types?
-func (m *SqlToEs) WalkNode(cur expr.Node, q *esMap) (value.Value, error) {
-	u.Debugf("walkFilter: %#v", cur)
+func (m *SqlToMgo) WalkNode(cur expr.Node, q *bson.M) (value.Value, error) {
+	u.Debugf("WalkNode: %#v", cur)
 	switch curNode := cur.(type) {
 	case *expr.NumberNode, *expr.StringNode:
 		nodeVal, ok := vm.Eval(nil, cur)
@@ -310,7 +313,7 @@ func (m *SqlToEs) WalkNode(cur expr.Node, q *esMap) (value.Value, error) {
 		u.Warnf("wat????   %v", curNode.StringAST())
 		// "errors" :   { "term" : { "body" : "error"   }},
 		//"terms": {        "field": "field1"      }
-		*q = esMap{"terms": esMap{"field": curNode.String()}}
+		*q = bson.M{"terms": bson.M{"field": curNode.String()}}
 		return value.NewStringValue(curNode.String()), nil
 	case *expr.MultiArgNode:
 		return m.walkMultiFilter(curNode, q)
@@ -319,12 +322,12 @@ func (m *SqlToEs) WalkNode(cur expr.Node, q *esMap) (value.Value, error) {
 		panic("Unrecognized node type")
 	}
 	// if cur.Negate {
-	// 	q = esMap{"not": q}
+	// 	q = bson.M{"not": q}
 	// }
 	return nil, nil
 }
 
-func (m *SqlToEs) walkFilterTri(node *expr.TriNode, q *esMap) (value.Value, error) {
+func (m *SqlToMgo) walkFilterTri(node *expr.TriNode, q *bson.M) (value.Value, error) {
 
 	arg1val, aok := vm.Eval(nil, node.Args[0])
 	//u.Debugf("arg1? %v  ok?%v", arg1val, aok)
@@ -337,7 +340,7 @@ func (m *SqlToEs) walkFilterTri(node *expr.TriNode, q *esMap) (value.Value, erro
 	u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
 	switch node.Operator.T {
 	case lex.TokenBetween:
-		*q = esMap{"range": esMap{arg1val.ToString(): esMap{"gte": arg2val.ToString(), "lte": arg3val.ToString()}}}
+		*q = bson.M{"range": bson.M{arg1val.ToString(): bson.M{"gte": arg2val.ToString(), "lte": arg3val.ToString()}}}
 	default:
 		u.Warnf("not implemented ")
 	}
@@ -356,16 +359,16 @@ Mutli Arg expressions:
             "terms" : { "year" : [1990,1992]}
         }
 */
-func (m *SqlToEs) walkMultiFilter(node *expr.MultiArgNode, q *esMap) (value.Value, error) {
+func (m *SqlToMgo) walkMultiFilter(node *expr.MultiArgNode, q *bson.M) (value.Value, error) {
 
 	// First argument must be field name in this context
 	fldName := node.Args[0].String()
 	u.Debugf("walkMulti: %v", node.StringAST())
 	switch node.Operator.T {
 	case lex.TokenIN:
-		//q = esMap{"range": esMap{arg1val.ToString(): esMap{"gte": arg2val.ToString(), "lte": arg3val.ToString()}}}
+		//q = bson.M{"range": bson.M{arg1val.ToString(): bson.M{"gte": arg2val.ToString(), "lte": arg3val.ToString()}}}
 		terms := make([]interface{}, len(node.Args)-1)
-		*q = esMap{"terms": esMap{fldName: terms}}
+		*q = bson.M{"terms": bson.M{fldName: terms}}
 		for i := 1; i < len(node.Args); i++ {
 			// Do we eval here?
 			v, ok := vm.Eval(nil, node.Args[i])
@@ -387,7 +390,7 @@ func (m *SqlToEs) walkMultiFilter(node *expr.MultiArgNode, q *esMap) (value.Valu
 	return nil, fmt.Errorf("Uknown Error")
 }
 
-func (m *SqlToEs) walkFilterBinary(node *expr.BinaryNode, q *esMap) (value.Value, error) {
+func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Value, error) {
 
 	// var lhval, rhval interface{}
 	// switch curNode := cur.(type) {
@@ -410,37 +413,37 @@ func (m *SqlToEs) walkFilterBinary(node *expr.BinaryNode, q *esMap) (value.Value
 	switch node.Operator.T {
 	case lex.TokenLogicAnd:
 		// this doesn't yet implement x AND y AND z
-		lhq, rhq := esMap{}, esMap{}
+		lhq, rhq := bson.M{}, bson.M{}
 		_, err := m.WalkNode(node.Args[0], &lhq)
 		_, err2 := m.WalkNode(node.Args[1], &rhq)
 		if err != nil || err2 != nil {
 			u.Errorf("could not get children nodes? %v %v %v", err, err2, node)
 			return nil, fmt.Errorf("could not evaluate: %v", node.StringAST())
 		}
-		*q = esMap{"and": []esMap{lhq, rhq}}
+		*q = bson.M{"and": []bson.M{lhq, rhq}}
 	case lex.TokenEqual, lex.TokenEqualEqual:
-		//q = esMap{"terms": esMap{lhs: rhs}}
+		//q = bson.M{"terms": bson.M{lhs: rhs}}
 		if lhval != nil && rhval != nil {
-			*q = esMap{"term": esMap{lhval.ToString(): rhval.ToString()}}
+			*q = bson.M{"term": bson.M{lhval.ToString(): rhval.ToString()}}
 			return nil, nil
 		}
 		if lhval != nil || rhval != nil {
 			u.Infof("has stuff?  %v", node.StringAST())
 		}
 	case lex.TokenLE:
-		*q = esMap{"range": esMap{lhval.ToString(): esMap{"lte": rhval.ToString()}}}
+		*q = bson.M{"range": bson.M{lhval.ToString(): bson.M{"lte": rhval.ToString()}}}
 	case lex.TokenLT:
-		*q = esMap{"range": esMap{lhval.ToString(): esMap{"lt": rhval.ToString()}}}
+		*q = bson.M{"range": bson.M{lhval.ToString(): bson.M{"lt": rhval.ToString()}}}
 	case lex.TokenGE:
-		*q = esMap{"range": esMap{lhval.ToString(): esMap{"gte": rhval.ToString()}}}
+		*q = bson.M{"range": bson.M{lhval.ToString(): bson.M{"gte": rhval.ToString()}}}
 	case lex.TokenGT:
-		*q = esMap{"range": esMap{lhval.ToString(): esMap{"gt": rhval.ToString()}}}
+		*q = bson.M{"range": bson.M{lhval.ToString(): bson.M{"gt": rhval.ToString()}}}
 	case lex.TokenLike:
-		//q = esMap{"terms": esMap{lhs: rhs}}
+		//q = bson.M{"terms": bson.M{lhs: rhs}}
 		switch val := lhval.ToString(); strings.ToLower(val) {
 		case "all", "query", "any":
-			//q = esMap{"query": esMap{"query_string": esMap{"query": rhval.ToString()}}}
-			*q = esMap{"query": esMap{"query_string": esMap{"query": rhval.ToString()}}}
+			//q = bson.M{"query": bson.M{"query_string": bson.M{"query": rhval.ToString()}}}
+			*q = bson.M{"query": bson.M{"query_string": bson.M{"query": rhval.ToString()}}}
 		default:
 			if lhval != nil && rhval != nil {
 				rhs := rhval.ToString()
@@ -455,9 +458,9 @@ func (m *SqlToEs) walkFilterBinary(node *expr.BinaryNode, q *esMap) (value.Value
 					hasLogic = strings.Contains(rhs, " OR")
 				}
 				if hasLogic || hasWildcard {
-					*q = esMap{"query": esMap{"query_string": esMap{"query": rhs}}}
+					*q = bson.M{"query": bson.M{"query_string": bson.M{"query": rhs}}}
 				} else {
-					*q = esMap{"query": esMap{"match": esMap{lhval.ToString(): rhs}}}
+					*q = bson.M{"query": bson.M{"match": bson.M{lhval.ToString(): rhs}}}
 				}
 
 				return nil, nil
@@ -478,7 +481,7 @@ func (m *SqlToEs) walkFilterBinary(node *expr.BinaryNode, q *esMap) (value.Value
 //
 //    exists, missing, prefix, term
 //
-func (m *SqlToEs) walkFilterFunc(node *expr.FuncNode, q *esMap) (value.Value, error) {
+func (m *SqlToMgo) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, error) {
 	switch funcName := strings.ToLower(node.Name); funcName {
 	case "exists", "missing", "prefix", "term":
 		fieldName := ""
@@ -499,7 +502,7 @@ func (m *SqlToEs) walkFilterFunc(node *expr.FuncNode, q *esMap) (value.Value, er
 
 		//  "exists" : { "field" : "user" }
 		// "missing" : { "field" : "user" }
-		*q = esMap{funcName: esMap{"field": fieldName}}
+		*q = bson.M{funcName: bson.M{"field": fieldName}}
 	default:
 		u.Warnf("not implemented ")
 	}
@@ -521,7 +524,7 @@ func (m *SqlToEs) walkFilterFunc(node *expr.FuncNode, q *esMap) (value.Value, er
 //  MultiValue aggregats:
 //      terms, ??
 //
-func (m *SqlToEs) walkAggFunc(node *expr.FuncNode) (q esMap, _ error) {
+func (m *SqlToMgo) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {
 	switch funcName := strings.ToLower(node.Name); funcName {
 	case "max", "min", "avg", "sum", "cardinality":
 		m.hasSingleValue = true
@@ -533,7 +536,7 @@ func (m *SqlToEs) walkAggFunc(node *expr.FuncNode) (q esMap, _ error) {
 			u.Errorf("Must be valid: %v", node.StringAST())
 		}
 		// "min_price" : { "min" : { "field" : "price" } }
-		q = esMap{funcName: esMap{"field": val.ToString()}}
+		q = bson.M{funcName: bson.M{"field": val.ToString()}}
 	case "terms":
 		m.hasMultiValue = true
 		// "products" : { "terms" : {"field" : "product", "size" : 5 }}
@@ -551,10 +554,10 @@ func (m *SqlToEs) walkAggFunc(node *expr.FuncNode) (q esMap, _ error) {
 				u.Errorf("Must be valid size: %v", node.Args[1].StringAST())
 			}
 			// "products" : { "terms" : {"field" : "product", "size" : 5 }}
-			q = esMap{funcName: esMap{"field": val.ToString(), "size": size.Value()}}
+			q = bson.M{funcName: bson.M{"field": val.ToString(), "size": size.Value()}}
 		} else {
 
-			q = esMap{funcName: esMap{"field": val.ToString()}}
+			q = bson.M{funcName: bson.M{"field": val.ToString()}}
 		}
 
 	case "count":
@@ -568,7 +571,7 @@ func (m *SqlToEs) walkAggFunc(node *expr.FuncNode) (q esMap, _ error) {
 		if val.ToString() == "*" {
 			return nil, nil
 		} else {
-			return esMap{"exists": esMap{"field": val.ToString()}}, nil
+			return bson.M{"exists": bson.M{"field": val.ToString()}}, nil
 		}
 
 	default:

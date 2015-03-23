@@ -16,19 +16,16 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 	u.Debugf("VisitShow %+v", stmt)
 
 	/*
-
-		// case *expr.SqlDescribe:
-		// 	switch {
-		// 	case stmt.Identity != "":
-		// 		return m.handleDescribeTable(sql, stmt)
-		// 	case stmt.Stmt != nil && stmt.Stmt.Keyword() == lex.TokenSelect:
-		// 		u.Infof("describe/explain Not Implemented: %#v", stmt)
-		// 	default:
-		// 		u.Warnf("unrecognized describe/explain: %#v", stmt)
-		// 	}
-		// 	return fmt.Errorf("describe/explain not yet supported: %#v", stmt)
-
-
+		case *expr.SqlDescribe:
+			switch {
+			case stmt.Identity != "":
+				return m.handleDescribeTable(sql, stmt)
+			case stmt.Stmt != nil && stmt.Stmt.Keyword() == lex.TokenSelect:
+				u.Infof("describe/explain Not Implemented: %#v", stmt)
+			default:
+				u.Warnf("unrecognized describe/explain: %#v", stmt)
+			}
+			return fmt.Errorf("describe/explain not yet supported: %#v", stmt)
 
 
 		switch strings.ToLower(stmt.Identity) {

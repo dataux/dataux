@@ -73,6 +73,7 @@ type SchemaConfig struct {
 	SourceType  string       `json:"source_type"`  // [mysql,elasticsearch,file]
 	Address     string       `json:"address"`      // If we don't need Per-Node info
 	DB          string       `json:"db"`           // Database Name, must be unique
+	Alias       string       `json:"alias"`        // Virtual Database Name, must be unique, use db if not provided
 	Nodes       []string     `json:"source_nodes"` // List of backend Servers
 	RulesConifg RulesConfig  `json:"rules"`        // (optional) Routing rules
 	Properties  u.JsonHelper `json:"properties"`   // Additional properties
