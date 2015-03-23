@@ -17,7 +17,13 @@ var (
 
 	// Ensure that we implement the Exec Visitor interface
 	_ exec.Visitor = (*Builder)(nil)
-	//_ exec.JobRunner = (*Builder)(nil)
+
+	// Standard errors
+	ErrNotSupported     = fmt.Errorf("DataUX: Not supported")
+	ErrNotImplemented   = fmt.Errorf("DataUX: Not implemented")
+	ErrUnknownCommand   = fmt.Errorf("DataUX: Unknown Command")
+	ErrInternalError    = fmt.Errorf("DataUX: Internal Error")
+	ErrNoSchemaSelected = fmt.Errorf("No Schema Selected")
 )
 
 const (
@@ -87,64 +93,44 @@ func NewBuilder(svr *models.ServerCtx, db string) *Builder {
 	return &m
 }
 
-func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
-	u.Debugf("VisitSelect %+v", stmt)
-
-	if sysVar := stmt.SysVariable(); len(sysVar) > 0 {
-		return m.VisitSysVariable(stmt)
-	}
-
-	tasks := make(exec.Tasks, 0)
-
-	if len(stmt.From) > 1 {
-		return nil, fmt.Errorf("join not implemented")
-	}
-	from := stmt.From[0]
-
-	// source is of type qlbridge.datasource.DataSource
-	source, err := m.schema.DataSource.SourceTask(stmt)
-	if err != nil {
-		return nil, err
-	}
-	// Some data sources provide their own projections
-	if projector, ok := source.(models.SourceProjection); ok {
-		m.Projection, err = projector.Projection()
-		if err != nil {
-			u.Errorf("could not build projection %v", err)
-			return nil, err
-		}
-	} else {
-		panic("must implement projection")
-	}
-	if scanner, ok := source.(datasource.Scanner); !ok {
-		return nil, fmt.Errorf("Must Implement Scanner")
-	} else {
-		sourceTask := exec.NewSourceScanner(from.Name, scanner)
-		tasks.Add(sourceTask)
-	}
-	return tasks, nil
-}
-
 func (m *Builder) VisitSysVariable(stmt *expr.SqlSelect) (interface{}, error) {
 	u.Debugf("VisitSysVariable %+v", stmt)
-	tasks := make(exec.Tasks, 0)
+
 	switch sysVar := stmt.SysVariable(); sysVar {
 	case "@@max_allowed_packet":
-		// TODO:   build a simple Result Task
-		static := datasource.NewStaticDataValue(MaxAllowedPacket, sysVar)
-		sourceTask := exec.NewSourceScanner("system", static)
-		m.Projection = StaticProjection(sysVar, value.IntType)
-		tasks.Add(sourceTask)
-		return tasks, nil
-		// r, _ := proxy.BuildSimpleSelectResult(MaxAllowedPacket, []byte(sysVar), nil)
-		// return nil, m.writer.WriteResult(r)
+		return m.sysVarTasks(sysVar, MaxAllowedPacket)
 	default:
 		u.Errorf("unknown var: %v", sysVar)
 		return nil, fmt.Errorf("Unrecognized System Variable: %v", sysVar)
 	}
-	return nil, exec.ErrNotImplemented
 }
 
+// A very simple tasks/builder for system variables
+//
+func (m *Builder) sysVarTasks(name string, val interface{}) (interface{}, error) {
+	tasks := make(exec.Tasks, 0)
+	static := datasource.NewStaticDataValue(val, name)
+	sourceTask := exec.NewSourceScanner("system", static)
+	tasks.Add(sourceTask)
+	switch val.(type) {
+	case int, int64:
+		m.Projection = StaticProjection(name, value.IntType)
+	case string:
+		m.Projection = StaticProjection(name, value.StringType)
+	case float32, float64:
+		m.Projection = StaticProjection(name, value.NumberType)
+	case bool:
+		m.Projection = StaticProjection(name, value.BoolType)
+	default:
+		u.Errorf("unknown var: %v", val)
+		return nil, fmt.Errorf("Unrecognized Data Type: %v", val)
+	}
+	return tasks, nil
+}
+
+// A very simple projection of name=value, for single row/column
+//   select @@max_bytes
+//
 func StaticProjection(name string, vt value.ValueType) *expr.Projection {
 	p := expr.NewProjection()
 	p.AddColumnShort(name, vt)
@@ -152,35 +138,25 @@ func StaticProjection(name string, vt value.ValueType) *expr.Projection {
 }
 func (m *Builder) VisitInsert(stmt *expr.SqlInsert) (interface{}, error) {
 	u.Debugf("VisitInsert %+v", stmt)
-	return nil, exec.ErrNotImplemented
+	return nil, ErrNotImplemented
 }
 
 func (m *Builder) VisitUpsert(stmt *expr.SqlUpsert) (interface{}, error) {
 	u.Debugf("VisitUpsert %+v", stmt)
-	return nil, exec.ErrNotImplemented
+	return nil, ErrNotImplemented
 }
 
 func (m *Builder) VisitDelete(stmt *expr.SqlDelete) (interface{}, error) {
 	u.Debugf("VisitDelete %+v", stmt)
-	return nil, exec.ErrNotImplemented
+	return nil, ErrNotImplemented
 }
 
 func (m *Builder) VisitUpdate(stmt *expr.SqlUpdate) (interface{}, error) {
 	u.Debugf("VisitUpdate %+v", stmt)
-	return nil, exec.ErrNotImplemented
-}
-
-func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
-	u.Debugf("VisitShow %+v", stmt)
-	return nil, exec.ErrNotImplemented
-}
-
-func (m *Builder) VisitDescribe(stmt *expr.SqlDescribe) (interface{}, error) {
-	u.Debugf("VisitDescribe %+v", stmt)
-	return nil, exec.ErrNotImplemented
+	return nil, ErrNotImplemented
 }
 
 func (m *Builder) VisitPreparedStmt(stmt *expr.PreparedStatement) (interface{}, error) {
 	u.Debugf("VisitPreparedStmt %+v", stmt)
-	return nil, exec.ErrNotImplemented
+	return nil, ErrNotImplemented
 }

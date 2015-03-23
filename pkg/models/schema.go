@@ -5,40 +5,60 @@ import (
 	"strings"
 
 	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/vendor/mixer/mysql"
 )
 
 var (
 	_ = u.EMPTY
+
+	// Standard headers
+	DescribeHeaders = NewDescribeHeaders()
 )
+
+func NewDescribeHeaders() []*Field {
+	fields := make([]*Field, 6)
+	fields[0] = NewField("Field", value.StringType, 255, "COLUMN_NAME")
+	fields[1] = NewField("Type", value.StringType, 32, "COLUMN_TYPE")
+	fields[2] = NewField("Null", value.StringType, 4, "IS_NULLABLE")
+	fields[3] = NewField("Key", value.StringType, 64, "COLUMN_KEY")
+	fields[4] = NewField("Default", value.StringType, 32, "COLUMN_DEFAULT")
+	fields[5] = NewField("Extra", value.StringType, 255, "EXTRA")
+	return fields
+}
 
 // Table represents traditional definition of Database Table
 //   It belongs to a Schema and can be used to
 //   create a Datasource used to read this table
 type Table struct {
-	Name           string                  // Name of table
-	FieldPositions map[string]int          // Position of field name to column list
-	Fields         []*Field                // List of Fields, in order
-	FieldMap       map[string]*Field       // List of Fields, in order
-	FieldsMySql    []*mysql.Field          // Mysql types
-	FieldMapMySql  map[string]*mysql.Field // shortcut for pre-build Mysql types
-	DescribeValues [][]driver.Value        // The Values that will be output for Describe
-	Schema         *Schema                 // The schema this is member of
-	Charset        uint16                  // Character set, default = utf8
+	Name            string                  // Name of table
+	FieldPositions  map[string]int          // Position of field name to column list
+	Fields          []*Field                // List of Fields, in order
+	FieldMap        map[string]*Field       // List of Fields, in order
+	FieldsMySql     []*mysql.Field          // Mysql types
+	FieldMapMySql   map[string]*mysql.Field // shortcut for pre-build Mysql types
+	DescribeValues  [][]driver.Value        // The Values that will be output for Describe
+	Schema          *Schema                 // The schema this is member of
+	Charset         uint16                  // Character set, default = utf8
+	tableProjection *expr.Projection
+	tableVals       *datasource.StaticDataSource
 }
 
-// Schema is a collection of tables/datatypes, servers to be
+// Schema is a "Virtual" Database.  A collection of tables/datatypes, servers to be
 //  a single schema.  Must be same BackendType (mysql, elasticsearch)
 type Schema struct {
-	Db         string
-	SourceType string `json:"source_type"`
-	Address    string `json:"address"` // If you have don't need per node routing
-	Nodes      map[string]*SourceConfig
-	Conf       *SchemaConfig
-	Tables     map[string]*Table
-	TableNames []string
-	DataSource DataSource
+	Db                  string                   `json:"db"`          // Virtual DB = Schema
+	SourceType          string                   `json:"source_type"` // [mysql,elasticsearch, csv, etc]
+	Address             string                   `json:"address"`     // If you have don't need per node routing
+	Nodes               map[string]*SourceConfig // map of Servers/Nodes to its config
+	Conf                *SchemaConfig            // Schema level configuration
+	Tables              map[string]*Table        // Tables in this schema
+	TableNames          []string                 // Table name
+	DataSource          DataSource               // The datasource Interface
+	showTableProjection *expr.Projection
+	showTableVals       *datasource.StaticDataSource
 }
 
 type FieldData []byte
@@ -92,6 +112,28 @@ func (m *Schema) ChooseBackend() string {
 	return m.Address
 }
 
+func (m *Schema) ShowTables() (*datasource.StaticDataSource, *expr.Projection) {
+
+	if m.showTableVals == nil {
+		vals := make([][]driver.Value, len(m.TableNames))
+		idx := 0
+		if len(m.TableNames) == 0 {
+			u.Warnf("NO TABLES!!!!! for %s p=%p", m.Db, m)
+		}
+		for _, tbl := range m.TableNames {
+			vals[idx] = []driver.Value{tbl}
+			//u.Infof("found table: %v   vals=%v", tbl, vals[idx])
+			idx++
+		}
+		m.showTableVals = datasource.NewStaticDataSource(vals, []string{"table"})
+		p := expr.NewProjection()
+		p.AddColumnShort("Table", value.StringType)
+		m.showTableProjection = p
+	}
+	//u.Infof("showtables:  %v", m.showTableVals)
+	return m.showTableVals, m.showTableProjection
+}
+
 func (m *Schema) Table(tableName string) (*Table, error) {
 	tbl := m.Tables[tableName]
 	if tbl != nil {
@@ -119,6 +161,27 @@ func (m *Table) DescribeResultset() *mysql.Resultset {
 		rs.AddRowValues(val)
 	}
 	return rs
+}
+
+func (m *Table) DescribeTable() (*datasource.StaticDataSource, *expr.Projection) {
+
+	//tbl.AddField(models.NewField("_score", value.NumberType, 24, "Created per Search By Elasticsearch"))
+	//tbl.AddValues([]driver.Value{"_id", "string", "NO", "PRI", "AUTOGEN", ""})
+
+	if m.tableVals == nil {
+		if len(m.Fields) == 0 {
+			u.Warnf("NO Fields!!!!! for %s p=%p", m.Name, m)
+		}
+		p := expr.NewProjection()
+		for _, f := range DescribeHeaders {
+			p.AddColumnShort(string(f.Name), f.Type)
+			u.Infof("found field:  vals=%#v", f)
+		}
+		m.tableVals = datasource.NewStaticDataSource(m.DescribeValues, nil)
+		m.tableProjection = p
+	}
+	u.Infof("describe table:  %v", m.tableVals)
+	return m.tableVals, m.tableProjection
 }
 
 func (m *Table) AddValues(values []driver.Value) {

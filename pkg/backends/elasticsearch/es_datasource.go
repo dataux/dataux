@@ -52,7 +52,7 @@ func NewElasticsearchDataSource(schema *models.Schema, conf *models.Config) mode
 
 func (m *ElasticsearchDataSource) Init() error {
 
-	u.Debugf("Init()")
+	u.Debugf("Init() Eleasticsearch schema P=%p", m.schema)
 	if err := m.findEsNodes(); err != nil {
 		u.Errorf("could not init es: %v", err)
 		return err
@@ -62,7 +62,9 @@ func (m *ElasticsearchDataSource) Init() error {
 		u.Errorf("could not load es tables: %v", err)
 		return err
 	}
-
+	if m.schema != nil {
+		u.Debugf("Post Init() Eleasticsearch schema P=%p tblct=%d", m.schema, len(m.schema.Tables))
+	}
 	return nil
 }
 
@@ -85,15 +87,6 @@ func (m *ElasticsearchDataSource) SourceTask(stmt *expr.SqlSelect) (models.Sourc
 		return nil, err
 	}
 
-	/*
-		rw := backends.NewMysqlResultWriter(stmt, resp)
-
-		if err := rw.Finalize(); err != nil {
-			u.Error(err)
-			return nil, err
-		}
-		return es, writer.WriteResult(rw.Rs)
-	*/
 	return resp, nil
 }
 
@@ -125,6 +118,9 @@ func (m *ElasticsearchDataSource) loadTableNames() error {
 		u.Infof("no schema? %v")
 	}
 	m.schema.TableNames = tables
+	// for _, table := range tables {
+	// 	m.loadTableSchema(table)
+	// }
 	u.Debugf("found tables: %v", m.schema.TableNames)
 
 	return nil

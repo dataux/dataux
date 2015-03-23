@@ -104,7 +104,7 @@ func (m *ResultReader) buildProjection() {
 		}
 	}
 	m.proj.Columns = cols
-	u.Warnf("leaving Columns:  %v", len(m.proj.Columns))
+	u.Debugf("leaving Columns:  %v", len(m.proj.Columns))
 }
 
 /*

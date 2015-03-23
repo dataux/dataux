@@ -38,7 +38,7 @@ func NewMysqlResultWriter(writer models.ResultWriter, proj *expr.Projection, sch
 	return m
 }
 func (m *MysqlResultWriter) Close() error {
-	u.Infof("in mysql resultwriter Close()")
+	u.Infof("in mysql resultwriter Close()  rowct:%v", len(m.Rs.RowDatas))
 	m.writer.WriteResult(m.Rs)
 	return nil
 }
@@ -96,10 +96,14 @@ func (m *MysqlResultWriter) WriteHeaders() error {
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Db, s.Db, 200, mysql.MYSQL_TYPE_STRING))
 		case value.NumberType:
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Db, s.Db, 32, mysql.MYSQL_TYPE_FLOAT))
+		case value.BoolType:
+			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Db, s.Db, 1, mysql.MYSQL_TYPE_TINY))
+		case value.TimeType:
+			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Db, s.Db, 32, mysql.MYSQL_TYPE_DATETIME))
 		default:
-			u.Warnf("Field type not known: %#v", col)
+			u.Warnf("Field type not known: type=%v  %#v", col.Type.String(), col)
 		}
-		u.Debugf("added field: %#v", m.Rs.Fields[i])
+		u.Debugf("added field: %v", col.Name)
 	}
 
 	u.Debugf("writeheaders: %#v", m.Rs.FieldNames)

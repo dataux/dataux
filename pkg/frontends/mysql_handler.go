@@ -177,7 +177,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	// sql = strings.TrimRight(sql, ";")
 	builder, err := backends.BuildSqlJob(m.svr, m.schema.Db, sql)
 	if err != nil {
-		u.Warnf("error? %v", err)
+		u.Debugf("error? %v", err)
 		sql = strings.ToLower(sql)
 		switch {
 		case strings.Contains(sql, "set autocommit"):
@@ -195,31 +195,12 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	}
 
 	switch stmt := builder.Job.Stmt.(type) {
-	// case *expr.SqlDescribe:
-	// 	switch {
-	// 	case stmt.Identity != "":
-	// 		return m.handleDescribeTable(sql, stmt)
-	// 	case stmt.Stmt != nil && stmt.Stmt.Keyword() == lex.TokenSelect:
-	// 		u.Infof("describe/explain Not Implemented: %#v", stmt)
-	// 	default:
-	// 		u.Warnf("unrecognized describe/explain: %#v", stmt)
-	// 	}
-	// 	return fmt.Errorf("describe/explain not yet supported: %#v", stmt)
-	case *expr.SqlSelect:
-		// resultWriter := NewResultRows(sqlSelect.Columns.FieldNames())
-		// job.Tasks.Add(resultWriter)
+	case *expr.SqlSelect, *expr.SqlShow, *expr.SqlDescribe:
 
-		// We need a result describer, to say which columns to expect?
-		// this is projection right?
 		u.Debugf("adding mysql result writer")
 		resultWriter := NewMysqlResultWriter(writer, builder.Projection, m.schema)
 		builder.Job.Tasks.Add(resultWriter)
 
-		// if err := rw.Finalize(); err != nil {
-		// 	u.Error(err)
-		// 	return err
-		// }
-		// writer.WriteResult(rw.Rs)
 	//case *expr.SqlShow:
 	//	return m.handleShow(sql, stmt)
 	// case *sqlparser.SimpleSelect:
@@ -262,85 +243,6 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	//}()
 	return nil
 
-}
-
-func (m *MySqlHandler) handleDescribeTable(sql string, req *expr.SqlDescribe) error {
-
-	/*
-		s := m.schema
-		if s == nil {
-			return mysql.NewDefaultError(mysql.ER_NO_DB_ERROR)
-		}
-		tableName := strings.ToLower(req.Identity)
-
-		tbl, err := m.loadTableSchema(tableName)
-		if err != nil {
-			return err
-		}
-
-		return m.conn.WriteResultset(m.conn.Status, tbl.DescribeResultset())
-	*/
-	return nil
-}
-
-func (m *MySqlHandler) handleShow(sql string, stmt *expr.SqlShow) error {
-	var err error
-	var r *mysql.Resultset
-	switch strings.ToLower(stmt.Identity) {
-	case "databases":
-		r, err = m.handleShowDatabases()
-	case "tables":
-		r, err = m.handleShowTables(sql, stmt)
-	// case "proxy":
-	// 	r, err = m.handleShowProxy(sql, stmt)
-	default:
-		err = fmt.Errorf("unsupport show %s now", sql)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	return m.conn.WriteResultset(m.conn.Status, r)
-}
-
-func (m *MySqlHandler) handleShowDatabases() (*mysql.Resultset, error) {
-	/*
-		dbs := make([]interface{}, 0, len(m.schemas))
-		for key := range m.schemas {
-			dbs = append(dbs, key)
-		}
-
-		return m.conn.BuildSimpleShowResultset(dbs, "Database")
-	*/
-	return nil, nil
-}
-
-func (m *MySqlHandler) handleShowTables(sql string, stmt *expr.SqlShow) (*mysql.Resultset, error) {
-	/*
-		s := m.schema
-		if stmt.From != "" {
-			s = m.getSchema(strings.ToLower(stmt.From))
-		}
-
-		if s == nil {
-			u.Warnf("no schema? %v", stmt)
-			return nil, mysql.NewDefaultError(mysql.ER_NO_DB_ERROR)
-		}
-		if len(s.TableNames) == 0 {
-			u.Errorf("no tables? %#v", s)
-			return nil, fmt.Errorf("No tables found?")
-		}
-
-		values := make([]interface{}, len(s.TableNames))
-		for i, name := range s.TableNames {
-			values[i] = name
-		}
-		u.Debugf("values: %v", values)
-		return m.conn.BuildSimpleShowResultset(values, fmt.Sprintf("Tables_in_%s", s.Db))
-	*/
-
-	return nil, nil
 }
 
 func (m *MySqlHandler) writeOK(r *mysql.Result) error {
