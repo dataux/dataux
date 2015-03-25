@@ -44,7 +44,7 @@ func (m *ServerCtx) loadSchemasFromConfig() error {
 			panic(fmt.Sprintf("duplicate schema '%s'", schemaConf.DB))
 		}
 		if len(schemaConf.Nodes) == 0 {
-			u.Warnf("schema '%s' should have at least one node", schemaConf.DB)
+			//u.Warnf("schema '%s' should have at least one node", schemaConf.DB)
 		}
 
 		schema := &Schema{
@@ -59,7 +59,7 @@ func (m *ServerCtx) loadSchemasFromConfig() error {
 		sourceFunc := DataSourceCreatorGet(schemaConf.SourceType)
 		if sourceFunc == nil {
 			//panic("Data source Not found for source_type: " + schemaConf.SourceType)
-			//u.Warnf("Data source Not found for source_type: " + schemaConf.SourceType)
+			u.Warnf("Data source Not found for source_type: " + schemaConf.SourceType)
 		} else {
 			u.Infof("found datasource for: %#v", schema)
 			schema.DataSource = sourceFunc(schema, m.Config)
@@ -71,6 +71,7 @@ func (m *ServerCtx) loadSchemasFromConfig() error {
 }
 
 func (m *ServerCtx) Schema(db string) *Schema {
-	u.Debugf("get schema for %s", db)
-	return m.schemas[db]
+	s := m.schemas[db]
+	u.Debugf("get schema for %s   %#v", db, s)
+	return s
 }

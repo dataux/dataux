@@ -53,23 +53,15 @@ func NewMySqlHandler(svr *models.ServerCtx) (models.Handler, error) {
 }
 
 func (m *MySqlHandlerShared) Init() error {
-
-	u.Debugf("Init()")
-	// if err := m.findEsNodes(); err != nil {
-	// 	u.Errorf("could not init es: %v", err)
-	// 	return err
-	// }
-	// if err := m.loadSchemasFromConfig(); err != nil {
-	// 	return err
-	// }
 	return nil
 }
 
+// Clone?   This is used to create a per-session copy of handler
 func (m *MySqlHandler) Clone(connI interface{}) models.Handler {
 
 	handler := MySqlHandler{MySqlHandlerShared: m.MySqlHandlerShared}
 	if conn, ok := connI.(*proxy.Conn); ok {
-		u.Debugf("Cloning shared handler %v", conn)
+		//u.Debugf("Cloning Mysql handler %v", conn)
 		handler.conn = conn
 		return &handler
 	}
@@ -209,16 +201,16 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 
 	builder.Job.Setup()
 	//go func() {
-	u.Debugf("Start Job.Run")
+	//u.Debugf("Start Job.Run")
 	err = builder.Job.Run()
-	u.Debugf("After job.Run()")
+	//u.Debugf("After job.Run()")
 	if err != nil {
 		u.Errorf("error on Query.Run(): %v", err)
 		//resultWriter.ErrChan() <- err
 		//job.Close()
 	}
 	builder.Job.Close()
-	u.Debugf("exiting Background Query")
+	//u.Debugf("exiting Background Query")
 	//}()
 	return nil
 

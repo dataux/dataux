@@ -8,8 +8,11 @@ import (
 	"runtime"
 	"syscall"
 
-	u "github.com/araddon/gou"
+	// Backend Registrations Side-Effect imports
 	_ "github.com/dataux/dataux/pkg/backends/elasticsearch"
+	_ "github.com/dataux/dataux/pkg/backends/mongo"
+
+	u "github.com/araddon/gou"
 	"github.com/dataux/dataux/pkg/frontends"
 	"github.com/dataux/dataux/pkg/models"
 	"github.com/dataux/dataux/pkg/proxy"
@@ -44,6 +47,7 @@ func main() {
 	svrCtx := models.NewServerCtx(conf)
 	svrCtx.Init()
 
+	// TODO:   these should be started by server through registry, imports
 	mysqlHandler, err := frontends.NewMySqlHandler(svrCtx)
 	if err != nil {
 		u.Errorf("Could not create handlers: %v", err)

@@ -3,6 +3,7 @@ package models
 import (
 	"database/sql/driver"
 	"strings"
+	"time"
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
@@ -16,6 +17,9 @@ var (
 
 	// Standard headers
 	DescribeHeaders = NewDescribeHeaders()
+
+	// Schema Refresh Interval
+	SchemaRefreshInterval = -time.Minute * 1
 )
 
 func NewDescribeHeaders() []*Field {
@@ -42,6 +46,7 @@ type Table struct {
 	DescribeValues  [][]driver.Value        // The Values that will be output for Describe
 	Schema          *Schema                 // The schema this is member of
 	Charset         uint16                  // Character set, default = utf8
+	lastRefreshed   time.Time               // Last time we refreshed this schema
 	tableProjection *expr.Projection
 	tableVals       *datasource.StaticDataSource
 }
@@ -57,6 +62,7 @@ type Schema struct {
 	Tables              map[string]*Table        // Tables in this schema
 	TableNames          []string                 // Table name
 	DataSource          DataSource               // The datasource Interface
+	lastRefreshed       time.Time                // Last time we refreshed this schema
 	showTableProjection *expr.Projection
 	showTableVals       *datasource.StaticDataSource
 }
@@ -142,6 +148,22 @@ func (m *Schema) Table(tableName string) (*Table, error) {
 	return m.DataSource.Table(tableName)
 }
 
+// Is this schema object current?
+func (m *Schema) Current() bool {
+	return m.Since(SchemaRefreshInterval)
+}
+
+// Is this schema object within time window described by @dur time ago ?
+func (m *Schema) Since(dur time.Duration) bool {
+	if m.lastRefreshed.IsZero() {
+		return false
+	}
+	if m.lastRefreshed.After(time.Now().Add(dur)) {
+		return true
+	}
+	return false
+}
+
 func NewTable(table string, s *Schema) *Table {
 	t := &Table{
 		Name:          strings.ToLower(table),
@@ -184,6 +206,13 @@ func (m *Table) DescribeTable() (*datasource.StaticDataSource, *expr.Projection)
 	return m.tableVals, m.tableProjection
 }
 
+func (m *Table) HasField(name string) bool {
+	if _, ok := m.FieldMap[name]; ok {
+		return true
+	}
+	return false
+}
+
 func (m *Table) AddValues(values []driver.Value) {
 	m.DescribeValues = append(m.DescribeValues, values)
 	//rowData, _ := mysql.ValuesToRowData(values, r.Fields)
@@ -212,4 +241,20 @@ func (m *Table) AddMySqlField(fld *mysql.Field) {
 // List of Field Names and ordinal position in Column list
 func (m *Table) FieldNamesPositions() map[string]int {
 	return m.FieldPositions
+}
+
+// Is this schema object current?
+func (m *Table) Current() bool {
+	return m.Since(SchemaRefreshInterval)
+}
+
+// Is this schema object within time window described by @dur time ago ?
+func (m *Table) Since(dur time.Duration) bool {
+	if m.lastRefreshed.IsZero() {
+		return false
+	}
+	if m.lastRefreshed.After(time.Now().Add(dur)) {
+		return true
+	}
+	return false
 }

@@ -17,7 +17,7 @@ func LoadConfigFromFile(filename string) (*Config, error) {
 	if _, err = confl.Decode(string(confBytes), &c); err != nil {
 		return nil, err
 	}
-
+	//u.Debug(string(confBytes))
 	return &c, nil
 }
 

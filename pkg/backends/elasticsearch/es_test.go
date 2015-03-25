@@ -105,6 +105,26 @@ func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 	//u.Infof("rows: %v", cols)
 }
 
+func TestShowTablesSelect(t *testing.T) {
+	data := struct {
+		Table string `db:"Table"`
+	}{}
+	found := false
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "show tables;",
+		ExpectRowCt: 22,
+		ValidateRowData: func() {
+			//u.Infof("%v", data)
+			assert.Tf(t, data.Table != "", "%v", data)
+			if data.Table == "github_fork" {
+				found = true
+			}
+		},
+		RowData: &data,
+	})
+	assert.Tf(t, found, "Must have found github_fork")
+}
+
 func TestInvalidQuery(t *testing.T) {
 	testmysql.RunTestServer(t)
 	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:4000)/es")

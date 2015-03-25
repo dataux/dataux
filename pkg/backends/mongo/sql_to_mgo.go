@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
 	u "github.com/araddon/gou"
@@ -49,7 +50,7 @@ func (m *SqlToMgo) Host() string {
 	return m.schema.ChooseBackend()
 }
 
-func (m *SqlToMgo) Query(req *expr.SqlSelect) (*ResultReader, error) {
+func (m *SqlToMgo) Query(req *expr.SqlSelect, sess *mgo.Session) (*ResultReader, error) {
 
 	var err error
 	m.sel = req
@@ -100,7 +101,7 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect) (*ResultReader, error) {
 		u.Debugf("setting limit: %v", req.Limit)
 	} else if len(m.filter) > 0 {
 		//u.Infof("in else: %v", esReq)
-		esReq = bson.M{"filter": m.filter}
+		esReq = m.filter
 	}
 	u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
 	if len(m.sel.OrderBy) > 0 {
@@ -119,47 +120,13 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	}
 
 	// TODO:  hostpool
-	query := fmt.Sprintf("%s/%s/_search?size=%d", m.Host(), m.tbl.Name, req.Limit)
+	query := sess.DB(m.schema.Db).C(m.tbl.Name).Find(m.filter).Limit(req.Limit)
+	//m.tbl.Name, req.Limit)
 
-	u.Infof("%v   filter=%v   \n\n%s", esReq, m.filter, u.JsonHelper(esReq).PrettyJson())
-	jhResp, err := u.JsonHelperHttp("POST", query, esReq)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(jhResp) == 0 {
-		return nil, fmt.Errorf("No response, error fetching elasticsearch query")
-	}
-
-	resp := NewResultReader(m)
-	m.resp = resp
-	resp.Total = jhResp.Int("hits.total")
-	resp.Aggs = jhResp.Helper("aggregations")
-	if req.Where != nil {
-		resp.Aggs = resp.Aggs.Helper("where")
-		if len(resp.Aggs) > 0 {
-			// Since we have a Where aggs, lets grab the count out of that????
-			if docCt, ok := resp.Aggs.IntSafe("doc_count"); ok {
-				resp.Total = docCt
-			}
-		}
-	}
-
-	resp.Docs = jhResp.Helpers("hits.hits")
-
-	//u.Debugf("%s", jhResp.PrettyJson())
-	//u.Debugf("%s", resp.Aggs.PrettyJson())
-	u.Debugf("doc.ct = %v", len(resp.Docs))
-
-	// if scrollId, ok := jhResp.StringSafe("_scroll_id"); !ok {
-	// 	sysErr = errloc.NewErrLoc("Malformed elasticsearch response")
-	// 	return ents, total, continuation, sysErr
-	// } else {
-	// 	resp.ScrollId = scrollId
-	// }
-	resp.Finalize()
-
-	return resp, nil
+	resultReader := NewResultReader(m, query)
+	m.resp = resultReader
+	resultReader.Finalize()
+	return resultReader, nil
 }
 
 // Aggregations from the <select_list>
@@ -392,17 +359,6 @@ func (m *SqlToMgo) walkMultiFilter(node *expr.MultiArgNode, q *bson.M) (value.Va
 
 func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Value, error) {
 
-	// var lhval, rhval interface{}
-	// switch curNode := cur.(type) {
-	// case *expr.BinaryNode, *expr.TriNode, *expr.UnaryNode, *expr.MultiArgNode, *expr.FuncNode:
-	// 	u.Warnf("not implemented: %#v", curNode)
-	// 	panic("not implemented")
-	// case *expr.IdentityNode, *expr.StringNode, *expr.NumberNode:
-	// 	u.Infof("node? %v", curNode)
-	// default:
-	// 	u.Errorf("unrecognized T:%T  %v", cur, cur)
-	// 	panic("Unrecognized node type")
-	// }
 	lhval, lhok := vm.Eval(nil, node.Args[0])
 	rhval, rhok := vm.Eval(nil, node.Args[1])
 	if !lhok || !rhok {
@@ -424,7 +380,8 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 	case lex.TokenEqual, lex.TokenEqualEqual:
 		//q = bson.M{"terms": bson.M{lhs: rhs}}
 		if lhval != nil && rhval != nil {
-			*q = bson.M{"term": bson.M{lhval.ToString(): rhval.ToString()}}
+			*q = bson.M{lhval.ToString(): rhval.Value()}
+			//u.Infof("m=%#v type=%v", q, rhval.Type())
 			return nil, nil
 		}
 		if lhval != nil || rhval != nil {

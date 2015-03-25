@@ -1,6 +1,7 @@
 package mongo_test
 
 import (
+	"encoding/json"
 	"flag"
 	"testing"
 	"time"
@@ -35,18 +36,34 @@ func init() {
 }
 
 type article struct {
-	Name     string
+	Title    string
 	Author   string
 	Count    int
+	Count64  int64
+	Deleted  bool
 	Category []string
 	Created  time.Time
+	Updated  *time.Time
+	F        float64
+	Embedded struct {
+		Tag string
+		ICt int
+	}
+	Body *json.RawMessage
 }
 
 func loadTestData() {
 	sess, _ := mgo.Dial(*mongoHost)
 	coll := sess.DB("mgo_datauxtest").C("article")
 	coll.DropCollection()
-	coll.Insert(&article{"article1", "aaron", 22, []string{"news", "sports"}, time.Now()})
+	t := time.Now()
+	ev := struct {
+		Tag string
+		ICt int
+	}{"tag", 1}
+	body := json.RawMessage([]byte(`{"name":"morestuff"}`))
+	coll.Insert(&article{"article1", "aaron", 22, 64, false, []string{"news", "sports"}, time.Now(), &t, 55.5, ev, &body})
+	coll.Insert(&article{"article2", "james", 2, 64, true, []string{"news", "sports"}, time.Now(), &t, 55.5, ev, &body})
 }
 
 type QuerySpec struct {
@@ -134,33 +151,111 @@ func TestInvalidQuery(t *testing.T) {
 	assert.Tf(t, rows == nil, "must not get rows")
 }
 
-func TestShowTablesSelect(t *testing.T) {
+func TestShowTables(t *testing.T) {
 	data := struct {
-		Table string
+		Table string `db:"Table"`
 	}{}
+	found := false
 	validateQuerySpec(t, QuerySpec{
 		Sql:         "show tables;",
 		ExpectRowCt: 2,
 		ValidateRowData: func() {
-			//u.Infof("%v", data)
-			assert.Tf(t, data.Table == "araddon", "%v", data)
+			u.Infof("%v", data)
+			assert.Tf(t, data.Table != "", "%v", data)
+			if data.Table == "article" {
+				found = true
+			}
 		},
 		RowData: &data,
 	})
+	assert.Tf(t, found, "Must have found article")
+}
+
+func TestDescribeTable(t *testing.T) {
+	data := struct {
+		Field   string `db:"Field"`
+		Type    string `db:"Type"`
+		Null    string `db:"Null"`
+		Key     string `db:"Key"`
+		Default string `db:"Default"`
+		Extra   string `db:"Extra"`
+	}{}
+	describedCt := 0
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "describe article;",
+		ExpectRowCt: 12,
+		ValidateRowData: func() {
+			u.Infof("%#v", data)
+			assert.Tf(t, data.Field != "", "%v", data)
+			switch data.Field {
+			case "embedded":
+				assert.Tf(t, data.Type == "object", "%#v", data)
+				describedCt++
+			case "author":
+				assert.T(t, data.Type == "string")
+				describedCt++
+			case "created":
+				assert.T(t, data.Type == "datetime")
+				describedCt++
+			case "category":
+				assert.T(t, data.Type == "[]string")
+				describedCt++
+			case "body":
+				assert.T(t, data.Type == "binary")
+				describedCt++
+			case "deleted":
+				assert.T(t, data.Type == "bool")
+				describedCt++
+			}
+		},
+		RowData: &data,
+	})
+	assert.Tf(t, describedCt == 6, "Should have found/described 6 but was %v", describedCt)
 }
 
 func TestSimpleRowSelect(t *testing.T) {
 	data := struct {
-		Actor string
+		Title   string
+		Count   int
+		Deleted bool
+		// Category []string  // Crap, downside of sqlx/mysql is no complex types
 	}{}
 	validateQuerySpec(t, QuerySpec{
-		Sql:         "select name from article WHERE `author` = \"aaron\" LIMIT 10;",
-		ExpectRowCt: 2,
+		Sql:         "select title, count, deleted from article WHERE `author` = \"aaron\" ",
+		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
-			assert.Tf(t, data.Actor == "aaron", "%v", data)
+			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
+			assert.Tf(t, data.Title == "article1", "%v", data)
 		},
 		RowData: &data,
+	})
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "select title, count from article WHERE count = 22;",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			assert.Tf(t, data.Title == "article1", "%v", data)
+		},
+		RowData: &data,
+	})
+	validateQuerySpec(t, QuerySpec{
+		Sql:             "select title, count from article LIMIT 10;",
+		ExpectRowCt:     2,
+		ValidateRowData: func() {},
+		RowData:         &data,
+	})
+}
+
+func TestSelectLimit(t *testing.T) {
+	data := struct {
+		Title string
+		Count int
+	}{}
+	validateQuerySpec(t, QuerySpec{
+		Sql:             "select title, count from article LIMIT 1;",
+		ExpectRowCt:     1,
+		ValidateRowData: func() {},
+		RowData:         &data,
 	})
 }
 
@@ -238,58 +333,61 @@ func TestSelectAggsGroupBy(t *testing.T) {
 }
 
 func TestSelectWhereEqual(t *testing.T) {
-	data := struct {
-		Actor    string `db:"actor"`
-		Name     string `db:"repository.name"`
-		Stars    int    `db:"repository.stargazers_count"`
-		Language string `db:"repository.language"`
-	}{}
-	validateQuerySpec(t, QuerySpec{
-		Sql: "select `actor`, `repository.name`, `repository.stargazers_count`, `repository.language` " +
-			"from github_watch where `repository.language` = \"Go\";",
-		ExpectRowCt: 20,
-		ValidateRowData: func() {
-			//u.Infof("%v", data)
-			assert.Tf(t, data.Actor != "", "%v", data)
-			assert.Tf(t, data.Language == "Go", "%v", data)
-		},
-		RowData: &data,
-	})
-	// Test when we have compound where clause
-	validateQuerySpec(t, QuerySpec{
-		Sql: "select `actor`, `repository.name`, `repository.stargazers_count`, `repository.language` " +
-			" from github_watch where " +
-			"`repository.language` == \"Go\" AND `repository.forks_count` > 1000;",
-		ExpectRowCt: 20,
-		ValidateRowData: func() {
-			//u.Infof("%v", data)
-			assert.Tf(t, data.Language == "Go", "%v", data)
-			assert.Tf(t, data.Stars > 1000, "must have filterd by forks: %v", data)
-			assert.Tf(t, data.Actor != "", "%v", data)
-		},
-		RowData: &data,
-	})
+	/*
+		data := struct {
+			Title   string
+			Count   int
+			Deleted bool
+			Updated time.Time
+		}{}
+		validateQuerySpec(t, QuerySpec{
+			Sql: "select title, count, deleted, updated " +
+				"from article WHERE Count = 22;",
+			ExpectRowCt: 1,
+			ValidateRowData: func() {
+				//u.Infof("%v", data)
+				assert.Tf(t, data.Title != "", "%v", data)
+				//assert.Tf(t, data.Language == "Go", "%v", data)
+			},
+			RowData: &data,
+		})
+		// Test when we have compound where clause
 
-	return
-	// TODO:   This isn't working yet bc the nested 3 where clauses
-	validateQuerySpec(t, QuerySpec{
-		Sql: `
-		SELECT
-			actor, repository.name, repository.stargazers_count, repository.language 
-		FROM github_watch
-		WHERE
-				repository.language = "Go" 
-				AND repository.forks_count > 1000 
-				AND repository.description NOT LIKE "docker";`,
-		ExpectRowCt: 20,
-		ValidateRowData: func() {
-			//u.Infof("%v", data)
-			assert.Tf(t, data.Language == "Go", "%v", data)
-			assert.Tf(t, data.Stars > 1000, "must have filterd by forks: %v", data)
-			assert.Tf(t, data.Actor != "", "%v", data)
-		},
-		RowData: &data,
-	})
+				validateQuerySpec(t, QuerySpec{
+					Sql: "select `actor`, `repository.name`, `repository.stargazers_count`, `repository.language` " +
+						" from github_watch where " +
+						"`repository.language` == \"Go\" AND `repository.forks_count` > 1000;",
+					ExpectRowCt: 20,
+					ValidateRowData: func() {
+						//u.Infof("%v", data)
+						assert.Tf(t, data.Language == "Go", "%v", data)
+						assert.Tf(t, data.Stars > 1000, "must have filterd by forks: %v", data)
+						assert.Tf(t, data.Actor != "", "%v", data)
+					},
+					RowData: &data,
+				})
+
+			return
+			// TODO:   This isn't working yet bc the nested 3 where clauses
+			validateQuerySpec(t, QuerySpec{
+				Sql: `
+				SELECT
+					actor, repository.name, repository.stargazers_count, repository.language
+				FROM github_watch
+				WHERE
+						repository.language = "Go"
+						AND repository.forks_count > 1000
+						AND repository.description NOT LIKE "docker";`,
+				ExpectRowCt: 20,
+				ValidateRowData: func() {
+					//u.Infof("%v", data)
+					assert.Tf(t, data.Language == "Go", "%v", data)
+					assert.Tf(t, data.Stars > 1000, "must have filterd by forks: %v", data)
+					assert.Tf(t, data.Actor != "", "%v", data)
+				},
+				RowData: &data,
+			})
+	*/
 }
 
 func TestSelectWhereLike(t *testing.T) {
@@ -313,12 +411,14 @@ func TestSelectWhereLike(t *testing.T) {
 
 func TestSelectWhereIn(t *testing.T) {
 	data := struct {
-		Actor string
-		Name  string `db:"repository.name"`
+		Title   string
+		Count   int
+		Deleted bool
+		Updated time.Time
 	}{}
 	validateQuerySpec(t, QuerySpec{
-		Sql:         `select actor, repository.name from github_push where actor IN ("mdmarek", "epsniff", "schmichael", "kyledj", "ropes","araddon");`,
-		ExpectRowCt: 13,
+		Sql:         `select title, count, deleted, updated from article WHERE category IN ("news");`,
+		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			u.Debugf("%#v", data)
 			assert.Tf(t, data.Name != "", "%v", data)
