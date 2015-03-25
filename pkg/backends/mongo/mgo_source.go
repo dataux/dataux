@@ -270,7 +270,7 @@ func (m *MongoDataSource) loadTableSchema(table string) (*models.Table, error) {
 		for colName, iVal := range dt {
 
 			colName = strings.ToLower(colName)
-			u.Debugf("found col: %s %T=%v", colName, iVal, iVal)
+			//u.Debugf("found col: %s %T=%v", colName, iVal, iVal)
 			if tbl.HasField(colName) {
 				continue
 			}

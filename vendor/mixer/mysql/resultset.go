@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"time"
 
 	u "github.com/araddon/gou"
 	"github.com/dataux/dataux/vendor/mixer/hack"
@@ -88,6 +89,22 @@ func ValuesToRowData(values []driver.Value, fields []*Field) (RowData, error) {
 			buf.Write(leby)
 		case []byte:
 			buf.Write(PutLengthEncodedString(v))
+		case time.Time:
+			//  "YYYY-MM-DD HH:MM:SS.MMMMMM"
+			//val := v.Format("2006-01-02 15:04:05.999999")
+			val := v.Format("2006-01-02 15:04:05")
+			leby := PutLengthEncodedString([]byte(val))
+			buf.Write(leby)
+		case bool:
+			if v {
+				//buf.Write(PutLengthEncodedInt(1))
+				leby := PutLengthEncodedString([]byte(strconv.FormatInt(1, 10)))
+				buf.Write(leby)
+			} else {
+				//buf.Write(PutLengthEncodedInt(0))
+				leby := PutLengthEncodedString([]byte(strconv.FormatInt(0, 10)))
+				buf.Write(leby)
+			}
 		default:
 			if v == nil {
 				buf.WriteByte(0xfb)

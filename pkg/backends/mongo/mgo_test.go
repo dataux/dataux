@@ -12,7 +12,7 @@ import (
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
 	"github.com/dataux/dataux/pkg/frontends/testmysql"
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -63,7 +63,8 @@ func loadTestData() {
 	}{"tag", 1}
 	body := json.RawMessage([]byte(`{"name":"morestuff"}`))
 	coll.Insert(&article{"article1", "aaron", 22, 64, false, []string{"news", "sports"}, time.Now(), &t, 55.5, ev, &body})
-	coll.Insert(&article{"article2", "james", 2, 64, true, []string{"news", "sports"}, time.Now(), &t, 55.5, ev, &body})
+	coll.Insert(&article{"article2", "james", 2, 64, true, []string{"news", "sports"}, time.Now().Add(-time.Hour * 100), &t, 55.5, ev, &body})
+	coll.Insert(&article{"article3", "bjorn", 55, 12, true, []string{"politics"}, time.Now().Add(-time.Hour * 220), &t, 21.5, ev, &body})
 }
 
 type QuerySpec struct {
@@ -231,7 +232,7 @@ func TestSimpleRowSelect(t *testing.T) {
 		RowData: &data,
 	})
 	validateQuerySpec(t, QuerySpec{
-		Sql:         "select title, count from article WHERE count = 22;",
+		Sql:         "select title, count,deleted from article WHERE count = 22;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			assert.Tf(t, data.Title == "article1", "%v", data)
@@ -239,8 +240,8 @@ func TestSimpleRowSelect(t *testing.T) {
 		RowData: &data,
 	})
 	validateQuerySpec(t, QuerySpec{
-		Sql:             "select title, count from article LIMIT 10;",
-		ExpectRowCt:     2,
+		Sql:             "select title, count, deleted from article LIMIT 10;",
+		ExpectRowCt:     3,
 		ValidateRowData: func() {},
 		RowData:         &data,
 	})
@@ -414,17 +415,38 @@ func TestSelectWhereIn(t *testing.T) {
 		Title   string
 		Count   int
 		Deleted bool
-		Updated time.Time
+		Updated mysql.NullTime // go-sql-driver/mysql#NullTime
 	}{}
 	validateQuerySpec(t, QuerySpec{
 		Sql:         `select title, count, deleted, updated from article WHERE category IN ("news");`,
-		ExpectRowCt: 1,
+		ExpectRowCt: 2,
 		ValidateRowData: func() {
-			u.Debugf("%#v", data)
-			assert.Tf(t, data.Name != "", "%v", data)
-			//assert.Tf(t, data.Ct == 74995 || data.Ct == 74994, "%v", data)
+			u.Debugf("Updated: %v", data.Updated.Time)
+			assert.Tf(t, data.Title != "", "%v", data)
 		},
 		RowData: &data,
+	})
+}
+
+func TestSelectWhereExists(t *testing.T) {
+	data := struct {
+		Title   string
+		Count   int
+		Deleted bool
+	}{}
+	validateQuerySpec(t, QuerySpec{
+		Sql:         `select title, count, deleted from article WHERE exists(title);`,
+		ExpectRowCt: 3,
+		ValidateRowData: func() {
+			assert.Tf(t, data.Title != "", "%v", data)
+		},
+		RowData: &data,
+	})
+	validateQuerySpec(t, QuerySpec{
+		Sql:             `select title, count, deleted from article WHERE exists(fakefield);`,
+		ExpectRowCt:     0,
+		ValidateRowData: func() {},
+		RowData:         &data,
 	})
 }
 

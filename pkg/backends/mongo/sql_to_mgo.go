@@ -67,11 +67,13 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect, sess *mgo.Session) (*ResultReader,
 		}
 	}
 
+	// Evaluate the Select columns
 	err = m.WalkSelectList()
 	if err != nil {
 		u.Warnf("Could Not evaluate Columns/Aggs %s %v", req.Columns.String(), err)
 		return nil, err
 	}
+
 	if len(req.GroupBy) > 0 {
 		err = m.WalkGroupBy()
 		if err != nil {
@@ -80,6 +82,8 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect, sess *mgo.Session) (*ResultReader,
 		}
 	}
 
+	// Aggregations are     count(xyz), or sum(abc) functional
+	// operations on select [columns] in the projection fields
 	if len(m.aggs) > 0 && len(m.filter) > 0 {
 		u.Debugf("adding filter to aggs: %v", m.filter)
 		m.aggs = bson.M{"where": bson.M{"aggs": m.aggs, "filter": m.filter}}
@@ -102,6 +106,7 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect, sess *mgo.Session) (*ResultReader,
 	} else if len(m.filter) > 0 {
 		//u.Infof("in else: %v", esReq)
 		esReq = m.filter
+		u.Debugf("filter: %v", m.filter)
 	}
 	u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
 	if len(m.sel.OrderBy) > 0 {
@@ -119,9 +124,7 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect, sess *mgo.Session) (*ResultReader,
 		}
 	}
 
-	// TODO:  hostpool
 	query := sess.DB(m.schema.Db).C(m.tbl.Name).Find(m.filter).Limit(req.Limit)
-	//m.tbl.Name, req.Limit)
 
 	resultReader := NewResultReader(m, query)
 	m.resp = resultReader
@@ -253,7 +256,7 @@ func (m *SqlToMgo) WalkAggs(cur expr.Node) (q bson.M, _ error) {
 // Walk() an expression, and its AND/OR/() logic to create an appropriately
 //  nested json document for elasticsearch queries
 //
-//  TODO:  think we need to separate Value Nodes from those that return es types?
+//  TODO:  think we need to separate Value Nodes from those that return types?
 func (m *SqlToMgo) WalkNode(cur expr.Node, q *bson.M) (value.Value, error) {
 	u.Debugf("WalkNode: %#v", cur)
 	switch curNode := cur.(type) {
@@ -278,8 +281,6 @@ func (m *SqlToMgo) WalkNode(cur expr.Node, q *bson.M) (value.Value, error) {
 		return m.walkFilterFunc(curNode, q)
 	case *expr.IdentityNode:
 		u.Warnf("wat????   %v", curNode.StringAST())
-		// "errors" :   { "term" : { "body" : "error"   }},
-		//"terms": {        "field": "field1"      }
 		*q = bson.M{"terms": bson.M{"field": curNode.String()}}
 		return value.NewStringValue(curNode.String()), nil
 	case *expr.MultiArgNode:
@@ -317,15 +318,10 @@ func (m *SqlToMgo) walkFilterTri(node *expr.TriNode, q *bson.M) (value.Value, er
 	return nil, fmt.Errorf("not implemented")
 }
 
-/*
-Mutli Arg expressions:
-
-	year IN (1990,1992)  =>
-
-		"filter" : {
-            "terms" : { "year" : [1990,1992]}
-        }
-*/
+// Mutli Arg expressions:
+//
+//		year IN (1990,1992)  =>
+//
 func (m *SqlToMgo) walkMultiFilter(node *expr.MultiArgNode, q *bson.M) (value.Value, error) {
 
 	// First argument must be field name in this context
@@ -335,7 +331,7 @@ func (m *SqlToMgo) walkMultiFilter(node *expr.MultiArgNode, q *bson.M) (value.Va
 	case lex.TokenIN:
 		//q = bson.M{"range": bson.M{arg1val.ToString(): bson.M{"gte": arg2val.ToString(), "lte": arg3val.ToString()}}}
 		terms := make([]interface{}, len(node.Args)-1)
-		*q = bson.M{"terms": bson.M{fldName: terms}}
+		*q = bson.M{fldName: bson.M{"$in": terms}}
 		for i := 1; i < len(node.Args); i++ {
 			// Do we eval here?
 			v, ok := vm.Eval(nil, node.Args[i])
@@ -357,6 +353,10 @@ func (m *SqlToMgo) walkMultiFilter(node *expr.MultiArgNode, q *bson.M) (value.Va
 	return nil, fmt.Errorf("Uknown Error")
 }
 
+// Simple Binary Node
+//
+//	x = y   =>   {field: {"$eq": value}}
+//
 func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Value, error) {
 
 	lhval, lhok := vm.Eval(nil, node.Args[0])
@@ -377,8 +377,18 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 			return nil, fmt.Errorf("could not evaluate: %v", node.StringAST())
 		}
 		*q = bson.M{"and": []bson.M{lhq, rhq}}
+	case lex.TokenLogicOr:
+		// this doesn't yet implement x AND y AND z
+		lhq, rhq := bson.M{}, bson.M{}
+		_, err := m.WalkNode(node.Args[0], &lhq)
+		_, err2 := m.WalkNode(node.Args[1], &rhq)
+		if err != nil || err2 != nil {
+			u.Errorf("could not get children nodes? %v %v %v", err, err2, node)
+			return nil, fmt.Errorf("could not evaluate: %v", node.StringAST())
+		}
+		*q = bson.M{"or": []bson.M{lhq, rhq}}
 	case lex.TokenEqual, lex.TokenEqualEqual:
-		//q = bson.M{"terms": bson.M{lhs: rhs}}
+		// The $eq expression is equivalent to { field: <value> }.
 		if lhval != nil && rhval != nil {
 			*q = bson.M{lhval.ToString(): rhval.Value()}
 			//u.Infof("m=%#v type=%v", q, rhval.Type())
@@ -387,38 +397,27 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 		if lhval != nil || rhval != nil {
 			u.Infof("has stuff?  %v", node.StringAST())
 		}
+	case lex.TokenNE:
+		// db.inventory.find( { qty: { $ne: 20 } } )
+		*q = bson.M{lhval.ToString(): bson.M{"$ne": rhval.Value()}}
 	case lex.TokenLE:
-		*q = bson.M{"range": bson.M{lhval.ToString(): bson.M{"lte": rhval.ToString()}}}
+		// db.inventory.find( { qty: { $lte: 20 } } )
+		*q = bson.M{lhval.ToString(): bson.M{"$lte": rhval.Value()}}
 	case lex.TokenLT:
-		*q = bson.M{"range": bson.M{lhval.ToString(): bson.M{"lt": rhval.ToString()}}}
+		// db.inventory.find( { qty: { $lt: 20 } } )
+		*q = bson.M{lhval.ToString(): bson.M{"$lt": rhval.Value()}}
 	case lex.TokenGE:
-		*q = bson.M{"range": bson.M{lhval.ToString(): bson.M{"gte": rhval.ToString()}}}
+		// db.inventory.find( { qty: { $gte: 20 } } )
+		*q = bson.M{lhval.ToString(): bson.M{"$gte": rhval.Value()}}
 	case lex.TokenGT:
-		*q = bson.M{"range": bson.M{lhval.ToString(): bson.M{"gt": rhval.ToString()}}}
+		// db.inventory.find( { qty: { $gt: 20 } } )
+		*q = bson.M{lhval.ToString(): bson.M{"$gt": rhval.Value()}}
 	case lex.TokenLike:
-		//q = bson.M{"terms": bson.M{lhs: rhs}}
+		// { $text: { $search: <string>, $language: <string> } }
 		switch val := lhval.ToString(); strings.ToLower(val) {
-		case "all", "query", "any":
-			//q = bson.M{"query": bson.M{"query_string": bson.M{"query": rhval.ToString()}}}
-			*q = bson.M{"query": bson.M{"query_string": bson.M{"query": rhval.ToString()}}}
+		//case "all", "query", "any":
 		default:
 			if lhval != nil && rhval != nil {
-				rhs := rhval.ToString()
-				hasWildcard := strings.Contains(rhs, "%")
-				if hasWildcard {
-					rhs = strings.Replace(rhs, "%", "*", -1)
-				} else {
-					hasWildcard = strings.Contains(rhs, "*")
-				}
-				hasLogic := strings.Contains(rhs, " AND")
-				if !hasLogic {
-					hasLogic = strings.Contains(rhs, " OR")
-				}
-				if hasLogic || hasWildcard {
-					*q = bson.M{"query": bson.M{"query_string": bson.M{"query": rhs}}}
-				} else {
-					*q = bson.M{"query": bson.M{"match": bson.M{lhval.ToString(): rhs}}}
-				}
 
 				return nil, nil
 			}
@@ -436,11 +435,16 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 // Take an expression func, ensure we don't do runtime-checking (as the function)
 //   doesn't really exist, then map that function to an ES Filter
 //
-//    exists, missing, prefix, term
+//    exists
 //
 func (m *SqlToMgo) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, error) {
 	switch funcName := strings.ToLower(node.Name); funcName {
-	case "exists", "missing", "prefix", "term":
+	case "exists", "missing":
+		op := true
+		if funcName == "missing" {
+			op = false
+		}
+		// { field: { $exists: <boolean> } }
 		fieldName := ""
 		if len(node.Args) != 1 {
 			return nil, fmt.Errorf("Invalid func")
@@ -456,10 +460,7 @@ func (m *SqlToMgo) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, 
 				fieldName = val.ToString()
 			}
 		}
-
-		//  "exists" : { "field" : "user" }
-		// "missing" : { "field" : "user" }
-		*q = bson.M{funcName: bson.M{"field": fieldName}}
+		*q = bson.M{fieldName: bson.M{"$exists": op}}
 	default:
 		u.Warnf("not implemented ")
 	}
