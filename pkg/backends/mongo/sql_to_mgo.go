@@ -1,6 +1,7 @@
 package mongo
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -106,7 +107,7 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect, sess *mgo.Session) (*ResultReader,
 	} else if len(m.filter) > 0 {
 		//u.Infof("in else: %v", esReq)
 		esReq = m.filter
-		u.Debugf("filter: %v", m.filter)
+
 	}
 	u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
 	if len(m.sel.OrderBy) > 0 {
@@ -123,7 +124,9 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect, sess *mgo.Session) (*ResultReader,
 			}
 		}
 	}
-
+	filterBy, _ := json.Marshal(m.filter)
+	u.Debug(m.filter)
+	u.Debugf("db=%v  tbl=%v  filter=%v  limit=%v skip=%v", m.schema.Db, m.tbl.Name, string(filterBy), req.Limit, req.Offset)
 	query := sess.DB(m.schema.Db).C(m.tbl.Name).Find(m.filter).Limit(req.Limit)
 
 	resultReader := NewResultReader(m, query)
@@ -355,7 +358,11 @@ func (m *SqlToMgo) walkMultiFilter(node *expr.MultiArgNode, q *bson.M) (value.Va
 
 // Simple Binary Node
 //
-//	x = y   =>   {field: {"$eq": value}}
+//	x = y             =>   {field: {"$eq": value}}
+//  x != y            =>   db.inventory.find( { qty: { $ne: 20 } } )
+//
+//  x like "list%"    =>   db.users.find( { user_id: /^list/ } )
+//  x like "%list%"   =>   db.users.find( { user_id: /bc/ } )
 //
 func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Value, error) {
 
@@ -414,13 +421,24 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 		*q = bson.M{lhval.ToString(): bson.M{"$gt": rhval.Value()}}
 	case lex.TokenLike:
 		// { $text: { $search: <string>, $language: <string> } }
-		switch val := lhval.ToString(); strings.ToLower(val) {
-		//case "all", "query", "any":
-		default:
-			if lhval != nil && rhval != nil {
+		// { <field>: { $regex: /pattern/, $options: '<options>' } }
 
-				return nil, nil
-			}
+		rhs := rhval.ToString()
+		startsPct := strings.Index(rhs, "%") == 0
+		endsPct := strings.LastIndex(rhs, "%") == len(rhs)-1
+		rhs = strings.Replace(rhs, "%", "", -1)
+		u.Infof("LIKE:  %v  startsPCt?%v  endsPct?%v", rhs, startsPct, endsPct)
+		// TODO:   this isn't working.   Not sure why
+		if startsPct && endsPct {
+			// user_id like "%bc%"
+			// db.users.find( { user_id: /bc/ } )
+			*q = bson.M{lhval.ToString(): bson.RegEx{fmt.Sprintf(`%s`, rhs), "i"}}
+		} else if endsPct {
+			//  WHERE user_id like "bc%"
+			// db.users.find( { user_id: /^bc/ } )
+			*q = bson.M{lhval.ToString(): bson.RegEx{fmt.Sprintf(`^%s`, rhs), "i"}}
+		} else {
+			*q = bson.M{lhval.ToString(): bson.RegEx{fmt.Sprintf(`%s`, rhs), "i"}}
 		}
 
 	default:
@@ -435,7 +453,8 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 // Take an expression func, ensure we don't do runtime-checking (as the function)
 //   doesn't really exist, then map that function to an ES Filter
 //
-//    exists
+//    exists(fieldname)
+//    regex(fieldname,value)
 //
 func (m *SqlToMgo) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, error) {
 	switch funcName := strings.ToLower(node.Name); funcName {
@@ -461,6 +480,26 @@ func (m *SqlToMgo) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, 
 			}
 		}
 		*q = bson.M{fieldName: bson.M{"$exists": op}}
+	case "regex":
+		// user_id regex("%bc%")
+		// db.users.find( { user_id: /bc/ } )
+
+		if len(node.Args) < 2 {
+			return nil, fmt.Errorf(`Invalid func regex:  regex(fieldname,"/regvalue/i")`)
+		}
+
+		fieldVal, ok := eval(node.Args[0])
+		if !ok {
+			u.Errorf("Must be valid: %v", node.StringAST())
+			return value.ErrValue, fmt.Errorf(`Invalid func regex:  regex(fieldname,"/regvalue/i")`)
+		}
+
+		regexval, ok := eval(node.Args[0])
+		if !ok {
+			u.Errorf("Must be valid: %v", node.StringAST())
+			return value.ErrValue, fmt.Errorf(`Invalid func regex:  regex(fieldname,"/regvalue/i")`)
+		}
+		*q = bson.M{fieldVal.ToString(): bson.M{"$regex": regexval.ToString()}}
 	default:
 		u.Warnf("not implemented ")
 	}

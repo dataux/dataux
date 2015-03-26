@@ -177,7 +177,7 @@ func (m *MongoDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, e
 func (m *MongoDataSource) Features() *datasource.SourceFeatures { return features }
 
 func (m *MongoDataSource) Table(table string) (*models.Table, error) {
-	u.Debugf("get table for %s", table)
+	//u.Debugf("get table for %s", table)
 	return m.loadTableSchema(table)
 }
 
@@ -212,7 +212,7 @@ func (m *MongoDataSource) loadDatabases() error {
 	}
 	sort.Strings(dbs)
 	m.databases = dbs
-	u.Debugf("found database names: %v", m.databases)
+	//u.Debugf("found database names: %v", m.databases)
 	found := false
 	for _, db := range dbs {
 		if strings.ToLower(db) == strings.ToLower(m.schemaConf.DB) {

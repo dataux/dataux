@@ -65,6 +65,7 @@ func loadTestData() {
 	coll.Insert(&article{"article1", "aaron", 22, 64, false, []string{"news", "sports"}, time.Now(), &t, 55.5, ev, &body})
 	coll.Insert(&article{"article2", "james", 2, 64, true, []string{"news", "sports"}, time.Now().Add(-time.Hour * 100), &t, 55.5, ev, &body})
 	coll.Insert(&article{"article3", "bjorn", 55, 12, true, []string{"politics"}, time.Now().Add(-time.Hour * 220), &t, 21.5, ev, &body})
+	coll.Insert(&article{"listicle1", "bjorn", 7, 12, true, []string{"world"}, time.Now().Add(-time.Hour * 500), &t, 21.5, ev, &body})
 }
 
 type QuerySpec struct {
@@ -393,18 +394,22 @@ func TestSelectWhereEqual(t *testing.T) {
 
 func TestSelectWhereLike(t *testing.T) {
 	data := struct {
-		Name string
-		Ct   int
+		Title string
+		Ct    int
 	}{}
 	validateQuerySpec(t, QuerySpec{
-		Sql: "select `repository.stargazers_count` AS ct, `repository.name` AS name " +
-			" FROM github_fork " +
-			"where `description` LIKE \"database AND graph\";",
-		ExpectRowCt: 9,
+		Sql:         `SELECT title, count as ct from article WHERE title like "list%"`,
+		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			u.Debugf("%#v", data)
-			assert.Tf(t, data.Name != "", "%v", data)
-			//assert.Tf(t, data.Ct == 74995 || data.Ct == 74994, "%v", data)
+			assert.Tf(t, data.Title == "listicle1", "%v", data)
+		},
+		RowData: &data,
+	})
+	validateQuerySpec(t, QuerySpec{
+		Sql:         `SELECT title, count as ct from article WHERE title like "%stic%"`,
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			assert.Tf(t, data.Title == "listicle1", "%v", data)
 		},
 		RowData: &data,
 	})

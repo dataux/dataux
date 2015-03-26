@@ -93,7 +93,7 @@ func (m *ResultReader) buildProjection() {
 	} else {
 		for _, col := range m.Req.sel.Columns {
 			if fld, ok := m.Req.tbl.FieldMap[col.SourceField]; ok {
-				u.Debugf("column: %#v", col)
+				//u.Debugf("column: %#v", col)
 				cols = append(cols, expr.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
 			} else {
 				u.Debugf("Could not find: %v", col.String())
@@ -101,7 +101,7 @@ func (m *ResultReader) buildProjection() {
 		}
 	}
 	m.proj.Columns = cols
-	u.Debugf("leaving Columns:  %v", len(m.proj.Columns))
+	//u.Debugf("leaving Columns:  %v", len(m.proj.Columns))
 }
 
 /*
@@ -144,7 +144,6 @@ func (m *ResultReader) Finalize() error {
 
 	m.Vals = make([][]driver.Value, 0)
 
-	//if sql.Star {
 	if sql.CountStar() {
 		// Count *
 		vals := make([]driver.Value, 1)
@@ -170,16 +169,16 @@ func (m *ResultReader) Finalize() error {
 			break
 		}
 		vals := make([]driver.Value, len(cols))
-		u.Debugf("found vals:  %#v   ct=%d", bm, len(bm))
 		for i, col := range cols {
 			if val, ok := bm[col.Name]; ok {
 				vals[i] = val
 			}
 		}
-		u.Warnf("vals=%#v", vals)
+		//u.Debugf("vals=%#v", vals)
 		m.Vals = append(m.Vals, vals)
 	}
 	if err := iter.Close(); err != nil {
+		u.Errorf("could not iter: %v", err)
 		return err
 	}
 
@@ -192,7 +191,7 @@ func (m *ResultReader) Next(row []driver.Value) error {
 		return io.EOF
 	}
 	m.cursor++
-	u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
+	//u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
 	for i, val := range m.Vals[m.cursor-1] {
 		row[i] = val
 	}
@@ -214,7 +213,7 @@ func (m *ResultReaderNext) Next() datasource.Message {
 			return nil
 		}
 		m.cursor++
-		u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
+		//u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
 		return models.ValsMessage{m.Vals[m.cursor-1], uint64(m.cursor)}
 	}
 }

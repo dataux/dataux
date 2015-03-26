@@ -38,7 +38,13 @@ func NewMysqlResultWriter(writer models.ResultWriter, proj *expr.Projection, sch
 	return m
 }
 func (m *MysqlResultWriter) Close() error {
-	u.Infof("in mysql resultwriter Close()  rowct:%v", len(m.Rs.RowDatas))
+
+	if m.Rs == nil || len(m.Rs.Fields) == 0 {
+		m.Rs = NewEmptyResultset(m.projection)
+		//u.Infof("nil resultwriter Close() has RS?%v rowct:%v", m.Rs == nil, len(m.Rs.RowDatas))
+	} else {
+		u.Infof("in mysql resultwriter Close() has RS?%v rowct:%v", m.Rs == nil, len(m.Rs.RowDatas))
+	}
 	m.writer.WriteResult(m.Rs)
 	return nil
 }
@@ -47,7 +53,7 @@ func resultWrite(m *MysqlResultWriter) exec.MessageHandler {
 
 	return func(_ *exec.Context, msg datasource.Message) bool {
 
-		u.Debugf("in resultWrite:  %#v", msg)
+		//u.Debugf("in resultWrite:  %#v", msg)
 		if !m.wroteHeaders {
 			m.WriteHeaders()
 		}
@@ -60,7 +66,7 @@ func resultWrite(m *MysqlResultWriter) exec.MessageHandler {
 		}
 
 		if vals, ok := msg.Body().([]driver.Value); ok {
-			u.Debugf("got msg in result writer: %#v", vals)
+			//u.Debugf("got msg in result writer: %#v", vals)
 			m.Rs.AddRowValues(vals)
 			return true
 		}
@@ -72,8 +78,10 @@ func resultWrite(m *MysqlResultWriter) exec.MessageHandler {
 
 func (m *MysqlResultWriter) WriteHeaders() error {
 
+	//u.LogTracef(u.WARN, "wat?")
+
 	cols := m.projection.Columns
-	u.Debugf("writing mysql headers: %v", cols)
+	//u.Debugf("writing mysql headers: %v", cols)
 	if len(cols) == 0 {
 		u.Warnf("Wat?   no columns?   %v", 0)
 		return nil
@@ -133,4 +141,32 @@ func (m *MysqlResultWriter) Finalize() error {
 	// }
 
 	return nil
+}
+
+func NewEmptyResultset(proj *expr.Projection) *mysql.Resultset {
+
+	r := new(mysql.Resultset)
+	r.Fields = make([]*mysql.Field, len(proj.Columns))
+
+	for i, col := range proj.Columns {
+		r.Fields[i] = &mysql.Field{}
+		switch {
+		case col.Star:
+			r.Fields[i].Name = []byte("*")
+		// case col.Tree != nil:
+		// 	if col.As != col.Key() {
+		// 		r.Fields[i].Name = []byte(col.As)
+		// 		r.Fields[i].OrgName = hack.Slice(col.String())
+		// 	} else {
+		// 		r.Fields[i].Name = hack.Slice(col.String())
+		// 	}
+		default:
+			r.Fields[i].Name = []byte(col.As)
+		}
+	}
+
+	r.Values = make([][]driver.Value, 0)
+	r.RowDatas = make([]mysql.RowData, 0)
+
+	return r
 }

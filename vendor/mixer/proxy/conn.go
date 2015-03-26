@@ -12,7 +12,6 @@ import (
 	"sync/atomic"
 
 	u "github.com/araddon/gou"
-	"github.com/araddon/qlbridge/expr"
 	"github.com/dataux/dataux/pkg/models"
 	"github.com/dataux/dataux/vendor/mixer/client"
 	"github.com/dataux/dataux/vendor/mixer/hack"
@@ -447,34 +446,6 @@ func (c *Conn) NewEmptyResultsetOLD(stmt *sqlparser.Select) *mysql.Resultset {
 			}
 		default:
 			r.Fields[i].Name = hack.Slice(nstring(e))
-		}
-	}
-
-	r.Values = make([][]driver.Value, 0)
-	r.RowDatas = make([]mysql.RowData, 0)
-
-	return r
-}
-
-func (c *Conn) NewEmptyResultset(stmt *expr.SqlSelect) *mysql.Resultset {
-
-	r := new(mysql.Resultset)
-	r.Fields = make([]*mysql.Field, len(stmt.Columns))
-
-	for i, col := range stmt.Columns {
-		r.Fields[i] = &mysql.Field{}
-		switch {
-		case col.Star:
-			r.Fields[i].Name = []byte("*")
-		case col.Tree != nil:
-			if col.As != col.Key() {
-				r.Fields[i].Name = []byte(col.As)
-				r.Fields[i].OrgName = hack.Slice(col.String())
-			} else {
-				r.Fields[i].Name = hack.Slice(col.String())
-			}
-		default:
-			r.Fields[i].Name = hack.Slice(col.String())
 		}
 	}
 

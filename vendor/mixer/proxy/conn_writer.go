@@ -106,7 +106,7 @@ func buildResultset(names []string, values [][]interface{}) (*mysql.Resultset, e
 }
 
 func (c *Conn) WriteResult(r models.Result) error {
-	//u.Warnf("in WriteResult():  ?")
+	//u.Warnf("in WriteResult():  %T %#v", r, r)
 	switch resVal := r.(type) {
 	case *mysql.Resultset:
 		return c.WriteHandlerResult(c.Status, resVal)
