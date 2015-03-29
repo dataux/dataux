@@ -83,50 +83,29 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect, sess *mgo.Session) (*ResultReader,
 		}
 	}
 
-	// Aggregations are     count(xyz), or sum(abc) functional
-	// operations on select [columns] in the projection fields
-	if len(m.aggs) > 0 && len(m.filter) > 0 {
-		u.Debugf("adding filter to aggs: %v", m.filter)
-		m.aggs = bson.M{"where": bson.M{"aggs": m.aggs, "filter": m.filter}}
-	}
+	filterBy, _ := json.Marshal(m.filter)
 
-	esReq := bson.M{}
-	//esPointer := esReq
-	if len(m.groupby) > 0 {
-		esReq = m.groupby
-		esReq["size"] = 0
-		req.Limit = 0
-		u.Infof("has group by: %v\ninner:%v   \naggs=%v", m.groupby, m.innergb, m.aggs)
-		if len(m.aggs) > 0 {
-			m.innergb["aggs"] = m.aggs
-		}
-	} else if len(m.aggs) > 0 {
-		esReq = bson.M{"aggs": m.aggs, "size": 0}
-		req.Limit = 0
-		u.Debugf("setting limit: %v", req.Limit)
-	} else if len(m.filter) > 0 {
-		//u.Infof("in else: %v", esReq)
-		esReq = m.filter
-
-	}
 	u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
 	if len(m.sel.OrderBy) > 0 {
 		m.sort = make([]bson.M, len(m.sel.OrderBy))
-		esReq["sort"] = m.sort
 		for i, col := range m.sel.OrderBy {
 			// We really need to look at any funcs?   walk this out
 			switch col.Order {
-			case "ASC", "DESC":
-				m.sort[i] = bson.M{col.As: bson.M{"order": strings.ToLower(col.Order)}}
+			case "ASC":
+				m.sort[i] = bson.M{col.As: 1}
+			case "DESC":
+				m.sort[i] = bson.M{col.As: -1}
 			default:
 				// default sorder order = ?
-				m.sort[i] = bson.M{col.As: bson.M{"order": "asc"}}
+				m.sort[i] = bson.M{col.As: -1}
 			}
 		}
+
+		m.filter = bson.M{"$query": m.filter, "$orderby": m.sort}
 	}
-	filterBy, _ := json.Marshal(m.filter)
-	u.Debug(m.filter)
-	u.Debugf("db=%v  tbl=%v  filter=%v  limit=%v skip=%v", m.schema.Db, m.tbl.Name, string(filterBy), req.Limit, req.Offset)
+
+	u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v",
+		m.schema.Db, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
 	query := sess.DB(m.schema.Db).C(m.tbl.Name).Find(m.filter).Limit(req.Limit)
 
 	resultReader := NewResultReader(m, query)
@@ -145,8 +124,8 @@ func (m *SqlToMgo) WalkSelectList() error {
 	for i := len(m.sel.Columns) - 1; i >= 0; i-- {
 		col := m.sel.Columns[i]
 		u.Debugf("i=%d of %d  %v %#v ", i, len(m.sel.Columns), col.Key(), col)
-		if col.Tree != nil && col.Tree.Root != nil {
-			switch curNode := col.Tree.Root.(type) {
+		if col.Expr != nil {
+			switch curNode := col.Expr.(type) {
 			// case *expr.NumberNode:
 			// 	return nil, value.NewNumberValue(curNode.Float64), nil
 			// case *expr.BinaryNode:
@@ -158,7 +137,7 @@ func (m *SqlToMgo) WalkSelectList() error {
 			// 	u.Warnf("not implemented: %#v", curNode)
 			case *expr.FuncNode:
 				// All Func Nodes are Aggregates
-				esm, err := m.WalkAggs(col.Tree.Root)
+				esm, err := m.WalkAggs(col.Expr)
 				if err == nil && len(esm) > 0 {
 					m.aggs[col.As] = esm
 				} else if err != nil {
@@ -190,30 +169,26 @@ func (m *SqlToMgo) WalkSelectList() error {
 func (m *SqlToMgo) WalkGroupBy() error {
 
 	for i, col := range m.sel.GroupBy {
-		if col.Tree != nil {
-			node := col.Tree.Root
-			if node != nil {
-				u.Infof("Walk group by %s  %T", node.StringAST(), node)
-				switch col.Tree.Root.(type) {
-				case *expr.IdentityNode, *expr.FuncNode:
-					esm := bson.M{}
-					_, err := m.WalkNode(node, &esm)
-					fld := strings.Replace(expr.FindIdentityField(node), ".", "", -1)
-					u.Infof("gb: %s  %s", fld, u.JsonHelper(esm).PrettyJson())
-					if err == nil {
-						if len(m.innergb) > 0 {
-							esm["aggs"] = bson.M{fmt.Sprintf("group_by_%d", i): m.innergb}
-							// esm["aggs"] = bson.M{"group_by_" + fld: m.innergb}
-						} else {
-							esm = esm
-						}
-						m.innergb = esm
-						u.Infof("esm: %v", esm)
+		if col.Expr != nil {
+			u.Infof("Walk group by %s  %T", col.Expr.StringAST(), col.Expr)
+			switch col.Expr.(type) {
+			case *expr.IdentityNode, *expr.FuncNode:
+				esm := bson.M{}
+				_, err := m.WalkNode(col.Expr, &esm)
+				fld := strings.Replace(expr.FindIdentityField(col.Expr), ".", "", -1)
+				u.Infof("gb: %s  %s", fld, u.JsonHelper(esm).PrettyJson())
+				if err == nil {
+					if len(m.innergb) > 0 {
+						esm["aggs"] = bson.M{fmt.Sprintf("group_by_%d", i): m.innergb}
+						// esm["aggs"] = bson.M{"group_by_" + fld: m.innergb}
 					} else {
-						u.Error(err)
-						return err
+						esm = esm
 					}
-
+					m.innergb = esm
+					u.Infof("esm: %v", esm)
+				} else {
+					u.Error(err)
+					return err
 				}
 
 			}

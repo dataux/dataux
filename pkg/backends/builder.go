@@ -71,7 +71,7 @@ func BuildSqlJob(svr *models.ServerCtx, schemaDb, sqlText string) (*Builder, err
 	if !ok {
 		return nil, fmt.Errorf("expected tasks but got: %T", ex)
 	}
-	builder.Job = &exec.SqlJob{tasks, stmt}
+	builder.Job = &exec.SqlJob{tasks, stmt, svr.RtConf}
 	return builder, nil
 }
 
@@ -110,7 +110,7 @@ func (m *Builder) VisitSysVariable(stmt *expr.SqlSelect) (interface{}, error) {
 func (m *Builder) sysVarTasks(name string, val interface{}) (interface{}, error) {
 	tasks := make(exec.Tasks, 0)
 	static := datasource.NewStaticDataValue(val, name)
-	sourceTask := exec.NewSourceScanner("system", static)
+	sourceTask := exec.NewSource("system", static)
 	tasks.Add(sourceTask)
 	switch val.(type) {
 	case int, int64:

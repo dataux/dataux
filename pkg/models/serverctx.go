@@ -4,20 +4,24 @@ import (
 	"fmt"
 
 	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/exec"
 )
 
 type ServerCtx struct {
 	Config  *Config
 	schemas map[string]*Schema
+	RtConf  *exec.RuntimeConfig
 }
 
 func NewServerCtx(conf *Config) *ServerCtx {
 	svr := ServerCtx{}
 	svr.Config = conf
+	svr.RtConf = exec.NewRuntimeConfig()
 	return &svr
 }
 
 func (m *ServerCtx) Init() error {
+
 	if err := m.loadSchemasFromConfig(); err != nil {
 		return err
 	}

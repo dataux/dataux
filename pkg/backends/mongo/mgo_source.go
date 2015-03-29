@@ -12,7 +12,6 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	u "github.com/araddon/gou"
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/models"
@@ -27,15 +26,6 @@ TODO:
 var (
 	// Ensure our MongoDataSource is a datasource.DataSource type
 	_ models.DataSource = (*MongoDataSource)(nil)
-
-	features = &datasource.SourceFeatures{
-		Scan:         true,
-		Seek:         true,
-		Where:        true,
-		GroupBy:      true,
-		Sort:         true,
-		Aggregations: true,
-	}
 )
 
 const (
@@ -173,8 +163,6 @@ func (m *MongoDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, e
 
 	return resp, nil
 }
-
-func (m *MongoDataSource) Features() *datasource.SourceFeatures { return features }
 
 func (m *MongoDataSource) Table(table string) (*models.Table, error) {
 	//u.Debugf("get table for %s", table)

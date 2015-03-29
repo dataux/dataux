@@ -105,6 +105,10 @@ func (m *ResultReader) buildProjection() {
 	u.Debugf("leaving Columns:  %v", len(m.proj.Columns))
 }
 
+func (m *ResultReader) Tables() []string {
+	return nil
+}
+
 /*
 
 	// Describe the Columns etc
@@ -116,7 +120,7 @@ func (m *ResultReader) Projection() (*expr.Projection, error) {
 	return m.proj, nil
 }
 
-func (m *ResultReader) Open(connInfo string) (datasource.DataSource, error) {
+func (m *ResultReader) Open(connInfo string) (datasource.SourceConn, error) {
 	panic("Not implemented")
 	return m, nil
 }
@@ -127,6 +131,11 @@ func (m *ResultReader) Schema() *models.Schema {
 
 func (m *ResultReader) CreateIterator(filter expr.Node) datasource.Iterator {
 	return &ResultReaderNext{m}
+}
+
+func (m *ResultReader) MesgChan(filter expr.Node) <-chan datasource.Message {
+	iter := m.CreateIterator(filter)
+	return datasource.SourceIterChannel(iter, filter, m.exit)
 }
 
 // Finalize maps the Es Documents/results into
@@ -165,8 +174,8 @@ func (m *ResultReader) Finalize() error {
 			vals := make([]driver.Value, len(sql.Columns))
 			for i, col := range sql.Columns {
 				fldName := col.Key()
-				if col.Tree != nil && col.Tree.Root != nil {
-					u.Debugf("col: %v", col.Tree.Root.StringAST())
+				if col.Expr != nil {
+					u.Debugf("col: %v", col.Expr.StringAST())
 				}
 
 				if col.CountStar() {

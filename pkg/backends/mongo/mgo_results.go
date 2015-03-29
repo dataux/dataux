@@ -104,24 +104,27 @@ func (m *ResultReader) buildProjection() {
 	//u.Debugf("leaving Columns:  %v", len(m.proj.Columns))
 }
 
-/*
+func (m *ResultReader) Tables() []string {
+	return nil
+}
 
-	// Describe the Columns etc
-	Projection() *expr.Projection
-
-*/
 func (m *ResultReader) Projection() (*expr.Projection, error) {
 	m.buildProjection()
 	return m.proj, nil
 }
 
-func (m *ResultReader) Open(connInfo string) (datasource.DataSource, error) {
+func (m *ResultReader) Open(connInfo string) (datasource.SourceConn, error) {
 	panic("Not implemented")
 	return m, nil
 }
 
 func (m *ResultReader) Schema() *models.Schema {
 	return m.Req.tbl.Schema
+}
+
+func (m *ResultReader) MesgChan(filter expr.Node) <-chan datasource.Message {
+	iter := m.CreateIterator(filter)
+	return datasource.SourceIterChannel(iter, filter, m.exit)
 }
 
 func (m *ResultReader) CreateIterator(filter expr.Node) datasource.Iterator {

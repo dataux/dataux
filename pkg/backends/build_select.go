@@ -22,34 +22,53 @@ func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
 	}
 
 	tasks := make(exec.Tasks, 0)
-	var from *expr.SqlSource
-	if len(stmt.From) > 1 {
-		return nil, fmt.Errorf("join not implemented")
-	} else if len(stmt.From) == 1 {
-		from = stmt.From[0]
-	}
 
-	// source is of type qlbridge.datasource.DataSource
-	source, err := m.schema.DataSource.SourceTask(stmt)
-	if err != nil {
-		return nil, err
-	}
-	// Some data sources provide their own projections
-	if projector, ok := source.(models.SourceProjection); ok {
-		m.Projection, err = projector.Projection()
+	if len(stmt.From) == 1 {
+		var from *expr.SqlSource
+		if len(stmt.From) > 1 {
+			return nil, fmt.Errorf("join not implemented")
+		} else if len(stmt.From) == 1 {
+			from = stmt.From[0]
+		}
+
+		// source is of type qlbridge.datasource.DataSource
+		source, err := m.schema.DataSource.SourceTask(stmt)
 		if err != nil {
-			u.Errorf("could not build projection %v", err)
 			return nil, err
 		}
+		// Some data sources provide their own projections
+		if projector, ok := source.(models.SourceProjection); ok {
+			m.Projection, err = projector.Projection()
+			if err != nil {
+				u.Errorf("could not build projection %v", err)
+				return nil, err
+			}
+		} else {
+			panic("must implement projection")
+		}
+		if scanner, ok := source.(datasource.Scanner); !ok {
+			return nil, fmt.Errorf("Must Implement Scanner")
+		} else {
+			sourceTask := exec.NewSource(from.Name, scanner)
+			tasks.Add(sourceTask)
+		}
 	} else {
-		panic("must implement projection")
+		// for now, only support 1 join
+		if len(stmt.From) != 2 {
+			return nil, fmt.Errorf("3 or more Table/Join not currently implemented")
+		}
+		// u.Debugf("we are going to do a join on two dbs: ")
+		// for _, from := range stmt.From {
+		// 	u.Infof("from:  %#v", from)
+		// }
+
+		in, err := exec.NewSourceJoin(stmt.From[0], stmt.From[1], m.svr.RtConf)
+		if err != nil {
+			return nil, err
+		}
+		tasks.Add(in)
 	}
-	if scanner, ok := source.(datasource.Scanner); !ok {
-		return nil, fmt.Errorf("Must Implement Scanner")
-	} else {
-		sourceTask := exec.NewSourceScanner(from.Name, scanner)
-		tasks.Add(sourceTask)
-	}
+
 	return tasks, nil
 }
 
@@ -62,7 +81,7 @@ func (m *Builder) VisitSelectDatabase(stmt *expr.SqlSelect) (interface{}, error)
 		val = m.schema.Db
 	}
 	static := datasource.NewStaticDataValue(val, "database")
-	sourceTask := exec.NewSourceScanner("system", static)
+	sourceTask := exec.NewSource("system", static)
 	tasks.Add(sourceTask)
 	m.Projection = StaticProjection("database", value.StringType)
 	return tasks, nil

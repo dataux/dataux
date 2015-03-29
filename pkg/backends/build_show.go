@@ -45,7 +45,7 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 	m.Projection = proj
 
 	tasks := make(exec.Tasks, 0)
-	sourceTask := exec.NewSourceScanner("system", source)
+	sourceTask := exec.NewSource("system", source)
 	u.Infof("source:  %#v", source)
 	tasks.Add(sourceTask)
 
@@ -67,7 +67,7 @@ func (m *Builder) VisitDescribe(stmt *expr.SqlDescribe) (interface{}, error) {
 	m.Projection = proj
 
 	tasks := make(exec.Tasks, 0)
-	sourceTask := exec.NewSourceScanner("schema", source)
+	sourceTask := exec.NewSource("schema", source)
 	u.Infof("source:  %#v", source)
 	tasks.Add(sourceTask)
 

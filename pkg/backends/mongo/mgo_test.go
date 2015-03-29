@@ -52,20 +52,36 @@ type article struct {
 	Body *json.RawMessage
 }
 
+type user struct {
+	Id      string
+	Name    string
+	Deleted bool
+	Roles   []string
+	Created time.Time
+	Updated *time.Time
+}
+
 func loadTestData() {
 	sess, _ := mgo.Dial(*mongoHost)
-	coll := sess.DB("mgo_datauxtest").C("article")
-	coll.DropCollection()
+	userCol := sess.DB("mgo_datauxtest").C("user")
+	userCol.DropCollection()
+	articleColl := sess.DB("mgo_datauxtest").C("article")
+	articleColl.DropCollection()
 	t := time.Now()
 	ev := struct {
 		Tag string
 		ICt int
 	}{"tag", 1}
 	body := json.RawMessage([]byte(`{"name":"morestuff"}`))
-	coll.Insert(&article{"article1", "aaron", 22, 64, false, []string{"news", "sports"}, time.Now(), &t, 55.5, ev, &body})
-	coll.Insert(&article{"article2", "james", 2, 64, true, []string{"news", "sports"}, time.Now().Add(-time.Hour * 100), &t, 55.5, ev, &body})
-	coll.Insert(&article{"article3", "bjorn", 55, 12, true, []string{"politics"}, time.Now().Add(-time.Hour * 220), &t, 21.5, ev, &body})
-	coll.Insert(&article{"listicle1", "bjorn", 7, 12, true, []string{"world"}, time.Now().Add(-time.Hour * 500), &t, 21.5, ev, &body})
+	articleColl.Insert(&article{"article1", "aaron", 22, 75, false, []string{"news", "sports"}, time.Now(), &t, 55.5, ev, &body})
+	articleColl.Insert(&article{"article2", "james", 2, 64, true, []string{"news", "sports"}, time.Now().Add(-time.Hour * 4000), &t, 55.5, ev, &body})
+	articleColl.Insert(&article{"article3", "bjorn", 55, 100, true, []string{"politics"}, time.Now().Add(-time.Hour * 5000), &t, 21.5, ev, &body})
+	articleColl.Insert(&article{"listicle1", "bjorn", 7, 12, true, []string{"world"}, time.Now().Add(-time.Hour * 500), &t, 21.5, ev, &body})
+	// Users
+	userCol.Insert(&user{"user123", "aaron", false, []string{"admin", "author"}, time.Now(), &t})
+	userCol.Insert(&user{"user456", "james", true, []string{"admin", "author"}, time.Now().Add(-time.Hour * 100), &t})
+	userCol.Insert(&user{"user789", "bjorn", true, []string{"author"}, time.Now().Add(-time.Hour * 220), &t})
+
 }
 
 type QuerySpec struct {
@@ -242,7 +258,7 @@ func TestSimpleRowSelect(t *testing.T) {
 	})
 	validateQuerySpec(t, QuerySpec{
 		Sql:             "select title, count, deleted from article LIMIT 10;",
-		ExpectRowCt:     3,
+		ExpectRowCt:     4,
 		ValidateRowData: func() {},
 		RowData:         &data,
 	})
@@ -262,6 +278,7 @@ func TestSelectLimit(t *testing.T) {
 }
 
 func TestSelectAggs(t *testing.T) {
+	t.Fail()
 	data := struct {
 		Oldest int `db:"oldest_repo"`
 		Card   int `db:"users_who_released"`
@@ -441,7 +458,7 @@ func TestSelectWhereExists(t *testing.T) {
 	}{}
 	validateQuerySpec(t, QuerySpec{
 		Sql:         `select title, count, deleted from article WHERE exists(title);`,
-		ExpectRowCt: 3,
+		ExpectRowCt: 4,
 		ValidateRowData: func() {
 			assert.Tf(t, data.Title != "", "%v", data)
 		},
@@ -460,6 +477,8 @@ func TestSelectWhereBetween(t *testing.T) {
 		Actor string
 		Name  string `db:"repository.name"`
 	}{}
+	t.Fatal()
+
 	validateQuerySpec(t, QuerySpec{
 		Sql:         `select actor, repository.name from github_push where repository.stargazers_count BETWEEN "1000" AND 1100;`,
 		ExpectRowCt: 20,
@@ -508,17 +527,53 @@ func TestSelectWhereBetween(t *testing.T) {
 
 func TestSelectOrderBy(t *testing.T) {
 	data := struct {
-		Name string
-		Ct   int
+		Title string
+		Ct    int
 	}{}
 	validateQuerySpec(t, QuerySpec{
-		Sql: "select `repository.stargazers_count` AS ct, `repository.name` AS name " +
-			" FROM github_fork ORDER BY `repository.stargazers_count` DESC limit 3;",
-		ExpectRowCt: 3,
+		Sql:         "select title, count64 AS ct FROM article ORDER BY count64 DESC LIMIT 1;",
+		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			assert.Tf(t, data.Name == "bootstrap", "%v", data)
-			assert.Tf(t, data.Ct == 74995 || data.Ct == 74994, "%v", data)
+			assert.Tf(t, data.Title == "article3", "%v", data)
+			assert.Tf(t, data.Ct == 100, "%v", data)
 		},
 		RowData: &data,
 	})
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "select title, count64 AS ct FROM article ORDER BY count64 ASC LIMIT 1;",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			assert.Tf(t, data.Title == "listicle1", "%v", data)
+			assert.Tf(t, data.Ct == 12, "%v", data)
+		},
+		RowData: &data,
+	})
+}
+
+func TestMongoToMongoJoin(t *testing.T) {
+	//  - No sort (overall), or where, full scans
+	sqlText := `
+		SELECT 
+			title, u.id
+		FROM article AS a 
+		INNER JOIN user AS u 
+			ON u.name = a.author
+	`
+
+	data := struct {
+		Title string
+		Id    string
+	}{}
+	validateQuerySpec(t, QuerySpec{
+		Sql:         sqlText,
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			assert.Tf(t, data.Title == "listicle1", "%v", data)
+		},
+		RowData: &data,
+	})
+
+	/*
+	   - Where Statement (rewrite query)
+	*/
 }

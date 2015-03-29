@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	u "github.com/araddon/gou"
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/models"
@@ -17,15 +16,6 @@ import (
 var (
 	// Ensure our ElasticsearchDataSource is a SourceTask type
 	_ models.DataSource = (*ElasticsearchDataSource)(nil)
-
-	esFeatures = &datasource.SourceFeatures{
-		Scan:         true,
-		Seek:         true,
-		Where:        true,
-		GroupBy:      true,
-		Sort:         true,
-		Aggregations: true,
-	}
 )
 
 const (
@@ -91,8 +81,8 @@ func (m *ElasticsearchDataSource) SourceTask(stmt *expr.SqlSelect) (models.Sourc
 	return resp, nil
 }
 
-func (m *ElasticsearchDataSource) Features() *datasource.SourceFeatures { return esFeatures }
-func (m *ElasticsearchDataSource) Close() error                         { return nil }
+//func (m *ElasticsearchDataSource) Features() *datasource.SourceFeatures { return esFeatures }
+func (m *ElasticsearchDataSource) Close() error { return nil }
 
 func (m *ElasticsearchDataSource) Table(table string) (*models.Table, error) {
 	u.Debugf("get table for %s", table)

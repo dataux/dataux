@@ -169,8 +169,8 @@ func (m *SqlToEs) WalkSelectList() error {
 	for i := len(m.sel.Columns) - 1; i >= 0; i-- {
 		col := m.sel.Columns[i]
 		u.Debugf("i=%d of %d  %v %#v ", i, len(m.sel.Columns), col.Key(), col)
-		if col.Tree != nil && col.Tree.Root != nil {
-			switch curNode := col.Tree.Root.(type) {
+		if col.Expr != nil {
+			switch curNode := col.Expr.(type) {
 			// case *expr.NumberNode:
 			// 	return nil, value.NewNumberValue(curNode.Float64), nil
 			// case *expr.BinaryNode:
@@ -182,7 +182,7 @@ func (m *SqlToEs) WalkSelectList() error {
 			// 	u.Warnf("not implemented: %#v", curNode)
 			case *expr.FuncNode:
 				// All Func Nodes are Aggregates
-				esm, err := m.WalkAggs(col.Tree.Root)
+				esm, err := m.WalkAggs(col.Expr)
 				if err == nil && len(esm) > 0 {
 					m.aggs[col.As] = esm
 				} else if err != nil {
@@ -214,30 +214,26 @@ func (m *SqlToEs) WalkSelectList() error {
 func (m *SqlToEs) WalkGroupBy() error {
 
 	for i, col := range m.sel.GroupBy {
-		if col.Tree != nil {
-			node := col.Tree.Root
-			if node != nil {
-				u.Infof("Walk group by %s  %T", node.StringAST(), node)
-				switch col.Tree.Root.(type) {
-				case *expr.IdentityNode, *expr.FuncNode:
-					esm := esMap{}
-					_, err := m.WalkNode(node, &esm)
-					fld := strings.Replace(expr.FindIdentityField(node), ".", "", -1)
-					u.Infof("gb: %s  %s", fld, u.JsonHelper(esm).PrettyJson())
-					if err == nil {
-						if len(m.innergb) > 0 {
-							esm["aggs"] = esMap{fmt.Sprintf("group_by_%d", i): m.innergb}
-							// esm["aggs"] = esMap{"group_by_" + fld: m.innergb}
-						} else {
-							esm = esm
-						}
-						m.innergb = esm
-						u.Infof("esm: %v", esm)
+		if col.Expr != nil {
+			u.Infof("Walk group by %s  %T", col.Expr.StringAST(), col.Expr)
+			switch col.Expr.(type) {
+			case *expr.IdentityNode, *expr.FuncNode:
+				esm := esMap{}
+				_, err := m.WalkNode(col.Expr, &esm)
+				fld := strings.Replace(expr.FindIdentityField(col.Expr), ".", "", -1)
+				u.Infof("gb: %s  %s", fld, u.JsonHelper(esm).PrettyJson())
+				if err == nil {
+					if len(m.innergb) > 0 {
+						esm["aggs"] = esMap{fmt.Sprintf("group_by_%d", i): m.innergb}
+						// esm["aggs"] = esMap{"group_by_" + fld: m.innergb}
 					} else {
-						u.Error(err)
-						return err
+						esm = esm
 					}
-
+					m.innergb = esm
+					u.Infof("esm: %v", esm)
+				} else {
+					u.Error(err)
+					return err
 				}
 
 			}
