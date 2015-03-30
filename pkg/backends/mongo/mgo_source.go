@@ -12,6 +12,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/models"
@@ -24,8 +25,10 @@ TODO:
 
 */
 var (
-	// Ensure our MongoDataSource is a datasource.DataSource type
 	_ models.DataSource = (*MongoDataSource)(nil)
+	// Ensure our MongoDataSource is a datasource.DataSource type
+	_ datasource.DataSource = (*MongoDataSource)(nil)
+	_ datasource.Scanner    = (*ResultReader)(nil)
 )
 
 const (
@@ -54,6 +57,8 @@ func NewMongoDataSource(schema *models.Schema, conf *models.Config) models.DataS
 	m.schema = schema
 	m.schemaConf = schema.Conf
 	m.conf = conf
+	// Register our datasource.Datasources in registry
+	datasource.Register("mongo", &m)
 	return &m
 }
 
@@ -80,6 +85,11 @@ func (m *MongoDataSource) loadMeta() error {
 
 	if err := m.findMongoNodes(); err != nil {
 		u.Errorf("could not init mongo nodes: %v", err)
+		return err
+	}
+
+	if err := m.loadDatabases(); err != nil {
+		u.Errorf("could not load mongo databases: %v", err)
 		return err
 	}
 
@@ -142,6 +152,18 @@ func (m *MongoDataSource) connect() error {
 	return nil
 }
 
+func (m *MongoDataSource) DataSource() datasource.DataSource {
+	return m
+}
+func (m *MongoDataSource) Tables() []string {
+	return m.schema.TableNames
+}
+
+func (m *MongoDataSource) Open(connInfo string) (datasource.SourceConn, error) {
+	u.Debugf("Open() for %v", connInfo)
+	return nil, nil
+}
+
 func (m *MongoDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, error) {
 
 	u.Debugf("get sourceTask for %v", stmt)
@@ -200,7 +222,7 @@ func (m *MongoDataSource) loadDatabases() error {
 	}
 	sort.Strings(dbs)
 	m.databases = dbs
-	//u.Debugf("found database names: %v", m.databases)
+	u.Debugf("found database names: %v", m.databases)
 	found := false
 	for _, db := range dbs {
 		if strings.ToLower(db) == strings.ToLower(m.schemaConf.DB) {
@@ -208,6 +230,7 @@ func (m *MongoDataSource) loadDatabases() error {
 		}
 	}
 	if !found {
+		u.Warnf("could not find database: %v", m.schemaConf.DB)
 		return fmt.Errorf("Could not find that database: %v", m.schemaConf.DB)
 	}
 

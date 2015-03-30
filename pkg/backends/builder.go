@@ -56,6 +56,7 @@ func BuildSqlJob(svr *models.ServerCtx, schemaDb, sqlText string) (*Builder, err
 		return nil, err
 	}
 
+	u.Infof("BuildSqlJob: schema='%s'", schemaDb)
 	builder := NewBuilder(svr, schemaDb)
 	ex, err := stmt.Accept(builder)
 
@@ -90,6 +91,9 @@ type Builder struct {
 func NewBuilder(svr *models.ServerCtx, db string) *Builder {
 	m := Builder{svr: svr}
 	m.schema = svr.Schema(db)
+	if m.schema == nil {
+		u.Warnf("no schema? %v", db)
+	}
 	return &m
 }
 

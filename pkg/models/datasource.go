@@ -26,6 +26,7 @@ type DataSource interface {
 	// Describe the Features Available on this Datasource, so we know
 	// which features to defer to db, which to implement in dataux
 	//Features() *datasource.SourceFeatures
+	DataSource() datasource.DataSource
 
 	// ???
 	Table(table string) (*Table, error)

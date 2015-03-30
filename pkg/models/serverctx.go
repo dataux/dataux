@@ -65,9 +65,17 @@ func (m *ServerCtx) loadSchemasFromConfig() error {
 			//panic("Data source Not found for source_type: " + schemaConf.SourceType)
 			u.Warnf("Data source Not found for source_type: " + schemaConf.SourceType)
 		} else {
-			u.Infof("found datasource for: %#v", schema)
+
 			schema.DataSource = sourceFunc(schema, m.Config)
 			schema.DataSource.Init()
+			source := schema.DataSource.DataSource()
+
+			for _, tbl := range source.Tables() {
+				u.Debugf("found table: %v", tbl)
+				//m.RtConf.Sources
+			}
+			u.Infof("found datasource for: %#v", schema)
+			u.Debugf("tables? %v", schema.TableNames)
 		}
 	}
 

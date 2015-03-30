@@ -62,6 +62,11 @@ func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
 		// 	u.Infof("from:  %#v", from)
 		// }
 
+		stmt.From[0].Source = stmt.From[0].Rewrite(stmt)
+		stmt.From[1].Source = stmt.From[1].Rewrite(stmt)
+		u.Debugf("from1: %v", stmt.From[0].Source.String())
+		u.Debugf("from2: %v", stmt.From[1].Source.String())
+
 		in, err := exec.NewSourceJoin(stmt.From[0], stmt.From[1], m.svr.RtConf)
 		if err != nil {
 			return nil, err
