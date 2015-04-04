@@ -1,6 +1,7 @@
 package mongo_test
 
 import (
+	"database/sql"
 	"encoding/json"
 	"flag"
 	"testing"
@@ -8,7 +9,7 @@ import (
 
 	"gopkg.in/mgo.v2"
 
-	"database/sql"
+	"github.com/araddon/dateparse"
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
 	"github.com/dataux/dataux/pkg/frontends/testmysql"
@@ -72,11 +73,15 @@ func loadTestData() {
 		Tag string
 		ICt int
 	}{"tag", 1}
+	t1, _ := dateparse.ParseAny("2010-10-01")
+	t2, _ := dateparse.ParseAny("2011-10-01")
+	t3, _ := dateparse.ParseAny("2012-10-01")
+	t4, _ := dateparse.ParseAny("2013-10-01")
 	body := json.RawMessage([]byte(`{"name":"morestuff"}`))
-	articleColl.Insert(&article{"article1", "aaron", 22, 75, false, []string{"news", "sports"}, time.Now(), &t, 55.5, ev, &body})
-	articleColl.Insert(&article{"article2", "james", 2, 64, true, []string{"news", "sports"}, time.Now().Add(-time.Hour * 4000), &t, 55.5, ev, &body})
-	articleColl.Insert(&article{"article3", "bjorn", 55, 100, true, []string{"politics"}, time.Now().Add(-time.Hour * 5000), &t, 21.5, ev, &body})
-	articleColl.Insert(&article{"listicle1", "bjorn", 7, 12, true, []string{"world"}, time.Now().Add(-time.Hour * 500), &t, 21.5, ev, &body})
+	articleColl.Insert(&article{"article1", "aaron", 22, 75, false, []string{"news", "sports"}, t1, &t, 55.5, ev, &body})
+	articleColl.Insert(&article{"article2", "james", 2, 64, true, []string{"news", "sports"}, t2, &t, 55.5, ev, &body})
+	articleColl.Insert(&article{"article3", "bjorn", 55, 100, true, []string{"politics"}, t3, &t, 21.5, ev, &body})
+	articleColl.Insert(&article{"listicle1", "bjorn", 7, 12, true, []string{"world"}, t4, &t, 21.5, ev, &body})
 	// Users
 	userCol.Insert(&user{"user123", "aaron", false, []string{"admin", "author"}, time.Now(), &t})
 	userCol.Insert(&user{"user456", "james", true, []string{"admin", "author"}, time.Now().Add(-time.Hour * 100), &t})
@@ -474,31 +479,41 @@ func TestSelectWhereExists(t *testing.T) {
 
 func TestSelectWhereBetween(t *testing.T) {
 	data := struct {
-		Actor string
-		Name  string `db:"repository.name"`
+		Title  string
+		Author string `db:"author"`
+		Count  int
 	}{}
-	t.Fatal()
-
 	validateQuerySpec(t, QuerySpec{
-		Sql:         `select actor, repository.name from github_push where repository.stargazers_count BETWEEN "1000" AND 1100;`,
-		ExpectRowCt: 20,
+		Sql:         `select title, count, author from article where count BETWEEN 5 AND 25;`,
+		ExpectRowCt: 2,
 		ValidateRowData: func() {
 			u.Debugf("%#v", data)
-			assert.Tf(t, data.Name != "", "%v", data)
-			//assert.Tf(t, data.Ct == 74995 || data.Ct == 74994, "%v", data)
+			switch data.Title {
+			case "article1":
+				assert.Tf(t, data.Count == 22, "%v", data)
+			case "listicle1":
+				assert.Tf(t, data.Count == 7, "%v", data)
+			default:
+				t.Errorf("Should not be in results: %#v", data)
+			}
 		},
 		RowData: &data,
 	})
+
 	// Now one that is date based
 	validateQuerySpec(t, QuerySpec{
-		Sql: `SELECT actor, repository.name 
-			FROM github_push 
-			WHERE repository.created_at BETWEEN "2008-12-01" AND "2008-12-03";`,
-		ExpectRowCt: 4,
+		Sql:         `select title, count, author from article where created BETWEEN "2011-08-01" AND "2013-08-03";`,
+		ExpectRowCt: 2,
 		ValidateRowData: func() {
 			u.Debugf("%#v", data)
-			assert.Tf(t, data.Name == "jasmine", "%v", data)
-			//assert.Tf(t, data.Ct == 74995 || data.Ct == 74994, "%v", data)
+			switch data.Title {
+			case "article1":
+				assert.Tf(t, data.Count == 22, "%v", data)
+			case "listicle1":
+				assert.Tf(t, data.Count == 7, "%v", data)
+			default:
+				t.Errorf("Should not be in results: %#v", data)
+			}
 		},
 		RowData: &data,
 	})
@@ -507,6 +522,8 @@ func TestSelectWhereBetween(t *testing.T) {
 		Name  string `db:"repository.name"`
 		Stars int
 	}{}
+
+	t.Fatal()
 	// simple test of mixed aliasing, non-aliasing on field names
 	validateQuerySpec(t, QuerySpec{
 		Sql: `
@@ -519,7 +536,7 @@ func TestSelectWhereBetween(t *testing.T) {
 		ExpectRowCt: 20,
 		ValidateRowData: func() {
 			//u.Debugf("%#v", datact)
-			assert.Tf(t, datact.Stars >= 1000 && datact.Stars < 1101, "%v", datact)
+			//assert.Tf(t, datact.Stars >= 1000 && datact.Stars < 1101, "%v", datact)
 		},
 		RowData: &datact,
 	})

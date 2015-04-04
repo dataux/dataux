@@ -286,7 +286,7 @@ func (m *SqlToMgo) walkFilterTri(node *expr.TriNode, q *bson.M) (value.Value, er
 	u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
 	switch node.Operator.T {
 	case lex.TokenBetween:
-		*q = bson.M{"range": bson.M{arg1val.ToString(): bson.M{"gte": arg2val.ToString(), "lte": arg3val.ToString()}}}
+		*q = bson.M{arg1val.ToString(): bson.M{"$gte": arg2val.Value(), "$lte": arg3val.Value()}}
 	default:
 		u.Warnf("not implemented ")
 	}
