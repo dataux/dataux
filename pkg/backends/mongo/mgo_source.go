@@ -268,6 +268,7 @@ func (m *MongoDataSource) loadTableSchema(table string) (*models.Table, error) {
 			- make recursive
 			- Don't need ALL, just x rows
 			- Resolve differences between object's? having different fields, types, nested
+			- shared pkg for data-inspection, data builder
 	*/
 	tbl := models.NewTable(table, m.schema)
 	coll := m.sess.DB(m.schemaConf.DB).C(table)
