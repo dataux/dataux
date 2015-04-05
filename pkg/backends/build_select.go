@@ -9,7 +9,6 @@ import (
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
-	"github.com/dataux/dataux/pkg/models"
 )
 
 func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
@@ -24,57 +23,92 @@ func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
 	tasks := make(exec.Tasks, 0)
 
 	if len(stmt.From) == 1 {
-		var from *expr.SqlSource
-		if len(stmt.From) > 1 {
-			return nil, fmt.Errorf("join not implemented")
-		} else if len(stmt.From) == 1 {
-			from = stmt.From[0]
-		}
+		from := stmt.From[0]
+		tableName := strings.ToLower(from.Name)
 
-		// source is of type qlbridge.datasource.DataSource
-		source, err := m.schema.DataSource.SourceTask(stmt)
+		tbl, err := m.schema.Table(tableName)
 		if err != nil {
 			return nil, err
 		}
+
+		source, err := tbl.SourceSchema.DS.SourceTask(stmt)
+		if err != nil {
+			u.Errorf("could not create source task: %v", err)
+			return nil, err
+		}
 		// Some data sources provide their own projections
-		if projector, ok := source.(models.SourceProjection); ok {
+		if projector, ok := source.(datasource.Projection); ok {
 			m.Projection, err = projector.Projection()
 			if err != nil {
 				u.Errorf("could not build projection %v", err)
 				return nil, err
 			}
 		} else {
-			panic("must implement projection")
+			//panic("must implement projection")
+			u.Warnf("could not create projection for: %T", source)
 		}
 		if scanner, ok := source.(datasource.Scanner); !ok {
+			u.Warnf("could not create scanner? %#v", source)
 			return nil, fmt.Errorf("Must Implement Scanner")
 		} else {
-			sourceTask := exec.NewSource(from.Name, scanner)
+			sourceTask := exec.NewSource(from, scanner)
 			tasks.Add(sourceTask)
 		}
 	} else {
+
 		// for now, only support 1 join
 		if len(stmt.From) != 2 {
+			// We should just be able to fold them all-together beyond 3
 			return nil, fmt.Errorf("3 or more Table/Join not currently implemented")
 		}
-		// u.Debugf("we are going to do a join on two dbs: ")
-		// for _, from := range stmt.From {
-		// 	u.Infof("from:  %#v", from)
-		// }
 
-		stmt.From[0].Source = stmt.From[0].Rewrite(stmt)
-		stmt.From[1].Source = stmt.From[1].Rewrite(stmt)
-		u.Debugf("from1: %v", stmt.From[0].Source.String())
-		u.Debugf("from2: %v", stmt.From[1].Source.String())
+		stmt.From[0].Rewrite(true, stmt)
+		stmt.From[1].Rewrite(false, stmt)
+		// This is a HACK, need a better way obviously of redoing limit on re-written queries
+		// preferably a Streaming solution using Sequence tasks
+		stmt.From[0].Source.Limit = 100000000
+		stmt.From[1].Source.Limit = 100000000
 
-		in, err := exec.NewSourceJoin(stmt.From[0], stmt.From[1], m.svr.RtConf)
+		in, err := exec.NewSourceJoin(m, stmt.From[0], stmt.From[1], m.svr.RtConf)
 		if err != nil {
 			return nil, err
 		}
 		tasks.Add(in)
 	}
 
+	// Add a Projection
+	m.Projection = m.createProjection(stmt)
+
 	return tasks, nil
+}
+
+func (m *Builder) createProjection(stmt *expr.SqlSelect) *expr.Projection {
+	u.Debugf("createProjection %s", stmt.String())
+	p := expr.NewProjection()
+	for _, from := range stmt.From {
+		u.Infof("info: %#v", from)
+		tbl, err := m.schema.Table(strings.ToLower(from.Name))
+		if err != nil {
+			u.Errorf("could not get table: %v", err)
+			return nil
+		} else if tbl == nil {
+			u.Errorf("no table? %v", from.Name)
+		} else {
+			u.Infof("getting cols? %v", len(from.Columns))
+			if len(from.Columns) == 0 && len(stmt.From) == 1 {
+				from.Columns = stmt.Columns
+			}
+			for _, col := range from.Columns {
+				if schemaCol, ok := tbl.FieldMap[col.SourceField]; ok {
+					u.Infof("adding projection col: %v %v", col.As, schemaCol.Type.String())
+					p.AddColumnShort(col.As, schemaCol.Type)
+				} else {
+					u.Errorf("schema col not found:  vals=%#v", col)
+				}
+			}
+		}
+	}
+	return p
 }
 
 func (m *Builder) VisitSelectDatabase(stmt *expr.SqlSelect) (interface{}, error) {
@@ -83,11 +117,22 @@ func (m *Builder) VisitSelectDatabase(stmt *expr.SqlSelect) (interface{}, error)
 	tasks := make(exec.Tasks, 0)
 	val := "NULL"
 	if m.schema != nil {
-		val = m.schema.Db
+		val = m.schema.Name
 	}
 	static := datasource.NewStaticDataValue(val, "database")
-	sourceTask := exec.NewSource("system", static)
+	sourceTask := exec.NewSource(nil, static)
 	tasks.Add(sourceTask)
 	m.Projection = StaticProjection("database", value.StringType)
 	return tasks, nil
+}
+
+func (m *Builder) VisitSubselect(stmt *expr.SqlSource) (interface{}, error) {
+	u.Debugf("VisitSubselect %+v", stmt)
+	u.LogTracef(u.WARN, "who?")
+	return nil, expr.ErrNotImplemented
+}
+
+func (m *Builder) VisitJoin(stmt *expr.SqlSource) (interface{}, error) {
+	u.Debugf("VisitJoin %+v", stmt)
+	return nil, expr.ErrNotImplemented
 }

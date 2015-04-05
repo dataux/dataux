@@ -42,13 +42,13 @@ type ResultProvider interface {
 	Next(dest []driver.Value) error
 }
 
-type ValsMessage struct {
-	Vals []driver.Value
-	Id   uint64
-}
+// type ValsMessage struct {
+// 	Vals []driver.Value
+// 	Id   uint64
+// }
 
-func (m ValsMessage) Key() uint64       { return m.Id }
-func (m ValsMessage) Body() interface{} { return m.Vals }
+// func (m ValsMessage) Key() uint64       { return m.Id }
+// func (m ValsMessage) Body() interface{} { return m.Vals }
 
 // type ResultColumn struct {
 // 	Name   string          // Original path/name for query field

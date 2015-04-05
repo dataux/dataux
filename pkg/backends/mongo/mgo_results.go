@@ -71,32 +71,14 @@ func (m *ResultReader) buildProjection() {
 	} else if sql.CountStar() {
 		// Count *
 		cols = append(cols, expr.NewResultColumn("count", len(cols), nil, value.IntType))
-	} else if len(m.Aggs) > 0 {
-		if m.Req.hasSingleValue {
-			for _, col := range sql.Columns {
-				if col.CountStar() {
-					cols = append(cols, expr.NewResultColumn(col.Key(), len(cols), col, value.IntType))
-				} else {
-					u.Debugf("why Aggs? %#v", col)
-					cols = append(cols, expr.NewResultColumn(col.Key(), len(cols), col, value.IntType))
-				}
-			}
-		} else if m.Req.hasMultiValue {
-			// MultiValue returns are resultsets that have multiple rows for a single expression, ie top 10 terms for this field, etc
-			// if len(sql.GroupBy) > 0 {
-			// We store the Field Name Here
-			u.Debugf("why MultiValue Aggs? %#v", m.Req)
-			cols = append(cols, expr.NewResultColumn("field_name", len(cols), nil, value.StringType))
-			cols = append(cols, expr.NewResultColumn("key", len(cols), nil, value.StringType)) // the value of the field
-			cols = append(cols, expr.NewResultColumn("count", len(cols), nil, value.IntType))
-		}
 	} else {
 		for _, col := range m.Req.sel.Columns {
 			if fld, ok := m.Req.tbl.FieldMap[col.SourceField]; ok {
-				//u.Debugf("column: %#v", col)
+				u.Debugf("column: %#v", col)
 				cols = append(cols, expr.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
 			} else {
-				u.Debugf("Could not find: %v", col.String())
+				u.Debugf("Could not find: '%v' in %#v", col.SourceField, m.Req.tbl.FieldMap)
+				u.Warnf("%#v", col)
 			}
 		}
 	}
@@ -171,13 +153,14 @@ func (m *ResultReader) Finalize() error {
 		if !iter.Next(&bm) {
 			break
 		}
+		//u.Debugf("col? %v", bm)
 		vals := make([]driver.Value, len(cols))
 		for i, col := range cols {
 			if val, ok := bm[col.Name]; ok {
 				vals[i] = val
 			}
 		}
-		//u.Debugf("vals=%#v", vals)
+		u.Debugf("vals=%#v", vals)
 		m.Vals = append(m.Vals, vals)
 	}
 	if err := iter.Close(); err != nil {
@@ -217,6 +200,6 @@ func (m *ResultReaderNext) Next() datasource.Message {
 		}
 		m.cursor++
 		//u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
-		return models.ValsMessage{m.Vals[m.cursor-1], uint64(m.cursor)}
+		return &datasource.SqlDriverMessage{m.Vals[m.cursor-1], uint64(m.cursor)}
 	}
 }

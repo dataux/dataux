@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/expr"
@@ -41,7 +40,7 @@ var _ = value.ErrValue
 // Schema is the schema for a named database, shared
 // across multiple nodes
 type SchemaSharded struct {
-	*models.Schema
+	*models.SourceSchema
 	mysqlnodes map[string]*Node
 	rule       *router.Router
 }
@@ -73,12 +72,10 @@ func NewHandlerSharded(conf *models.Config) (models.Handler, error) {
 
 func (m *HandlerSharded) Init() error {
 
-	if err := m.startBackends(); err != nil {
+	if err := m.startBackendNodes(); err != nil {
 		return err
 	}
-	if err := m.loadSchemasFromConfig(); err != nil {
-		return err
-	}
+
 	return nil
 }
 
@@ -105,7 +102,7 @@ func (m *HandlerSharded) SchemaUse(db string) *models.Schema {
 	schema, ok := m.schemas[db]
 	if ok {
 		m.schema = schema
-		return schema.Schema
+		return schema.SourceSchema.Schema
 	}
 
 	u.Errorf("Could not find schema for db=%s", db)
@@ -1046,41 +1043,50 @@ func (m *HandlerSharded) getNode(name string) *Node {
 	return m.nodes[name]
 }
 
-func (m *HandlerSharded) startBackends() error {
+func (m *HandlerSharded) startBackendNodes() error {
 
 	m.nodes = make(map[string]*Node)
 
-	for _, be := range m.conf.Sources {
-		if be.SourceType == "" {
-			for _, schemaConf := range m.conf.Schemas {
-				for _, bename := range schemaConf.Nodes {
-					if bename == be.Name {
-						u.Infof("setting SourceType: %v", be.Name)
-						be.SourceType = schemaConf.SourceType
+	panic("not implemented")
+
+	/*
+		for _, be := range m.conf.Sources {
+			if be.SourceType == "" {
+				for _, schemaConf := range m.conf.Schemas {
+					for _, bename := range schemaConf.Nodes {
+						if bename == be.Name {
+							u.Infof("setting SourceType: %v", be.Name)
+							be.SourceType = schemaConf.SourceType
+						}
 					}
 				}
 			}
-		}
-		if be.SourceType == ListenerType {
-			if _, ok := m.nodes[be.Name]; ok {
-				return fmt.Errorf("duplicate node '%s'", be.Name)
-			}
+			if be.SourceType == ListenerType {
+				if _, ok := m.nodes[be.Name]; ok {
+					return fmt.Errorf("duplicate node '%s'", be.Name)
+				}
 
-			n, err := m.startMysqlNode(be)
-			if err != nil {
-				return err
-			}
+				n, err := m.startMysqlNode(be)
+				if err != nil {
+					return err
+				}
 
-			u.Infof("adding node: %s", be.String())
-			m.nodes[be.Name] = n
-		} else {
-			u.Warnf("wrong backend type?: %#v", be)
+				u.Infof("adding node: %s", be.String())
+				m.nodes[be.Name] = n
+			} else {
+				u.Warnf("wrong backend type?: %#v", be)
+			}
 		}
-	}
+	*/
+
+	// if err := m.loadSchemasFromConfig(); err != nil {
+	// 	return err
+	// }
 
 	return nil
 }
 
+/*
 func (m *HandlerSharded) startMysqlNode(beConf *models.SourceConfig) (*Node, error) {
 
 	n := new(Node)
@@ -1159,6 +1165,7 @@ func (m *HandlerSharded) loadSchemasFromConfig() error {
 
 	return nil
 }
+*/
 
 func (m *HandlerSharded) getSchema(db string) *SchemaSharded {
 	u.Debugf("get schema for %s", db)

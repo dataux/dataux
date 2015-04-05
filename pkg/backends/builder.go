@@ -16,7 +16,7 @@ var (
 	_ = u.EMPTY
 
 	// Ensure that we implement the Exec Visitor interface
-	_ exec.Visitor = (*Builder)(nil)
+	_ expr.Visitor = (*Builder)(nil)
 
 	// Standard errors
 	ErrNotSupported     = fmt.Errorf("DataUX: Not supported")
@@ -56,7 +56,7 @@ func BuildSqlJob(svr *models.ServerCtx, schemaDb, sqlText string) (*Builder, err
 		return nil, err
 	}
 
-	u.Infof("BuildSqlJob: schema='%s'", schemaDb)
+	//u.Infof("BuildSqlJob: schema='%s'", schemaDb)
 	builder := NewBuilder(svr, schemaDb)
 	ex, err := stmt.Accept(builder)
 
@@ -114,7 +114,7 @@ func (m *Builder) VisitSysVariable(stmt *expr.SqlSelect) (interface{}, error) {
 func (m *Builder) sysVarTasks(name string, val interface{}) (interface{}, error) {
 	tasks := make(exec.Tasks, 0)
 	static := datasource.NewStaticDataValue(val, name)
-	sourceTask := exec.NewSource("system", static)
+	sourceTask := exec.NewSource(nil, static)
 	tasks.Add(sourceTask)
 	switch val.(type) {
 	case int, int64:

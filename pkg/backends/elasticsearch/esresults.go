@@ -109,12 +109,6 @@ func (m *ResultReader) Tables() []string {
 	return nil
 }
 
-/*
-
-	// Describe the Columns etc
-	Projection() *expr.Projection
-
-*/
 func (m *ResultReader) Projection() (*expr.Projection, error) {
 	m.buildProjection()
 	return m.proj, nil
@@ -135,6 +129,10 @@ func (m *ResultReader) CreateIterator(filter expr.Node) datasource.Iterator {
 
 func (m *ResultReader) MesgChan(filter expr.Node) <-chan datasource.Message {
 	iter := m.CreateIterator(filter)
+	if m == nil {
+		u.LogTracef(u.WARN, "wat, no iter?")
+		return nil
+	}
 	return datasource.SourceIterChannel(iter, filter, m.exit)
 }
 
@@ -233,6 +231,23 @@ func (m *ResultReader) Finalize() error {
 
 	metaFields := map[string]byte{"_id": 1, "_type": 1, "_score": 1}
 
+	// If we have projected fields using  "fields=field1,field2" in Elasticsearch
+	//  then it will change the response format to
+	//
+	//     gou.JsonHelper{"_index":"github_push", "_type":"event", "_id":"b307c13d856d95b4990f89b5df2fd667", "_score":1,
+	//         "fields":map[string]interface {}{"repository.name":[]interface {}{"fluentd-ui"}, "actor":[]interface {}{"uu59"}}}
+	//
+	//  INSTEAD of
+	//
+	//     gou.JsonHelper{"_index":"github_push", "_type":"event", "_id":"b307c13d856d95b4990f89b5df2fd667", "_score":1,
+	//         "_source":map[string]interface {}{"repository.name":[]interface {}{"fluentd-ui"}, "actor":[]interface {}{"uu59"}}}
+	keyPath := "_source."
+	useFields := false
+	if len(m.Req.projections) > 0 {
+		keyPath = "fields."
+		useFields = true
+	}
+
 	cols := m.proj.Columns
 	if len(cols) == 0 {
 		u.Errorf("WTF?  no cols? %v", cols)
@@ -241,59 +256,67 @@ func (m *ResultReader) Finalize() error {
 		if len(doc) > 0 {
 			//by, _ := json.MarshalIndent(doc, " ", " ")
 			//u.Debugf("doc: %v", string(by))
-
+			if useFields {
+				doc = doc.Helper("fields")
+				if len(doc) < 1 {
+					u.Warnf("could not find fields? %#v", doc)
+					continue
+				}
+			}
 			vals := make([]driver.Value, len(m.proj.Columns))
-			//for fldI, fld := range rs.Fields {
 			fldI := 0
 
 			for _, col := range cols {
-				// key := "_source." + fld.FieldName
-				// if _, ok := metaFields[fld.FieldName]; ok {
-				// 	key = fld.FieldName
-				// }
-				// //u.Debugf("field: %s type=%v key='%s' %v", fld.Name, mysql.TypeString(fld.Type), key, doc.String(key))
-				// switch fld.Type {
-				// case mysql.MYSQL_TYPE_STRING:
-				// 	vals[fldI] = doc.String(key)
-				// case mysql.MYSQL_TYPE_DATETIME:
-				// 	vals[fldI] = doc.String(key)
-				// case mysql.MYSQL_TYPE_LONG:
-				// 	vals[fldI] = doc.Int64(key)
-				// case mysql.MYSQL_TYPE_FLOAT:
-				// 	vals[fldI] = doc.Float64(key)
-				// case mysql.MYSQL_TYPE_BLOB:
-				// 	u.Debugf("blob?  %v", key)
-				// 	if docVal := doc.Get(key); docVal != nil {
-				// 		by, _ := json.Marshal(docVal)
-				// 		vals[fldI] = string(by)
-				// 	}
-				// default:
-				// 	u.Warnf("unrecognized type: %v", fld.String())
-				// }
-				key := "_source." + col.Name
+				key := keyPath + col.Name
 				if _, ok := metaFields[col.Name]; ok {
 					key = col.Name
 					u.Debugf("looking for? %v in %#v", key, doc)
 				}
-				u.Debugf("field: %s type=%v key='%s' %v", col.Name, col.Type.String(), key, doc.String(key))
-				switch col.Type {
-				case value.StringType:
-					vals[fldI] = doc.String(key)
-				case value.TimeType:
-					vals[fldI] = doc.String(key)
-				case value.IntType:
-					vals[fldI] = doc.Int64(key)
-				case value.NumberType:
-					vals[fldI] = doc.Float64(key)
-				case value.ByteSliceType:
-					u.Debugf("blob?  %v", key)
-					if docVal := doc.Get(key); docVal != nil {
-						by, _ := json.Marshal(docVal)
-						vals[fldI] = string(by)
+				//u.Debugf("field: %s type=%v key='%s' val='%v'  doc=%#v", col.Name, col.Type.String(), key, doc.String(key), doc)
+				if useFields {
+					switch col.Type {
+					case value.StringType:
+						if docVals := doc.Strings(col.Name); len(docVals) > 0 {
+							vals[fldI] = docVals[0]
+						}
+					case value.TimeType:
+						if vals := doc.Strings(col.Name); len(vals) > 0 {
+							vals[fldI] = vals[0]
+						}
+					case value.IntType, value.NumberType:
+						if vals := doc.List(col.Name); len(vals) > 0 {
+							vals[fldI] = vals[0]
+						}
+					case value.ByteSliceType:
+						//u.Debugf("blob?  %v", key)
+						if docVal := doc.Get(col.Name); docVal != nil {
+							by, _ := json.Marshal(docVal)
+							vals[fldI] = string(by)
+						}
+					default:
+						u.Warnf("unrecognized type: %v  %T", col.Name, col.Type)
 					}
-				default:
-					u.Warnf("unrecognized type: %v  %T", col.Name, col.Type)
+				} else {
+					switch col.Type {
+					case value.StringType:
+						vals[fldI] = doc.String(key)
+					case value.TimeType:
+						vals[fldI] = doc.String(key)
+					case value.IntType:
+						vals[fldI] = doc.Int64(key)
+					case value.NumberType:
+						vals[fldI] = doc.Float64(key)
+					case value.ByteSliceType:
+						u.Debugf("blob?  %v", key)
+						if docVal := doc.Get(key); docVal != nil {
+							by, _ := json.Marshal(docVal)
+							vals[fldI] = string(by)
+						}
+					default:
+						u.Warnf("unrecognized type: %v  %T", col.Name, col.Type)
+					}
 				}
+
 				fldI++
 			}
 			m.Vals = append(m.Vals, vals)
@@ -331,7 +354,7 @@ func (m *ResultReaderNext) Next() datasource.Message {
 			return nil
 		}
 		m.cursor++
-		u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
-		return models.ValsMessage{m.Vals[m.cursor-1], uint64(m.cursor)}
+		//u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
+		return &datasource.SqlDriverMessage{m.Vals[m.cursor-1], uint64(m.cursor)}
 	}
 }

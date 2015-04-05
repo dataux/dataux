@@ -1,11 +1,17 @@
 
-DataUX a query proxy
----------------------------------
-Mysql compatible querying of elasticsearch.  Making data more usable by
-opening SQL access patterns to data.
+Sql Query Proxy to Elasticsearch, Mongo, Etc
+----------------------------------------------
+Mysql tcp proxy to Elasticsearch, Mongo, Mysql backend sources, including join.
 
+This is an early prototype, not production ready.  It is wire compatible with
+Mysql by implementing a relational algebra engine to map the sql queries to one or more
+backends.
 
-Elasticsearch QL -> ES Api
+**Why?** An experiement to see if it is possible, as more and more databases for more and more
+specialized needs seems to be the norm and this is an attempt to translate back into a
+cohesive data model.
+
+SQL -> Elasticsearch Api
 ----------------------------------
 
 ES API | SQL Query  

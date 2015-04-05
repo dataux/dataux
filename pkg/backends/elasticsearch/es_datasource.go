@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/models"
@@ -28,16 +29,17 @@ func init() {
 }
 
 type ElasticsearchDataSource struct {
-	schema     *models.Schema
-	conf       *models.Config
-	schemaConf *models.SchemaConfig
+	schema *models.SourceSchema
+	conf   *models.Config
 }
 
-func NewElasticsearchDataSource(schema *models.Schema, conf *models.Config) models.DataSource {
+func NewElasticsearchDataSource(schema *models.SourceSchema, conf *models.Config) models.DataSource {
 	es := ElasticsearchDataSource{}
 	es.schema = schema
-	es.schemaConf = schema.Conf
 	es.conf = conf
+	// Register our datasource.Datasources in registry
+	es.Init()
+	datasource.Register(ListenerType, &es)
 	return &es
 }
 
@@ -64,7 +66,7 @@ func (m *ElasticsearchDataSource) SourceTask(stmt *expr.SqlSelect) (models.Sourc
 	u.Debugf("get sourceTask for %v", stmt)
 	tblName := strings.ToLower(stmt.From[0].Name)
 
-	tbl, _ := m.schema.Table(tblName)
+	tbl := m.schema.Tables[tblName]
 	if tbl == nil {
 		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Db, tblName)
 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, tblName)
@@ -81,18 +83,43 @@ func (m *ElasticsearchDataSource) SourceTask(stmt *expr.SqlSelect) (models.Sourc
 	return resp, nil
 }
 
-//func (m *ElasticsearchDataSource) Features() *datasource.SourceFeatures { return esFeatures }
+func (m *ElasticsearchDataSource) Open(schemaName string) (datasource.SourceConn, error) {
+	//u.Debugf("Open(%v)", schemaName)
+	tbl := m.schema.Tables[schemaName]
+	if tbl == nil {
+		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Db, schemaName)
+		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, schemaName)
+	}
+
+	sqlConverter := NewSqlToEs(tbl)
+	return sqlConverter, nil
+}
+
 func (m *ElasticsearchDataSource) Close() error { return nil }
 
+func (m *ElasticsearchDataSource) DataSource() datasource.DataSource {
+	return m
+}
+
+func (m *ElasticsearchDataSource) Tables() []string {
+	return m.schema.TableNames
+}
+
 func (m *ElasticsearchDataSource) Table(table string) (*models.Table, error) {
-	u.Debugf("get table for %s", table)
+	//u.Debugf("get table for %s", table)
 	return m.loadTableSchema(table)
 }
 
 // Load only table names, not full schema
 func (m *ElasticsearchDataSource) loadTableNames() error {
 
-	jh, err := u.JsonHelperHttp("GET", "http://localhost:9200/_aliases", nil)
+	host := m.schema.ChooseBackend()
+	if host == "" {
+		u.Errorf("missing address: %#v", m.schema)
+		return fmt.Errorf("Could not find Elasticsearch Host Address: %v", host)
+	}
+
+	jh, err := u.JsonHelperHttp("GET", fmt.Sprintf("%s/_aliases", host), nil)
 	if err != nil {
 		u.Error("error on es read: %v", err)
 		return err
@@ -127,10 +154,10 @@ func (m *ElasticsearchDataSource) loadTableSchema(table string) (*models.Table, 
 		return tbl, nil
 	}
 
-	s := m.schema
-	host := s.ChooseBackend()
-	if m.schema.Address == "" {
+	host := m.schema.ChooseBackend()
+	if host == "" {
 		u.Errorf("missing address: %#v", m.schema)
+		return nil, fmt.Errorf("Could not find Elasticsearch Host Address: %v", table)
 	}
 	tbl := models.NewTable(table, m.schema)
 
@@ -139,7 +166,7 @@ func (m *ElasticsearchDataSource) loadTableSchema(table string) (*models.Table, 
 	if err != nil {
 		u.Error("error on es read: url=%v  err=%v", indexUrl, err)
 	}
-	u.Debugf("url: %v", indexUrl)
+	//u.Debugf("url: %v", indexUrl)
 	respJh = respJh.Helper(table + ".mappings")
 	respKeys := respJh.Keys()
 	//u.Infof("keys:%v  resp:%v", respKeys, respJh)
@@ -167,13 +194,13 @@ func (m *ElasticsearchDataSource) loadTableSchema(table string) (*models.Table, 
 	tbl.AddValues([]driver.Value{"type", "string", "NO", "", nil, "tbd"})
 	tbl.AddValues([]driver.Value{"_score", "float", "NO", "", nil, "Created per search"})
 
-	buildEsFields(s, tbl, jh, "", 0)
+	buildEsFields(m.schema, tbl, jh, "", 0)
 	m.schema.Tables[table] = tbl
 
 	return tbl, nil
 }
 
-func buildEsFields(s *models.Schema, tbl *models.Table, jh u.JsonHelper, prefix string, depth int) {
+func buildEsFields(s *models.SourceSchema, tbl *models.Table, jh u.JsonHelper, prefix string, depth int) {
 	for field, _ := range jh {
 
 		if h := jh.Helper(field); len(h) > 0 {
@@ -224,33 +251,6 @@ func buildEsFields(s *models.Schema, tbl *models.Table, jh u.JsonHelper, prefix 
 }
 
 func (m *ElasticsearchDataSource) findEsNodes() error {
-
-	//m.nodes = make(map[string]*Node)
-
-	for _, be := range m.conf.Sources {
-		if be.SourceType == "" {
-			for _, schemaConf := range m.conf.Schemas {
-				for _, bename := range schemaConf.Nodes {
-					if bename == be.Name {
-						be.SourceType = schemaConf.SourceType
-					}
-				}
-			}
-		}
-		if be.SourceType == ListenerType {
-			// if _, ok := m.nodes[be.Name]; ok {
-			// 	return fmt.Errorf("duplicate node '%s'", be.Name)
-			// }
-
-			// n, err := m.startMysqlNode(be)
-			// if err != nil {
-			// 	return err
-			// }
-
-			u.Debugf("adding node: %s", be.String())
-			//m.nodes[be.Name] = n
-		}
-	}
 
 	return nil
 }

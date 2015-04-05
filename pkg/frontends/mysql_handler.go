@@ -146,7 +146,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 
 	// Ensure it parses, right now we can't handle multiple statement (ie with semi-colons separating)
 	// sql = strings.TrimRight(sql, ";")
-	builder, err := backends.BuildSqlJob(m.svr, m.schema.Db, sql)
+	builder, err := backends.BuildSqlJob(m.svr, m.schema.Name, sql)
 	if err != nil {
 		u.Debugf("error? %v", err)
 		sql = strings.ToLower(sql)
@@ -168,7 +168,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	switch stmt := builder.Job.Stmt.(type) {
 	case *expr.SqlSelect, *expr.SqlShow, *expr.SqlDescribe:
 
-		u.Debugf("adding mysql result writer")
+		u.Debugf("adding mysql result writer: %#v", builder.Projection)
 		resultWriter := NewMysqlResultWriter(writer, builder.Projection, m.schema)
 		builder.Job.Tasks.Add(resultWriter)
 

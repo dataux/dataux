@@ -9,6 +9,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
@@ -19,6 +20,11 @@ import (
 
 var (
 	DefaultLimit = 20
+
+	_ = json.Marshal
+
+	// planner
+	_ datasource.SourcePlanner = (*SqlToMgo)(nil)
 )
 
 // Sql To Elasticsearch Request Object
@@ -28,7 +34,8 @@ type SqlToMgo struct {
 	resp           *ResultReader
 	tbl            *models.Table
 	sel            *expr.SqlSelect
-	schema         *models.Schema
+	schema         *models.SourceSchema
+	sess           *mgo.Session
 	filter         bson.M
 	aggs           bson.M
 	groupby        bson.M
@@ -38,10 +45,11 @@ type SqlToMgo struct {
 	hasSingleValue bool // single value agg
 }
 
-func NewSqlToMgo(table *models.Table) *SqlToMgo {
+func NewSqlToMgo(table *models.Table, sess *mgo.Session) *SqlToMgo {
 	return &SqlToMgo{
 		tbl:      table,
-		schema:   table.Schema,
+		schema:   table.SourceSchema,
+		sess:     sess,
 		TaskBase: exec.NewTaskBase("SqlToMgo"),
 	}
 }
@@ -51,12 +59,13 @@ func (m *SqlToMgo) Host() string {
 	return m.schema.ChooseBackend()
 }
 
-func (m *SqlToMgo) Query(req *expr.SqlSelect, sess *mgo.Session) (*ResultReader, error) {
+func (m *SqlToMgo) Query(req *expr.SqlSelect) (*ResultReader, error) {
 
 	var err error
 	m.sel = req
-	if req.Limit == 0 {
-		req.Limit = DefaultLimit
+	limit := req.Limit
+	if limit == 0 {
+		limit = DefaultLimit
 	}
 
 	if req.Where != nil {
@@ -83,9 +92,7 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect, sess *mgo.Session) (*ResultReader,
 		}
 	}
 
-	filterBy, _ := json.Marshal(m.filter)
-
-	u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
+	//u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
 	if len(m.sel.OrderBy) > 0 {
 		m.sort = make([]bson.M, len(m.sel.OrderBy))
 		for i, col := range m.sel.OrderBy {
@@ -100,18 +107,39 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect, sess *mgo.Session) (*ResultReader,
 				m.sort[i] = bson.M{col.As: -1}
 			}
 		}
-
-		m.filter = bson.M{"$query": m.filter, "$orderby": m.sort}
+		var sort interface{}
+		if len(m.sort) == 1 {
+			sort = m.sort[0]
+		} else {
+			sort = m.sort
+		}
+		if len(m.filter) > 0 {
+			m.filter = bson.M{"$query": m.filter, "$orderby": sort}
+		} else {
+			m.filter = bson.M{"$query": bson.M{}, "$orderby": sort}
+		}
 	}
 
-	u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v",
-		m.schema.Db, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
-	query := sess.DB(m.schema.Db).C(m.tbl.Name).Find(m.filter).Limit(req.Limit)
+	filterBy, _ := json.Marshal(m.filter)
+	u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v", m.schema.Db, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
+	query := m.sess.DB(m.schema.Db).C(m.tbl.Name).Find(m.filter).Limit(limit)
 
 	resultReader := NewResultReader(m, query)
 	m.resp = resultReader
 	resultReader.Finalize()
 	return resultReader, nil
+}
+
+func (m *SqlToMgo) Accept(visitor expr.SubVisitor) (datasource.Scanner, error) {
+	//u.Debugf("Accept(): %T  %#v", visitor, visitor)
+	// TODO:   this is really bad, this should not be a type switch
+	//         something pretty wrong upstream, that the Plan doesn't do the walk visitor
+	switch plan := visitor.(type) {
+	case *exec.SourcePlan:
+		u.Debugf("Accept():  %T  %#v", plan, plan)
+		return m.Query(plan.SqlSource.Source)
+	}
+	return nil, expr.ErrNotImplemented
 }
 
 // Aggregations from the <select_list>
@@ -123,7 +151,7 @@ func (m *SqlToMgo) WalkSelectList() error {
 	m.aggs = bson.M{}
 	for i := len(m.sel.Columns) - 1; i >= 0; i-- {
 		col := m.sel.Columns[i]
-		u.Debugf("i=%d of %d  %v %#v ", i, len(m.sel.Columns), col.Key(), col)
+		//u.Debugf("i=%d of %d  %v %#v ", i, len(m.sel.Columns), col.Key(), col)
 		if col.Expr != nil {
 			switch curNode := col.Expr.(type) {
 			// case *expr.NumberNode:
@@ -137,15 +165,15 @@ func (m *SqlToMgo) WalkSelectList() error {
 			// 	u.Warnf("not implemented: %#v", curNode)
 			case *expr.FuncNode:
 				// All Func Nodes are Aggregates
-				esm, err := m.WalkAggs(col.Expr)
+				esm, err := m.WalkAggs(curNode)
 				if err == nil && len(esm) > 0 {
 					m.aggs[col.As] = esm
 				} else if err != nil {
 					u.Error(err)
 					return err
 				}
-				u.Debugf("esm: %v:%v", col.As, esm)
-				u.Debugf(curNode.StringAST())
+				//u.Debugf("esm: %v:%v", col.As, esm)
+				//u.Debugf(curNode.StringAST())
 			// case *expr.MultiArgNode:
 			// 	return m.walkMulti(curNode)
 			// case *expr.IdentityNode:
@@ -153,7 +181,7 @@ func (m *SqlToMgo) WalkSelectList() error {
 			// case *expr.StringNode:
 			// 	return nil, value.NewStringValue(curNode.Text), nil
 			default:
-				u.Debugf("likely a projection, not agg T:%T  %v", curNode, curNode)
+				//u.Debugf("likely a projection, not agg T:%T  %v", curNode, curNode)
 				//panic("Unrecognized node type")
 			}
 		}

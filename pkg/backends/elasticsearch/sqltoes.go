@@ -2,9 +2,13 @@ package elasticsearch
 
 import (
 	"fmt"
+	"net/url"
+	"strconv"
 	"strings"
 
 	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/value"
@@ -14,6 +18,9 @@ import (
 
 var (
 	DefaultLimit = 20
+
+	// planner
+	_ datasource.SourcePlanner = (*SqlToEs)(nil)
 )
 
 type esMap map[string]interface{}
@@ -24,7 +31,7 @@ type SqlToEs struct {
 	resp           *ResultReader
 	tbl            *models.Table
 	sel            *expr.SqlSelect
-	schema         *models.Schema
+	schema         *models.SourceSchema
 	filter         esMap
 	aggs           esMap
 	groupby        esMap
@@ -32,14 +39,18 @@ type SqlToEs struct {
 	sort           []esMap
 	hasMultiValue  bool // Multi-Value vs Single-Value aggs
 	hasSingleValue bool // single value agg
+	projections    map[string]string
 }
 
 func NewSqlToEs(table *models.Table) *SqlToEs {
 	return &SqlToEs{
-		tbl:    table,
-		schema: table.Schema,
+		tbl:         table,
+		schema:      table.SourceSchema,
+		projections: make(map[string]string),
 	}
 }
+
+func (m *SqlToEs) Close() error { return nil }
 
 func (m *SqlToEs) Host() string {
 	//u.Warnf("TODO:  replace hardcoded es host")
@@ -77,7 +88,7 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	}
 
 	if len(m.aggs) > 0 && len(m.filter) > 0 {
-		u.Debugf("adding filter to aggs: %v", m.filter)
+		//u.Debugf("adding filter to aggs: %v", m.filter)
 		m.aggs = esMap{"where": esMap{"aggs": m.aggs, "filter": m.filter}}
 	}
 
@@ -87,19 +98,19 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 		esReq = m.groupby
 		esReq["size"] = 0
 		req.Limit = 0
-		u.Infof("has group by: %v\ninner:%v   \naggs=%v", m.groupby, m.innergb, m.aggs)
+		//u.Infof("has group by: %v\ninner:%v   \naggs=%v", m.groupby, m.innergb, m.aggs)
 		if len(m.aggs) > 0 {
 			m.innergb["aggs"] = m.aggs
 		}
 	} else if len(m.aggs) > 0 {
 		esReq = esMap{"aggs": m.aggs, "size": 0}
 		req.Limit = 0
-		u.Debugf("setting limit: %v", req.Limit)
+		//u.Debugf("setting limit: %v", req.Limit)
 	} else if len(m.filter) > 0 {
 		//u.Infof("in else: %v", esReq)
 		esReq = esMap{"filter": m.filter}
 	}
-	u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
+	//u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
 	if len(m.sel.OrderBy) > 0 {
 		m.sort = make([]esMap, len(m.sel.OrderBy))
 		esReq["sort"] = m.sort
@@ -116,13 +127,24 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	}
 
 	// TODO:  hostpool
-	query := fmt.Sprintf("%s/%s/_search?size=%d", m.Host(), m.tbl.Name, req.Limit)
+	qs := make(url.Values)
+	qs.Set("size", strconv.Itoa(req.Limit))
+	if len(m.projections) > 0 {
+		fields := make([]string, 0)
+		for field, _ := range m.projections {
+			fields = append(fields, field)
+		}
+		qs.Set("fields", strings.Join(fields, ","))
+	}
+	query := fmt.Sprintf("%s/%s/_search?%s", m.Host(), m.tbl.Name, qs.Encode())
 
 	u.Infof("%v   filter=%v   \n\n%s", esReq, m.filter, u.JsonHelper(esReq).PrettyJson())
 	jhResp, err := u.JsonHelperHttp("POST", query, esReq)
 	if err != nil {
+		u.Errorf("err %v", err)
 		return nil, err
 	}
+	//u.Debugf("%s", jhResp.PrettyJson())
 
 	if len(jhResp) == 0 {
 		return nil, fmt.Errorf("No response, error fetching elasticsearch query")
@@ -144,7 +166,6 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 
 	resp.Docs = jhResp.Helpers("hits.hits")
 
-	//u.Debugf("%s", jhResp.PrettyJson())
 	//u.Debugf("%s", resp.Aggs.PrettyJson())
 	u.Debugf("doc.ct = %v", len(resp.Docs))
 
@@ -157,6 +178,18 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	resp.Finalize()
 
 	return resp, nil
+}
+
+func (m *SqlToEs) Accept(visitor expr.SubVisitor) (datasource.Scanner, error) {
+	u.Debugf("Accept(): %T  %#v", visitor, visitor)
+	// TODO:   this is really bad, this should not be a type switch
+	//         something pretty wrong upstream, that the Plan doesn't do the walk visitor
+	switch plan := visitor.(type) {
+	case *exec.SourcePlan:
+		//u.Debugf("Accept():  %T  %#v", plan, plan)
+		return m.Query(plan.SqlSource.Source)
+	}
+	return nil, expr.ErrNotImplemented
 }
 
 // Aggregations from the <select_list>
@@ -182,21 +215,22 @@ func (m *SqlToEs) WalkSelectList() error {
 			// 	u.Warnf("not implemented: %#v", curNode)
 			case *expr.FuncNode:
 				// All Func Nodes are Aggregates
-				esm, err := m.WalkAggs(col.Expr)
+				esm, err := m.WalkAggs(curNode)
 				if err == nil && len(esm) > 0 {
 					m.aggs[col.As] = esm
 				} else if err != nil {
 					u.Error(err)
 					return err
 				}
-				u.Debugf("esm: %v:%v", col.As, esm)
-				u.Debugf(curNode.StringAST())
+				//u.Debugf("esm: %v:%v", col.As, esm)
+				//u.Debugf(curNode.StringAST())
 			// case *expr.MultiArgNode:
 			// 	return m.walkMulti(curNode)
-			// case *expr.IdentityNode:
-			// 	return nil, value.NewStringValue(curNode.Text), nil
 			// case *expr.StringNode:
 			// 	return nil, value.NewStringValue(curNode.Text), nil
+			case *expr.IdentityNode:
+				s := curNode.String()
+				m.projections[s] = s
 			default:
 				u.Debugf("likely a projection, not agg T:%T  %v", curNode, curNode)
 				//panic("Unrecognized node type")
@@ -215,13 +249,13 @@ func (m *SqlToEs) WalkGroupBy() error {
 
 	for i, col := range m.sel.GroupBy {
 		if col.Expr != nil {
-			u.Infof("Walk group by %s  %T", col.Expr.StringAST(), col.Expr)
+			//u.Infof("Walk group by %s  %T", col.Expr.StringAST(), col.Expr)
 			switch col.Expr.(type) {
 			case *expr.IdentityNode, *expr.FuncNode:
 				esm := esMap{}
 				_, err := m.WalkNode(col.Expr, &esm)
-				fld := strings.Replace(expr.FindIdentityField(col.Expr), ".", "", -1)
-				u.Infof("gb: %s  %s", fld, u.JsonHelper(esm).PrettyJson())
+				//fld := strings.Replace(expr.FindIdentityField(col.Expr), ".", "", -1)
+				//u.Infof("gb: %s  %s", fld, u.JsonHelper(esm).PrettyJson())
 				if err == nil {
 					if len(m.innergb) > 0 {
 						esm["aggs"] = esMap{fmt.Sprintf("group_by_%d", i): m.innergb}
@@ -230,7 +264,7 @@ func (m *SqlToEs) WalkGroupBy() error {
 						esm = esm
 					}
 					m.innergb = esm
-					u.Infof("esm: %v", esm)
+					//u.Infof("esm: %v", esm)
 				} else {
 					u.Error(err)
 					return err

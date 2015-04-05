@@ -36,38 +36,58 @@ supress_recover: true
 
 frontends [
   {
-    name : mysql 
-    type : "mysql"
-    addr : "127.0.0.1:4000"
-    user : root
+    type : mysql
+    address : "127.0.0.1:13307"
   }
 ]
 
-sources [
-  {
-    name : node1
-    address : "http://localhost:9200"
-  },
-  {
-    name : mgo1
-    address : "localhost"
-  }
-]
-
+# schemas
 schemas : [
   {
-    db : es
-    source_nodes : ["node1"]
-    source_type : elasticsearch
+    name : datauxtest
+    sources : [ "mgo_datauxtest", "es_test", "csvlocal" ]
+  }
+]
+
+# sources
+sources : [
+  {
+    name : mgo_datauxtest
+    type : mongo
+  },
+  {
+    name : es_test
+    type : elasticsearch
+  },
+  {
+    name : csvlocal
+    type : csv
+  },
+  {
+    name : mysql_test
+    type : mysql
+  }
+]
+
+# List of nodes hosting data sources
+nodes : [
+  {
+    name    : estest1
+    type    : elasticsearch
     address : "http://localhost:9200"
   },
   {
-    db : mgo_datauxtest
-    source_nodes : ["mgo1"]
-    source_type : mongo
+    name    : mgotest1
+    type    : mongo
     address : "localhost"
+  },
+  {
+    name    : csvlocal1
+    type    : csv
+    address : "$GOPATH/src/github.com/dataux/dataux/data"
   }
 ]
+
 `
 
 type TestListenerWraper struct {

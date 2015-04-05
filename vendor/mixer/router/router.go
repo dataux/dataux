@@ -60,14 +60,16 @@ type Router struct {
 
 func NewRouter(schemaConfig *models.SchemaConfig) (*Router, error) {
 
+	panic("not implemented nodes")
+
 	if !includeNode(schemaConfig.Nodes, schemaConfig.RulesConifg.Default) {
 		return nil, fmt.Errorf("default node[%s] not in the nodes list.",
 			schemaConfig.RulesConifg.Default)
 	}
 
 	rt := new(Router)
-	rt.DB = schemaConfig.DB
-	rt.nodes = schemaConfig.Nodes
+	rt.DB = schemaConfig.Name
+	//rt.nodes = schemaConfig.Nodes
 	rt.Rules = make(map[string]*Rule, len(schemaConfig.RulesConifg.ShardRule))
 	rt.DefaultRule = NewDefaultRule(rt.DB, schemaConfig.RulesConifg.Default)
 

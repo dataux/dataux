@@ -65,9 +65,22 @@ func resultWrite(m *MysqlResultWriter) exec.MessageHandler {
 			//ok
 		}
 
-		if vals, ok := msg.Body().([]driver.Value); ok {
-			//u.Debugf("got msg in result writer: %#v", vals)
+		switch mt := msg.Body().(type) {
+		case map[string]driver.Value:
+			vals := make([]driver.Value, len(m.projection.Columns))
+			for _, col := range m.projection.Columns {
+				if val, ok := mt[col.As]; !ok {
+					u.Warnf("could not find result val: %v name=%s", col.As, col.Name)
+				} else {
+					u.Debugf("found col: %#v    val=%#v", col, val)
+					vals[col.ColPos] = val
+				}
+			}
 			m.Rs.AddRowValues(vals)
+			return true
+		case []driver.Value:
+			//u.Debugf("got msg in result writer: %#v", vals)
+			m.Rs.AddRowValues(mt)
 			return true
 		}
 
@@ -79,9 +92,11 @@ func resultWrite(m *MysqlResultWriter) exec.MessageHandler {
 func (m *MysqlResultWriter) WriteHeaders() error {
 
 	//u.LogTracef(u.WARN, "wat?")
-
+	if m.projection == nil {
+		u.Warnf("no projection")
+	}
 	cols := m.projection.Columns
-	//u.Debugf("writing mysql headers: %v", cols)
+	u.Debugf("writing mysql headers: %v", cols)
 	if len(cols) == 0 {
 		u.Warnf("Wat?   no columns?   %v", 0)
 		return nil
@@ -99,15 +114,15 @@ func (m *MysqlResultWriter) WriteHeaders() error {
 		m.Rs.FieldNames[col.Name] = i
 		switch col.Type {
 		case value.IntType:
-			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Db, s.Db, 32, mysql.MYSQL_TYPE_LONG))
+			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_LONG))
 		case value.StringType:
-			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Db, s.Db, 200, mysql.MYSQL_TYPE_STRING))
+			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 200, mysql.MYSQL_TYPE_STRING))
 		case value.NumberType:
-			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Db, s.Db, 32, mysql.MYSQL_TYPE_FLOAT))
+			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_FLOAT))
 		case value.BoolType:
-			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Db, s.Db, 1, mysql.MYSQL_TYPE_TINY))
+			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 1, mysql.MYSQL_TYPE_TINY))
 		case value.TimeType:
-			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Db, s.Db, 32, mysql.MYSQL_TYPE_DATETIME))
+			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_DATETIME))
 		default:
 			u.Warnf("Field type not known: type=%v  %#v", col.Type.String(), col)
 		}
@@ -146,6 +161,7 @@ func (m *MysqlResultWriter) Finalize() error {
 func NewEmptyResultset(proj *expr.Projection) *mysql.Resultset {
 
 	r := new(mysql.Resultset)
+	u.Infof("projection: %#v", proj)
 	r.Fields = make([]*mysql.Field, len(proj.Columns))
 
 	for i, col := range proj.Columns {

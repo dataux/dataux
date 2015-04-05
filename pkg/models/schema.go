@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql/driver"
+	"fmt"
 	"strings"
 	"time"
 
@@ -22,15 +23,32 @@ var (
 	SchemaRefreshInterval = -time.Minute * 1
 )
 
-func NewDescribeHeaders() []*Field {
-	fields := make([]*Field, 6)
-	fields[0] = NewField("Field", value.StringType, 255, "COLUMN_NAME")
-	fields[1] = NewField("Type", value.StringType, 32, "COLUMN_TYPE")
-	fields[2] = NewField("Null", value.StringType, 4, "IS_NULLABLE")
-	fields[3] = NewField("Key", value.StringType, 64, "COLUMN_KEY")
-	fields[4] = NewField("Default", value.StringType, 32, "COLUMN_DEFAULT")
-	fields[5] = NewField("Extra", value.StringType, 255, "EXTRA")
-	return fields
+// Schema is a "Virtual" Database.  Made up of
+//  - Multiple backend data sources (each is discrete db type)
+//  - each DataSource may have more than one node
+//  - each datasource supplies tables to the virtual table pool
+type Schema struct {
+	Name                string                   `json:"name"` // Virtual Schema Name
+	Conf                *SchemaConfig            // Schema level configuration
+	SourceSchemas       map[string]*SourceSchema // Source Schemas
+	Tables              map[string]*Table        // Tables in this schema
+	TableNames          []string                 // Table name
+	lastRefreshed       time.Time                // Last time we refreshed this schema
+	showTableProjection *expr.Projection
+	showTableVals       *datasource.StaticDataSource
+}
+
+// SourceSchema is a schema for a single backend source
+type SourceSchema struct {
+	address    string
+	Schema     *Schema
+	Db         string                         `json:"db"` // Schema Database
+	Conf       *SourceConfig                  `json:"-"`  // per source configuration
+	Tables     map[string]*Table              // Tables in this schema
+	TableNames []string                       // Table name
+	Nodes      []*NodeConfig                  // server nodes for this source
+	DataSource *datasource.DataSourceFeatures // The datasource Interface
+	DS         DataSource
 }
 
 // Table represents traditional definition of Database Table
@@ -45,26 +63,11 @@ type Table struct {
 	FieldMapMySql   map[string]*mysql.Field // shortcut for pre-build Mysql types
 	DescribeValues  [][]driver.Value        // The Values that will be output for Describe
 	Schema          *Schema                 // The schema this is member of
+	SourceSchema    *SourceSchema           // The source schema this is member of
 	Charset         uint16                  // Character set, default = utf8
 	lastRefreshed   time.Time               // Last time we refreshed this schema
 	tableProjection *expr.Projection
 	tableVals       *datasource.StaticDataSource
-}
-
-// Schema is a "Virtual" Database.  A collection of tables/datatypes, servers to be
-//  a single schema.  Must be same BackendType (mysql, elasticsearch)
-type Schema struct {
-	Db                  string                   `json:"db"`          // Virtual DB = Schema
-	SourceType          string                   `json:"source_type"` // [mysql,elasticsearch, csv, etc]
-	Address             string                   `json:"address"`     // If you have don't need per node routing
-	Nodes               map[string]*SourceConfig // map of Servers/Nodes to its config
-	Conf                *SchemaConfig            // Schema level configuration
-	Tables              map[string]*Table        // Tables in this schema
-	TableNames          []string                 // Table name
-	DataSource          DataSource               // The datasource Interface
-	lastRefreshed       time.Time                // Last time we refreshed this schema
-	showTableProjection *expr.Projection
-	showTableVals       *datasource.StaticDataSource
 }
 
 type FieldData []byte
@@ -81,41 +84,10 @@ type Field struct {
 	Indexed            bool
 }
 
-func NewField(name string, valType value.ValueType, size int, description string) *Field {
-	return &Field{
-		Name:        name,
-		Description: description,
-		Length:      uint32(size),
-		Type:        valType,
-	}
-}
-
-func (m *Field) ToMysql(s *Schema) *mysql.Field {
-	switch m.Type {
-	case value.StringType:
-		return mysql.NewField(m.Name, s.Db, s.Db, m.Length, mysql.MYSQL_TYPE_STRING)
-	case value.BoolType:
-		return mysql.NewField(m.Name, s.Db, s.Db, 1, mysql.MYSQL_TYPE_TINY)
-	case value.IntType:
-		return mysql.NewField(m.Name, s.Db, s.Db, 32, mysql.MYSQL_TYPE_LONG)
-	case value.NumberType:
-		return mysql.NewField(m.Name, s.Db, s.Db, 64, mysql.MYSQL_TYPE_FLOAT)
-	case value.TimeType:
-		return mysql.NewField(m.Name, s.Db, s.Db, 8, mysql.MYSQL_TYPE_DATETIME)
-	default:
-		u.Warnf("Could not find mysql type for :%T", m.Type)
-	}
-
-	return nil
-}
-
 // Get a backend to fulfill a request
-func (m *Schema) ChooseBackend() string {
-	if m.Address != "" {
-		return m.Address
-	}
-	// ELSE:   round-robbin?   hostpool?
-	return m.Address
+func (m *SourceSchema) ChooseBackend() string {
+	// round-robbin?   hostpool?
+	return m.address
 }
 
 func (m *Schema) ShowTables() (*datasource.StaticDataSource, *expr.Projection) {
@@ -124,7 +96,7 @@ func (m *Schema) ShowTables() (*datasource.StaticDataSource, *expr.Projection) {
 		vals := make([][]driver.Value, len(m.TableNames))
 		idx := 0
 		if len(m.TableNames) == 0 {
-			u.Warnf("NO TABLES!!!!! for %s p=%p", m.Db, m)
+			u.Warnf("NO TABLES!!!!! for %s p=%p", m)
 		}
 		for _, tbl := range m.TableNames {
 			vals[idx] = []driver.Value{tbl}
@@ -145,7 +117,8 @@ func (m *Schema) Table(tableName string) (*Table, error) {
 	if tbl != nil {
 		return tbl, nil
 	}
-	return m.DataSource.Table(tableName)
+	//return m.DataSource.Table(tableName)
+	return nil, fmt.Errorf("Could not find that table: %v", tableName)
 }
 
 // Is this schema object current?
@@ -164,12 +137,12 @@ func (m *Schema) Since(dur time.Duration) bool {
 	return false
 }
 
-func NewTable(table string, s *Schema) *Table {
+func NewTable(table string, s *SourceSchema) *Table {
 	t := &Table{
 		Name:          strings.ToLower(table),
 		Fields:        make([]*Field, 0),
 		FieldMap:      make(map[string]*Field),
-		Schema:        s,
+		SourceSchema:  s,
 		FieldMapMySql: make(map[string]*mysql.Field),
 	}
 	return t
@@ -222,7 +195,7 @@ func (m *Table) AddValues(values []driver.Value) {
 func (m *Table) AddField(fld *Field) {
 	m.Fields = append(m.Fields, fld)
 	m.FieldMap[fld.Name] = fld
-	mySqlFld := mysql.NewField(fld.Name, m.Schema.Db, m.Schema.Db, fld.Length, mysql.MYSQL_TYPE_STRING)
+	mySqlFld := mysql.NewField(fld.Name, m.SourceSchema.Db, m.SourceSchema.Db, fld.Length, mysql.MYSQL_TYPE_STRING)
 	m.AddMySqlField(mySqlFld)
 }
 
@@ -257,4 +230,43 @@ func (m *Table) Since(dur time.Duration) bool {
 		return true
 	}
 	return false
+}
+
+func NewField(name string, valType value.ValueType, size int, description string) *Field {
+	return &Field{
+		Name:        name,
+		Description: description,
+		Length:      uint32(size),
+		Type:        valType,
+	}
+}
+
+func (m *Field) ToMysql(s *SourceSchema) *mysql.Field {
+	switch m.Type {
+	case value.StringType:
+		return mysql.NewField(m.Name, s.Db, s.Db, m.Length, mysql.MYSQL_TYPE_STRING)
+	case value.BoolType:
+		return mysql.NewField(m.Name, s.Db, s.Db, 1, mysql.MYSQL_TYPE_TINY)
+	case value.IntType:
+		return mysql.NewField(m.Name, s.Db, s.Db, 32, mysql.MYSQL_TYPE_LONG)
+	case value.NumberType:
+		return mysql.NewField(m.Name, s.Db, s.Db, 64, mysql.MYSQL_TYPE_FLOAT)
+	case value.TimeType:
+		return mysql.NewField(m.Name, s.Db, s.Db, 8, mysql.MYSQL_TYPE_DATETIME)
+	default:
+		u.Warnf("Could not find mysql type for :%T", m.Type)
+	}
+
+	return nil
+}
+
+func NewDescribeHeaders() []*Field {
+	fields := make([]*Field, 6)
+	fields[0] = NewField("Field", value.StringType, 255, "COLUMN_NAME")
+	fields[1] = NewField("Type", value.StringType, 32, "COLUMN_TYPE")
+	fields[2] = NewField("Null", value.StringType, 4, "IS_NULLABLE")
+	fields[3] = NewField("Key", value.StringType, 64, "COLUMN_KEY")
+	fields[4] = NewField("Default", value.StringType, 32, "COLUMN_DEFAULT")
+	fields[5] = NewField("Extra", value.StringType, 255, "EXTRA")
+	return fields
 }

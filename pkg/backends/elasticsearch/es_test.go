@@ -54,7 +54,7 @@ func validateQuery(t *testing.T, querySql string, expectCols []string, expectCol
 func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 	testmysql.RunTestServer(t)
 
-	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:4000)/es")
+	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
 	assert.Tf(t, err == nil, "%v", err)
 	defer dbx.Close()
 	//u.Debugf("%v", testSpec.Sql)
@@ -186,7 +186,7 @@ func TestSelectAggs(t *testing.T) {
 		ValidateRowData: func() {
 			//u.Debugf("%v", data2)
 			assert.Tf(t, data2.Card == 36, "%v", data2)
-			assert.Tf(t, data2.Oldest == 904810, "%v", data2)
+			assert.Tf(t, data2.Oldest == 904810, "%#v", data2)
 			assert.Tf(t, data2.Ct == 47, "%v", data2) // 47 docs had database
 		},
 		RowData: &data2,
