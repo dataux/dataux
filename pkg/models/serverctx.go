@@ -115,7 +115,8 @@ func (m *ServerCtx) loadConfig() error {
 				tbl, err := ds.Table(tableName)
 				if err != nil {
 					u.Errorf("Could not find table? %v", err)
-					return err
+					//return err
+					continue
 				}
 
 				tbl.Schema = schema

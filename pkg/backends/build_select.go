@@ -83,6 +83,11 @@ func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
 }
 
 func (m *Builder) createProjection(stmt *expr.SqlSelect) *expr.Projection {
+
+	if m.Projection != nil {
+		u.Debugf("allready has projection? %#v", m.Projection)
+		return m.Projection
+	}
 	u.Debugf("createProjection %s", stmt.String())
 	p := expr.NewProjection()
 	for _, from := range stmt.From {

@@ -167,11 +167,12 @@ func (m *ElasticsearchDataSource) loadTableSchema(table string) (*models.Table, 
 		u.Error("error on es read: url=%v  err=%v", indexUrl, err)
 	}
 	//u.Debugf("url: %v", indexUrl)
-	respJh = respJh.Helper(table + ".mappings")
-	respKeys := respJh.Keys()
+	dataJh := respJh.Helper(table).Helper("mappings")
+	respKeys := dataJh.Keys()
 	//u.Infof("keys:%v  resp:%v", respKeys, respJh)
 	if len(respKeys) < 1 {
 		u.Errorf("could not get data? %v   %v", indexUrl, respJh)
+		u.LogTracef(u.WARN, "wat?")
 		return nil, fmt.Errorf("Could not process desribe")
 	}
 	indexType := "user"
@@ -182,7 +183,7 @@ func (m *ElasticsearchDataSource) loadTableSchema(table string) (*models.Table, 
 		}
 	}
 
-	jh := respJh.Helper(indexType)
+	jh := dataJh.Helper(indexType)
 	//u.Debugf("resp: %v", jh)
 	jh = jh.Helper("properties")
 
@@ -226,7 +227,11 @@ func buildEsFields(s *models.SourceSchema, tbl *models.Table, jh u.JsonHelper, p
 				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
 				//fld = mysql.NewField(fieldName, s.Db, s.Db, 64, mysql.MYSQL_TYPE_LONG)
 				fld = models.NewField(fieldName, value.IntType, 8, string(jb))
-			case "nested":
+			case "double", "float":
+				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
+				//fld = mysql.NewField(fieldName, s.Db, s.Db, 64, mysql.MYSQL_TYPE_LONG)
+				fld = models.NewField(fieldName, value.NumberType, 8, string(jb))
+			case "nested", "object":
 				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
 				//fld = mysql.NewField(fieldName, s.Db, s.Db, 2000, mysql.MYSQL_TYPE_BLOB)
 				fld = models.NewField(fieldName, value.StringType, 2000, string(jb))
@@ -238,7 +243,7 @@ func buildEsFields(s *models.SourceSchema, tbl *models.Table, jh u.JsonHelper, p
 				if len(props) > 0 {
 					buildEsFields(s, tbl, props, fieldName+".", depth+1)
 				} else {
-					u.Debugf("unknown type: %v", string(jb))
+					u.Debugf("unknown type: '%v'  '%v'", esType, string(jb))
 				}
 
 			}

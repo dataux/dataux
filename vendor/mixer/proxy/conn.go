@@ -117,6 +117,7 @@ func (c *Conn) Run() {
 
 		data, err := c.readPacket()
 		if err != nil {
+			u.Errorf("error on packet?  %v", err)
 			return
 		}
 

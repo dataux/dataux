@@ -67,6 +67,7 @@ func (m *ResultReader) buildProjection() {
 	if sql.Star {
 		// Select Each field, grab fields from Table Schema
 		for _, fld := range m.Req.tbl.Fields {
+			u.Infof("found %#v", fld)
 			cols = append(cols, expr.NewResultColumn(fld.Name, len(cols), nil, fld.Type))
 		}
 	} else if sql.CountStar() {
@@ -272,20 +273,27 @@ func (m *ResultReader) Finalize() error {
 					key = col.Name
 					u.Debugf("looking for? %v in %#v", key, doc)
 				}
-				//u.Debugf("field: %s type=%v key='%s' val='%v'  doc=%#v", col.Name, col.Type.String(), key, doc.String(key), doc)
+
 				if useFields {
+					//u.Debugf("use fields: '%s' type=%v Strings()='%v'  doc=%#v", col.Name, col.Type.String(), doc.Strings(key), doc)
 					switch col.Type {
 					case value.StringType:
 						if docVals := doc.Strings(col.Name); len(docVals) > 0 {
 							vals[fldI] = docVals[0]
+						} else {
+							u.Warnf("no vals?  %#v", docVals)
 						}
 					case value.TimeType:
-						if vals := doc.Strings(col.Name); len(vals) > 0 {
-							vals[fldI] = vals[0]
+						if docVals := doc.Strings(col.Name); len(docVals) > 0 {
+							vals[fldI] = docVals[0]
+						} else {
+							u.Warnf("no vals?  %#v", docVals)
 						}
 					case value.IntType, value.NumberType:
-						if vals := doc.List(col.Name); len(vals) > 0 {
-							vals[fldI] = vals[0]
+						if docVals := doc.List(col.Name); len(docVals) > 0 {
+							vals[fldI] = docVals[0]
+						} else {
+							u.Warnf("no vals?  %#v", docVals)
 						}
 					case value.ByteSliceType:
 						//u.Debugf("blob?  %v", key)
@@ -319,6 +327,7 @@ func (m *ResultReader) Finalize() error {
 
 				fldI++
 			}
+			u.Infof("vals: %#v", vals)
 			m.Vals = append(m.Vals, vals)
 		}
 	}
