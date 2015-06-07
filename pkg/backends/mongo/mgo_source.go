@@ -282,11 +282,13 @@ func (m *MongoDataSource) loadTableSchema(table string) (*models.Table, error) {
 	coll := m.sess.DB(m.db).C(table)
 
 	var dataType []map[string]interface{}
-	if err := coll.Find(nil).All(&dataType); err != nil {
+	// Why are we loading All?  Limit?
+	if err := coll.Find(nil).Limit(10).All(&dataType); err != nil {
 		u.Errorf("could not query collection")
 	}
+	u.Debugf("loading %s", table)
 	for _, dt := range dataType {
-
+		//u.Infof("%#v", dt)
 		for colName, iVal := range dt {
 
 			colName = strings.ToLower(colName)
@@ -359,18 +361,14 @@ func (m *MongoDataSource) loadTableSchema(table string) (*models.Table, error) {
 				}
 
 			default:
-				u.Warnf("not recognized type: %v %T", colName, iVal)
+				if iVal != nil {
+					u.Warnf("not recognized type: %v %T", colName, iVal)
+				} else {
+					u.Warnf("could not infer from nil: %v", colName)
+				}
 			}
 		}
 	}
-
-	// tbl.AddField(models.NewField("_id", value.StringType, 24, "AUTOGEN"))
-	// tbl.AddField(models.NewField("type", value.StringType, 24, "tbd"))
-	// tbl.AddField(models.NewField("_score", value.NumberType, 24, "Created per Search By Elasticsearch"))
-
-	// tbl.AddValues([]driver.Value{"_id", "string", "NO", "PRI", "AUTOGEN", ""})
-	// tbl.AddValues([]driver.Value{"type", "string", "NO", "", nil, "tbd"})
-	// tbl.AddValues([]driver.Value{"_score", "float", "NO", "", nil, "Created per search"})
 
 	// buildMongoFields(s, tbl, jh, "", 0)
 	m.schema.Tables[table] = tbl
@@ -406,7 +404,7 @@ func discoverType(iVal interface{}) value.ValueType {
 	case []interface{}:
 		return value.SliceValueType
 	default:
-		u.Warnf("not recognized type:  %T", iVal)
+		u.Warnf("not recognized type:  %T %#v", iVal, iVal)
 	}
 	return value.NilType
 }

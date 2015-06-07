@@ -158,9 +158,15 @@ func (m *ResultReader) Finalize() error {
 		for i, col := range cols {
 			if val, ok := bm[col.Name]; ok {
 				vals[i] = val
+			} else {
+				// Not returned in query, sql hates missing fields
+				// Should we zero/empty fill here or in mysql handler?
+				if col.Type == value.StringType {
+					vals[i] = ""
+				}
 			}
 		}
-		u.Debugf("vals=%#v", vals)
+		//u.Debugf("vals=%#v", vals)
 		m.Vals = append(m.Vals, vals)
 	}
 	if err := iter.Close(); err != nil {

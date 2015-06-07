@@ -72,7 +72,7 @@ func resultWrite(m *MysqlResultWriter) exec.MessageHandler {
 				if val, ok := mt[col.As]; !ok {
 					u.Warnf("could not find result val: %v name=%s", col.As, col.Name)
 				} else {
-					u.Debugf("found col: %#v    val=%#v", col, val)
+					//u.Debugf("found col: %#v    val=%#v", col, val)
 					vals[col.ColPos] = val
 				}
 			}
