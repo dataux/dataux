@@ -255,8 +255,8 @@ func (m *ResultReader) Finalize() error {
 	}
 	for _, doc := range m.Docs {
 		if len(doc) > 0 {
-			//by, _ := json.MarshalIndent(doc, " ", " ")
-			//u.Debugf("doc: %v", string(by))
+			by, _ := json.MarshalIndent(doc, " ", " ")
+			u.Debugf("doc: %v", string(by))
 			if useFields {
 				doc = doc.Helper("fields")
 				if len(doc) < 1 {
@@ -281,7 +281,7 @@ func (m *ResultReader) Finalize() error {
 						if docVals := doc.Strings(col.Name); len(docVals) > 0 {
 							vals[fldI] = docVals[0]
 						} else {
-							u.Warnf("no vals?  %#v", docVals)
+							u.Warnf("no vals for %v?  %#v", col.Name, docVals)
 						}
 					case value.TimeType:
 						if docVals := doc.Strings(col.Name); len(docVals) > 0 {
@@ -327,7 +327,7 @@ func (m *ResultReader) Finalize() error {
 
 				fldI++
 			}
-			u.Infof("vals: %#v", vals)
+			//u.Infof("vals: %#v", vals)
 			m.Vals = append(m.Vals, vals)
 		}
 	}

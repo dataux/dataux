@@ -106,13 +106,14 @@ func (m *MongoDataSource) Close() error {
 }
 
 func (m *MongoDataSource) connect() error {
-	u.Infof("connecting MongoDataSource: %#v", m.schema.Conf)
+	host := m.schema.ChooseBackend()
+	u.Infof("connecting MongoDataSource: host='%s'  conf=%#v", host, m.schema.Conf)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	// TODO
 	//host := s.ChooseBackend()
-	sess, err := mgo.Dial(m.schema.ChooseBackend())
+	sess, err := mgo.Dial(host)
 	if err != nil {
 		u.Errorf("Could not connect to mongo: %v", err)
 		return err
@@ -286,7 +287,7 @@ func (m *MongoDataSource) loadTableSchema(table string) (*models.Table, error) {
 	if err := coll.Find(nil).Limit(10).All(&dataType); err != nil {
 		u.Errorf("could not query collection")
 	}
-	u.Debugf("loading %s", table)
+	//u.Debugf("loading %s", table)
 	for _, dt := range dataType {
 		//u.Infof("%#v", dt)
 		for colName, iVal := range dt {

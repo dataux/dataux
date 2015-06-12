@@ -110,17 +110,20 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 		//u.Infof("in else: %v", esReq)
 		esReq = esMap{"filter": m.filter}
 	}
-	//u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
+	//u.Debugf("OrderBy? %v  %#v", len(m.sel.OrderBy), m.sel.OrderBy)
 	if len(m.sel.OrderBy) > 0 {
 		m.sort = make([]esMap, len(m.sel.OrderBy))
 		esReq["sort"] = m.sort
 		for i, col := range m.sel.OrderBy {
+
 			// We really need to look at any funcs?   walk this out
 			switch col.Order {
 			case "ASC", "DESC":
 				m.sort[i] = esMap{col.As: esMap{"order": strings.ToLower(col.Order)}}
+				u.Infof("sort col: %#v", col)
 			default:
 				// default sorder order = ?
+				u.Warnf("not asc,desc???   %#v", col)
 				m.sort[i] = esMap{col.As: esMap{"order": "asc"}}
 			}
 		}
@@ -138,7 +141,7 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	}
 	query := fmt.Sprintf("%s/%s/_search?%s", m.Host(), m.tbl.Name, qs.Encode())
 
-	u.Infof("%v   filter=%v   \n\n%s", esReq, m.filter, u.JsonHelper(esReq).PrettyJson())
+	u.Infof("%v url=%v  filter=%v   \n\n%s", esReq, query, m.filter, u.JsonHelper(esReq).PrettyJson())
 	jhResp, err := u.JsonHelperHttp("POST", query, esReq)
 	if err != nil {
 		u.Errorf("err %v", err)

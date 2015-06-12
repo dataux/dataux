@@ -65,8 +65,10 @@ func (m *SchemaConfig) String() string {
 //  - may have more than one node
 //  - belongs to a Schema ( or schemas)
 type SourceConfig struct {
-	Name       string `json:"name"` // Name of this Source, ie a database schema
-	SourceType string `json:"type"` // [mysql,elasticsearch,file]
+	Name          string   `json:"name"`           // Name of this Source, ie a database schema
+	SourceType    string   `json:"type"`           // [mysql,elasticsearch,file]
+	TablesToLoad  []string `json:"tables_to_load"` // if non empty, only load these tables
+	tablesLoadMap map[string]struct{}
 
 	// Do we deprecate this?
 	DownAfterNoAlive int    `json:"down_after_noalive"`
@@ -76,6 +78,16 @@ type SourceConfig struct {
 	Password         string `json:"password"`
 	Master           string `json:"master"`
 	Slave            string `json:"slave"`
+}
+
+func (m *SourceConfig) Init() {
+	if len(m.TablesToLoad) > 0 && len(m.tablesLoadMap) == 0 {
+		tm := make(map[string]struct{})
+		for _, tbl := range m.TablesToLoad {
+			tm[tbl] = struct{}{}
+		}
+		m.tablesLoadMap = tm
+	}
 }
 
 func (m *SourceConfig) String() string {

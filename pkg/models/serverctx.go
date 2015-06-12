@@ -76,6 +76,7 @@ func (m *ServerCtx) loadConfig() error {
 				u.Warnf("could not find source: %v", sourceName)
 				return fmt.Errorf("Could not find Source Config for %v", sourceName)
 			}
+			sourceConf.Init()
 
 			//u.Infof("found sourceConf: %#v", sourceConf)
 			sourceSchema := &SourceSchema{
@@ -107,31 +108,15 @@ func (m *ServerCtx) loadConfig() error {
 			sourceSchema.DS = ds
 			sourceSchema.DataSource = datasource.NewFeaturedSource(ds)
 
+			// TODO:   Periodically refresh this as es schema is dynamic
 			for _, tableName := range ds.Tables() {
 				tableName = strings.ToLower(tableName)
 				if _, exists := schema.Tables[tableName]; exists {
 					return fmt.Errorf("Schemas may not contain more than one table of same name: %v", tableName)
 				}
-				tbl, err := ds.Table(tableName)
-				if err != nil {
-					u.Errorf("Could not find table? %v", err)
-					//return err
-					continue
-				}
-
-				tbl.Schema = schema
-				tbl.SourceSchema = sourceSchema
-				sourceSchema.Tables[tableName] = tbl
-				schema.Tables[tableName] = tbl
-				schema.TableNames = append(schema.TableNames, tableName)
-				sourceSchema.TableNames = append(sourceSchema.TableNames, tableName)
-				//u.Debugf("found table: %#v", tbl)
+				m.loadSourceSchema(tableName, schema, sourceSchema)
 			}
-			//u.Infof("found datasource: source=%v  %T %#v", sourceName, ds, ds)
-			//u.Debugf("tables? %v", schema.TableNames)
-
 			schema.SourceSchemas[sourceName] = sourceSchema
-
 		}
 
 	}
@@ -139,8 +124,31 @@ func (m *ServerCtx) loadConfig() error {
 	return nil
 }
 
+func (m *ServerCtx) loadSourceSchema(tableName string, schema *Schema, source *SourceSchema) {
+	tableLoad := true
+	if len(source.Conf.tablesLoadMap) > 0 {
+		_, tableLoad = source.Conf.tablesLoadMap[tableName]
+	}
+	if tableLoad {
+		u.Debugf("loading table %s", tableName)
+		tbl, err := source.DS.Table(tableName)
+		if err != nil {
+			u.Errorf("Could not find table? %v", err)
+		} else {
+			tbl.Schema = schema
+			tbl.SourceSchema = source
+			source.Tables[tableName] = tbl
+			schema.Tables[tableName] = tbl
+			schema.TableNames = append(schema.TableNames, tableName)
+			source.TableNames = append(source.TableNames, tableName)
+		}
+
+	} else {
+		//u.Debugf("not loading schema table: %v", tableName)
+	}
+}
+
 func (m *ServerCtx) Schema(db string) *Schema {
 	s := m.schemas[db]
-	//u.Debugf("get schema for %s   %#v", db, s)
 	return s
 }

@@ -106,7 +106,7 @@ func (m *ElasticsearchDataSource) Tables() []string {
 }
 
 func (m *ElasticsearchDataSource) Table(table string) (*models.Table, error) {
-	//u.Debugf("get table for %s", table)
+	u.Debugf("get table for %s", table)
 	return m.loadTableSchema(table)
 }
 
@@ -127,7 +127,15 @@ func (m *ElasticsearchDataSource) loadTableNames() error {
 	//u.Debugf("resp: %v", jh)
 	tables := []string{}
 	for alias, _ := range jh {
-		tables = append(tables, alias)
+		//u.Debugf("alias: %s", alias)
+		if aliasJh := jh.Helper(alias + ".aliases"); len(aliasJh) > 0 {
+			//u.Infof("has aliases? %#v", aliasJh)
+			for aliasName, _ := range aliasJh {
+				tables = append(tables, aliasName)
+			}
+		} else {
+			tables = append(tables, alias)
+		}
 	}
 	sort.Strings(tables)
 
@@ -168,6 +176,15 @@ func (m *ElasticsearchDataSource) loadTableSchema(table string) (*models.Table, 
 	}
 	//u.Debugf("url: %v", indexUrl)
 	dataJh := respJh.Helper(table).Helper("mappings")
+	if len(dataJh) == 0 {
+		// This is an aliased index
+		nonAliasTable := ""
+		for nonAliasTable, _ = range respJh {
+			break
+		}
+		u.Debugf("found non aliased table: %v", nonAliasTable)
+		dataJh = respJh.Helper(nonAliasTable).Helper("mappings")
+	}
 	respKeys := dataJh.Keys()
 	//u.Infof("keys:%v  resp:%v", respKeys, respJh)
 	if len(respKeys) < 1 {
