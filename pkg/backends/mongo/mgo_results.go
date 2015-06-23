@@ -3,6 +3,7 @@ package mongo
 import (
 	"database/sql/driver"
 	"io"
+	"time"
 
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -22,7 +23,7 @@ var (
 	_ datasource.Scanner    = (*ResultReader)(nil)
 )
 
-// Mongo ResultProvider
+// Mongo ResultReader implements result paging, reading
 // - driver.Rows
 type ResultReader struct {
 	exit          <-chan bool
@@ -30,6 +31,7 @@ type ResultReader struct {
 	hasprojection bool
 	cursor        int
 	proj          *expr.Projection
+	cols          []string
 	Docs          []u.JsonHelper
 	Vals          [][]driver.Value
 	Total         int
@@ -82,12 +84,21 @@ func (m *ResultReader) buildProjection() {
 			}
 		}
 	}
+	colNames := make([]string, len(cols))
+	for i, col := range cols {
+		colNames[i] = col.As
+	}
+	m.cols = colNames
 	m.proj.Columns = cols
 	//u.Debugf("leaving Columns:  %v", len(m.proj.Columns))
 }
 
 func (m *ResultReader) Tables() []string {
 	return nil
+}
+
+func (m *ResultReader) Columns() []string {
+	return m.cols
 }
 
 func (m *ResultReader) Projection() (*expr.Projection, error) {
@@ -147,6 +158,7 @@ func (m *ResultReader) Finalize() error {
 		u.Errorf("WTF?  no cols? %v", cols)
 	}
 
+	n := time.Now()
 	iter := m.query.Iter()
 	for {
 		var bm bson.M
@@ -173,7 +185,7 @@ func (m *ResultReader) Finalize() error {
 		u.Errorf("could not iter: %v", err)
 		return err
 	}
-
+	u.Infof("finished query, took: %v for %v rows", time.Now().Sub(n), len(m.Vals))
 	return nil
 }
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"runtime/pprof"
 	"syscall"
 
 	// Backend Registrations Side-Effect imports
@@ -20,25 +21,32 @@ import (
 )
 
 var (
-	configFile *string = flag.String("config", "dataux.conf", "dataux proxy config file")
-	logLevel   *string = flag.String("loglevel", "debug", "log level [debug|info|warn|error]")
+	configFile     string
+	cpuProfileFile string
+	memProfileFile string
+	logLevel       = "info"
 )
 
+func init() {
+	flag.StringVar(&configFile, "config", "dataux.conf", "dataux proxy config file")
+	flag.StringVar(&logLevel, "loglevel", "debug", "logging [ debug,info,warn,error ]")
+	flag.StringVar(&cpuProfileFile, "cpuprofile", "", "cpuprofile")
+	flag.StringVar(&memProfileFile, "memprofile", "", "memProfileFile")
+	flag.Parse()
+}
 func main() {
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	flag.Parse()
-
-	if len(*configFile) == 0 {
+	if len(configFile) == 0 {
 		u.Errorf("must use a config file")
 		return
 	}
-	u.SetupLogging(*logLevel)
+	u.SetupLogging(logLevel)
 	u.SetColorIfTerminal()
 
 	// get config
-	conf, err := models.LoadConfigFromFile(*configFile)
+	conf, err := models.LoadConfigFromFile(configFile)
 	if err != nil {
 		u.Errorf("Could not load config: %v", err)
 		os.Exit(1)
@@ -79,6 +87,15 @@ func main() {
 		u.Infof("Got signal [%d] to exit.", sig)
 		svr.Shutdown(proxy.Reason{Reason: "signal", Message: fmt.Sprintf("%v", sig)})
 	}()
+
+	if cpuProfileFile != "" {
+		f, err := os.Create(cpuProfileFile)
+		if err != nil {
+			u.Errorf("could not care cpu file: %v", err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
 
 	svr.Run()
 }

@@ -66,6 +66,18 @@ func resultWrite(m *MysqlResultWriter) exec.MessageHandler {
 		}
 
 		switch mt := msg.Body().(type) {
+		case *datasource.SqlDriverMessageMap:
+			vals := make([]driver.Value, len(m.projection.Columns))
+			for _, col := range m.projection.Columns {
+				if val, ok := mt.Vals[col.As]; !ok {
+					u.Warnf("could not find result val: %v name=%s", col.As, col.Name)
+				} else {
+					//u.Debugf("found col: %#v    val=%#v", col, val)
+					vals[col.ColPos] = val
+				}
+			}
+			m.Rs.AddRowValues(vals)
+			return true
 		case map[string]driver.Value:
 			vals := make([]driver.Value, len(m.projection.Columns))
 			for _, col := range m.projection.Columns {
@@ -123,6 +135,8 @@ func (m *MysqlResultWriter) WriteHeaders() error {
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 1, mysql.MYSQL_TYPE_TINY))
 		case value.TimeType:
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_DATETIME))
+		case value.ByteSliceType:
+			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_BLOB))
 		default:
 			u.Warnf("Field type not known: type=%v  %#v", col.Type.String(), col)
 		}

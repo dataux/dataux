@@ -34,6 +34,7 @@ type ResultReader struct {
 	proj          *expr.Projection
 	Docs          []u.JsonHelper
 	Vals          [][]driver.Value
+	cols          []string
 	Total         int
 	Aggs          u.JsonHelper
 	ScrollId      string
@@ -54,7 +55,6 @@ func NewResultReader(req *SqlToEs) *ResultReader {
 
 func (m *ResultReader) Close() error { return nil }
 
-//func (m *ResultReader) Columns() []*models.ResultColumn { return cols }
 func (m *ResultReader) buildProjection() {
 
 	if m.hasprojection {
@@ -108,6 +108,10 @@ func (m *ResultReader) buildProjection() {
 
 func (m *ResultReader) Tables() []string {
 	return nil
+}
+
+func (m *ResultReader) Columns() []string {
+	return m.cols
 }
 
 func (m *ResultReader) Projection() (*expr.Projection, error) {
@@ -255,8 +259,8 @@ func (m *ResultReader) Finalize() error {
 	}
 	for _, doc := range m.Docs {
 		if len(doc) > 0 {
-			by, _ := json.MarshalIndent(doc, " ", " ")
-			u.Debugf("doc: %v", string(by))
+			//by, _ := json.MarshalIndent(doc, " ", " ")
+			//u.Debugf("doc: %v", string(by))
 			if useFields {
 				doc = doc.Helper("fields")
 				if len(doc) < 1 {

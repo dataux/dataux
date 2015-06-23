@@ -275,22 +275,22 @@ func (m *MongoDataSource) loadTableSchema(table string) (*models.Table, error) {
 		TODO:
 			- Need to read the indexes, and include that info
 			- make recursive
-			- Don't need ALL, just x rows
-			- Resolve differences between object's? having different fields, types, nested
+			- allow future columns to get refreshed/discovered at runtime?
+			- Resolve differences between object's/schemas? having different fields, types, nested
+				- use new structure for Observations
 			- shared pkg for data-inspection, data builder
 	*/
 	tbl := models.NewTable(table, m.schema)
 	coll := m.sess.DB(m.db).C(table)
 
-	var dataType []map[string]interface{}
-	// Why are we loading All?  Limit?
-	if err := coll.Find(nil).Limit(10).All(&dataType); err != nil {
+	var sampleRows []map[string]interface{}
+	if err := coll.Find(nil).Limit(30).All(&sampleRows); err != nil {
 		u.Errorf("could not query collection")
 	}
 	//u.Debugf("loading %s", table)
-	for _, dt := range dataType {
-		//u.Infof("%#v", dt)
-		for colName, iVal := range dt {
+	for _, sampleRow := range sampleRows {
+		//u.Infof("%#v", sampleRow)
+		for colName, iVal := range sampleRow {
 
 			colName = strings.ToLower(colName)
 			//u.Debugf("found col: %s %T=%v", colName, iVal, iVal)
@@ -346,6 +346,8 @@ func (m *MongoDataSource) loadTableSchema(table string) (*models.Table, error) {
 			case []string:
 				u.Warnf("NOT IMPLEMENTED:  found []string %v='%v'", colName, val)
 			case []interface{}:
+				// We don't currently allow infinite recursion.  Probably should same as ES with
+				//  a prefix
 				//u.Debugf("SEMI IMPLEMENTED:   found []interface{}: %v='%v'", colName, val)
 				typ := value.NilType
 				for _, sliceVal := range val {
