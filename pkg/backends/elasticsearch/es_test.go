@@ -1,16 +1,17 @@
 package elasticsearch_test
 
 import (
+	"database/sql"
 	"flag"
 	"testing"
 
-	"database/sql"
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
-	"github.com/dataux/dataux/pkg/frontends/testmysql"
-	"github.com/dataux/dataux/pkg/testutil"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
+
+	"github.com/dataux/dataux/pkg/frontends/testmysql"
+	"github.com/dataux/dataux/pkg/testutil"
 )
 
 var (
@@ -52,8 +53,10 @@ func validateQuery(t *testing.T, querySql string, expectCols []string, expectCol
 }
 
 func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
+
 	testmysql.RunTestServer(t)
 
+	// This is a connection to RunTestServer, which starts on port 13307
 	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
 	assert.Tf(t, err == nil, "%v", err)
 	defer dbx.Close()
@@ -130,7 +133,7 @@ func TestShowTablesSelect(t *testing.T) {
 
 func TestInvalidQuery(t *testing.T) {
 	testmysql.RunTestServer(t)
-	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:4000)/es")
+	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
 	assert.T(t, err == nil)
 	// It is parsing the SQL on server side (proxy)
 	//  not in client, so hence that is what this is testing, making sure

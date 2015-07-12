@@ -1,7 +1,6 @@
 package mongo_test
 
 import (
-	//"database/sql"
 	"encoding/json"
 	"flag"
 	"testing"

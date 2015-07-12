@@ -9,21 +9,27 @@ import (
 	"testing"
 	"time"
 
-	u "github.com/araddon/gou"
-	"github.com/araddon/qlbridge/expr"
-	"github.com/bmizerany/assert"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/cloud"
 	"google.golang.org/cloud/datastore"
+
+	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/expr"
+	"github.com/bmizerany/assert"
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
+
+	gds "github.com/dataux/dataux/pkg/backends/datastore"
+	"github.com/dataux/dataux/pkg/frontends/testmysql"
+	//"github.com/dataux/dataux/pkg/testutil"
 )
 
 var (
 	ctx context.Context
 
 	veryVerbose *bool   = flag.Bool("vv", false, "very verbose output")
-	googleJwt   *string = flag.String("googlejwt", os.Getenv("GOOGLEJWT"), "Path to google JWT oauth token file")
 	logLevel    *string = flag.String("logging", "debug", "Which log level: [debug,info,warn,error,fatal]")
 )
 
@@ -39,12 +45,16 @@ func init() {
 	}
 	u.SetColorIfTerminal()
 
-	if *googleJwt == "" {
+	if *gds.GoogleJwt == "" {
 		u.Errorf("must have google oauth jwt")
 		os.Exit(1)
 	}
+	if *gds.GoogleProject == "" {
+		u.Errorf("must have google cloud project")
+		os.Exit(1)
+	}
 
-	jsonKey, err := ioutil.ReadFile(*googleJwt)
+	jsonKey, err := ioutil.ReadFile(*gds.GoogleJwt)
 	if err != nil {
 		u.Errorf("Could not open Google Auth Token JWT file %v", err)
 		os.Exit(1)
@@ -90,13 +100,91 @@ func loadAuth(jsonKey []byte) context.Context {
 	return ctx
 }
 
+type QuerySpec struct {
+	Sql             string
+	Cols            []string
+	ValidateRow     func([]interface{})
+	ExpectRowCt     int
+	ExpectColCt     int
+	RowData         interface{}
+	ValidateRowData func()
+}
+
+func validateQuery(t *testing.T, querySql string, expectCols []string, expectColCt, expectRowCt int, rowValidate func([]interface{})) {
+	validateQuerySpec(t, QuerySpec{Sql: querySql,
+		Cols:        expectCols,
+		ExpectRowCt: expectRowCt, ExpectColCt: expectColCt,
+		ValidateRow: rowValidate})
+}
+
+func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
+
+	testmysql.RunTestServer(t)
+
+	// This is a connection to RunTestServer, which starts on port 13307
+	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
+	assert.Tf(t, err == nil, "%v", err)
+	defer dbx.Close()
+	//u.Debugf("%v", testSpec.Sql)
+	rows, err := dbx.Queryx(testSpec.Sql)
+	assert.Tf(t, err == nil, "%v", err)
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	assert.Tf(t, err == nil, "%v", err)
+	if len(testSpec.Cols) > 0 {
+		for _, expectCol := range testSpec.Cols {
+			found := false
+			for _, colName := range cols {
+				if colName == expectCol {
+					found = true
+				}
+			}
+			assert.Tf(t, found, "Should have found column: %v", expectCol)
+		}
+	}
+	rowCt := 0
+	for rows.Next() {
+		if testSpec.RowData != nil {
+			err = rows.StructScan(testSpec.RowData)
+			//u.Infof("rowVals: %#v", testSpec.RowData)
+			assert.Tf(t, err == nil, "%v", err)
+			rowCt++
+			if testSpec.ValidateRowData != nil {
+				testSpec.ValidateRowData()
+			}
+
+		} else {
+			// rowVals is an []interface{} of all of the column results
+			rowVals, err := rows.SliceScan()
+			//u.Infof("rowVals: %#v", rowVals)
+			assert.Tf(t, err == nil, "%v", err)
+			assert.Tf(t, len(rowVals) == testSpec.ExpectColCt, "wanted cols but got %v", len(rowVals))
+			rowCt++
+			if testSpec.ValidateRow != nil {
+				testSpec.ValidateRow(rowVals)
+			}
+		}
+
+	}
+
+	if testSpec.ExpectRowCt > -1 {
+		assert.Tf(t, rowCt == testSpec.ExpectRowCt, "expected %v rows but got %v", testSpec.ExpectRowCt, rowCt)
+	}
+
+	assert.T(t, rows.Err() == nil)
+	//u.Infof("rows: %v", cols)
+}
+
 type MapDataStore struct {
 	Vals  map[string]interface{}
 	props []datastore.Property
+	key   *datastore.Key
 }
 
 func (m *MapDataStore) Load(props []datastore.Property) error {
 	m.Vals = make(map[string]interface{}, len(props))
+	m.props = props
 	//u.Infof("Load: %#v", props)
 	for _, p := range props {
 		u.Infof("prop: %#v", p)
@@ -109,21 +197,16 @@ func (m *MapDataStore) Save() ([]datastore.Property, error) {
 	return nil, nil
 }
 
-func testDataSourceTables(t *testing.T) {
-	queryPut(t, `
-		SELECT 
-		    fname
-		FROM mystream 
-		WHERE 
-		   ne(event,"stuff") AND ge(party, 1)
-		ALIAS query_users1;
-	`)
-	aidAlias := fmt.Sprintf("%d-%s", 123, "query_users1")
-	key := datastore.NewKey(ctx, QueryKind, aidAlias, 0, nil)
-	qd := &QueryData{}
-	err := datastore.Get(ctx, key, qd)
-	assert.Tf(t, err == nil, "no error: %v", err)
-	assert.Tf(t, qd.Alias == "query_users1", "has alias")
+func TestDataSourceTables(t *testing.T) {
+	testmysql.RunTestServer(t)
+	// This is a connection to RunTestServer, which starts on port 13307
+	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
+	assert.Tf(t, err == nil, "%v", err)
+	defer dbx.Close()
+	//u.Debugf("%v", testSpec.Sql)
+	rows, err := dbx.Queryx("select * from Query")
+	assert.Tf(t, err == nil, "%v", err)
+	defer rows.Close()
 }
 
 func TestBasic(t *testing.T) {
@@ -161,7 +244,13 @@ func pageQuery(iter *datastore.Iterator) {
 			u.Errorf("error: %v", err)
 			break
 		} else {
-			u.Infof("\n\tkey:\t%#v\n\tvals:\t%#v", key, mv.Vals)
+			mv.key = key
+			if len(mv.props) == 0 {
+				u.Infof("%#v", key)
+			} else {
+				u.Infof("\n\tkey:\t%#v\n\tvals:\t%#v", key, mv.Vals)
+			}
+
 		}
 	}
 }
