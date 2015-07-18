@@ -16,6 +16,7 @@ import (
 	"google.golang.org/cloud/datastore"
 
 	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/bmizerany/assert"
 	_ "github.com/go-sql-driver/mysql"
@@ -197,7 +198,13 @@ func (m *MapDataStore) Save() ([]datastore.Property, error) {
 	return nil, nil
 }
 
-func TestDataSourceTables(t *testing.T) {
+func TestDataSourceInterface(t *testing.T) {
+
+	datasource.Register("datstore-test", &gds.GoogleDSDataSource{})
+
+	ds, err := datasource.OpenConn("datstore-test", "")
+	assert.Tf(t, err == nil, "no error on conn: %v", err)
+	u.Infof("ds: %T  %v", ds, ds)
 	testmysql.RunTestServer(t)
 	// This is a connection to RunTestServer, which starts on port 13307
 	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")

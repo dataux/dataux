@@ -1,7 +1,7 @@
 package datastore
 
 import (
-	//"database/sql/driver"
+	"database/sql/driver"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -32,7 +32,9 @@ var (
 	GoogleJwt     *string = flag.String("googlejwt", os.Getenv("GOOGLEJWT"), "Path to google JWT oauth token file")
 	GoogleProject *string = flag.String("googleproject", os.Getenv("GOOGLEPROJECT"), "Google Datastore Project Name")
 
-	// Ensure our MongoDataSource is a datasource.DataSource type
+	ErrNoSchema = fmt.Errorf("No schema or configuration exists")
+
+	// Ensure our Google DataStore implements datasource.DataSource interface
 	_ datasource.DataSource = (*GoogleDSDataSource)(nil)
 	//_ datasource.Scanner    = (*ResultReader)(nil)
 	// source
@@ -145,7 +147,10 @@ func (m *GoogleDSDataSource) Tables() []string {
 }
 
 func (m *GoogleDSDataSource) Open(collectionName string) (datasource.SourceConn, error) {
-	//u.Debugf("Open(%v)", collectionName)
+	u.Debugf("Open(%v)", collectionName)
+	if m.schema == nil {
+		return nil, nil
+	}
 	tbl := m.schema.Tables[collectionName]
 	if tbl == nil {
 		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Db, collectionName)
@@ -174,17 +179,15 @@ func (m *GoogleDSDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask
 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, tblName)
 	}
 
-	// es := NewSqlToMgo(tbl, m.sess)
-	// u.Debugf("SqlToMgo: %#v", es)
-	// resp, err := es.Query(stmt)
-	// if err != nil {
-	// 	u.Error(err)
-	// 	return nil, err
-	// }
+	sqlDs := NewSqlToDatstore(tbl, m.dsCtx)
+	u.Debugf("SqlToDatstore: %#v", sqlDs)
+	resp, err := sqlDs.Query(stmt)
+	if err != nil {
+		u.Error(err)
+		return nil, err
+	}
 
-	// return resp, nil
-
-	return nil, nil
+	return resp, nil
 }
 
 func (m *GoogleDSDataSource) Table(table string) (*models.Table, error) {
@@ -218,13 +221,21 @@ func (m *GoogleDSDataSource) loadTableNames() error {
 	tables := make([]string, 0)
 	rows := pageQuery(datastore.NewQuery("__kind__").Run(m.dsCtx))
 	for _, row := range rows {
-		u.Warnf("%#v", row.key)
-		tables = append(tables, strings.ToLower(row.key.Name()))
+		if !strings.HasPrefix(row.key.Name(), "__") {
+			u.Warnf("%#v", row.key)
+			tables = append(tables, strings.ToLower(row.key.Name()))
+		}
+
 	}
 	sort.Strings(tables)
 	m.schema.TableNames = tables
 	u.Debugf("found tables: %v", m.schema.TableNames)
 	return nil
+}
+
+func titleCase(table string) string {
+	table = strings.ToLower(table)
+	return strings.ToUpper(table[0:1]) + table[1:]
 }
 
 func (m *GoogleDSDataSource) loadTableSchema(table string) (*models.Table, error) {
@@ -238,9 +249,37 @@ func (m *GoogleDSDataSource) loadTableSchema(table string) (*models.Table, error
 	}
 
 	/*
+		- Datastore keeps list of all indexed properties available
+		- then we will need to ?? sample some others?
 		TODO:
 			- Need to recurse through enough records to get good idea of types
 	*/
+	tbl := models.NewTable(table, m.schema)
+	table = titleCase(table)
+	u.Infof("gettint table info: %s", table)
+	props := pageQuery(datastore.NewQuery(table).Limit(20).Run(m.dsCtx))
+	for _, prop := range props {
+		u.Warnf("%#v   %#v", prop.key, prop.props)
+		for _, p := range prop.props {
+
+			//tables = append(tables, strings.ToLower(row.key.Name()))
+			colName := p.Name
+			switch val := p.Value.(type) {
+			case *datastore.Key:
+				u.Debugf("found datastore.Key: %v='%#v'", colName, val)
+				tbl.AddField(models.NewField(p.Name, value.StringType, 24, "Key"))
+				tbl.AddValues([]driver.Value{p.Name, "string", "NO", "PRI", "Key", ""})
+			default:
+				u.Warnf("%#v", p)
+			}
+		}
+	}
+	if len(tbl.FieldMap) > 0 {
+		return tbl, nil
+	}
+
+	u.Warnf("table not implemented %v  %p", table, tbl)
+
 	/*
 		tbl := models.NewTable(table, m.schema)
 		coll := m.sess.DB(m.db).C(table)
@@ -340,9 +379,7 @@ func (m *GoogleDSDataSource) loadTableSchema(table string) (*models.Table, error
 
 		return tbl, nil
 	*/
-	u.Warnf("table not implemented %v", table)
-	return nil, fmt.Errorf("not implemented")
-	return nil, nil
+	return nil, fmt.Errorf("not found")
 }
 
 func discoverType(iVal interface{}) value.ValueType {
@@ -386,7 +423,7 @@ func pageQuery(iter *datastore.Iterator) []schemaType {
 			break
 		} else {
 			row.key = key
-			u.Debugf("key:  %#v", key)
+			//u.Debugf("key:  %#v", key)
 			rows = append(rows, row)
 		}
 	}
@@ -404,7 +441,7 @@ func (m *schemaType) Load(props []datastore.Property) error {
 	m.props = props
 	//u.Infof("Load: %#v", props)
 	for _, p := range props {
-		u.Infof("prop: %#v", p)
+		//u.Infof("prop: %#v", p)
 		m.Vals[p.Name] = p.Value
 	}
 	return nil

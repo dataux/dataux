@@ -1,12 +1,13 @@
-package mongo
+package datastore
 
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
+	//"strings"
 
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+	"golang.org/x/net/context"
+	//"google.golang.org/cloud"
+	"google.golang.org/cloud/datastore"
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
@@ -24,43 +25,40 @@ var (
 	_ = json.Marshal
 
 	// planner
-	_ datasource.SourcePlanner = (*SqlToMgo)(nil)
+	_ datasource.SourcePlanner = (*SqlToDatstore)(nil)
 )
 
-// Sql To Mongo Request
-//   Map sql queries into Mongo bson Requests
-type SqlToMgo struct {
+// Sql To Google Datastore Maps a Sql request into an equivalent
+//    google data store query
+type SqlToDatstore struct {
 	*exec.TaskBase
 	resp           *ResultReader
 	tbl            *models.Table
 	sel            *expr.SqlSelect
 	schema         *models.SourceSchema
-	sess           *mgo.Session
-	filter         bson.M
-	aggs           bson.M
-	groupby        bson.M
-	innergb        bson.M // InnerMost Group By
-	sort           []bson.M
+	dsCtx          context.Context
+	query          *datastore.Query
 	hasMultiValue  bool // Multi-Value vs Single-Value aggs
 	hasSingleValue bool // single value agg
 }
 
-func NewSqlToMgo(table *models.Table, sess *mgo.Session) *SqlToMgo {
-	return &SqlToMgo{
+func NewSqlToDatstore(table *models.Table, ctx context.Context) *SqlToDatstore {
+	return &SqlToDatstore{
 		tbl:      table,
 		schema:   table.SourceSchema,
-		sess:     sess,
-		TaskBase: exec.NewTaskBase("SqlToMgo"),
+		dsCtx:    ctx,
+		TaskBase: exec.NewTaskBase("SqlToDatstore"),
 	}
 }
 
-func (m *SqlToMgo) Host() string {
+func (m *SqlToDatstore) Host() string {
 	//u.Warnf("TODO:  replace hardcoded es host")
 	return m.schema.ChooseBackend()
 }
 
-func (m *SqlToMgo) Query(req *expr.SqlSelect) (*ResultReader, error) {
+func (m *SqlToDatstore) Query(req *expr.SqlSelect) (*ResultReader, error) {
 
+	m.query = datastore.NewQuery(titleCase(m.tbl.Name))
 	var err error
 	m.sel = req
 	limit := req.Limit
@@ -69,68 +67,70 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	}
 
 	if req.Where != nil {
-		m.filter = bson.M{}
-		_, err = m.WalkNode(req.Where.Expr, &m.filter)
+		_, err = m.WalkNode(req.Where.Expr)
 		if err != nil {
 			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.StringAST(), err)
 			return nil, err
 		}
 	}
 
-	// Evaluate the Select columns
-	err = m.WalkSelectList()
-	if err != nil {
-		u.Warnf("Could Not evaluate Columns/Aggs %s %v", req.Columns.String(), err)
-		return nil, err
-	}
-
-	if len(req.GroupBy) > 0 {
-		err = m.WalkGroupBy()
+	/*
+		// Evaluate the Select columns
+		err = m.WalkSelectList()
 		if err != nil {
-			u.Warnf("Could Not evaluate GroupBys %s %v", req.GroupBy.String(), err)
+			u.Warnf("Could Not evaluate Columns/Aggs %s %v", req.Columns.String(), err)
 			return nil, err
 		}
-	}
 
-	//u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
-	if len(m.sel.OrderBy) > 0 {
-		m.sort = make([]bson.M, len(m.sel.OrderBy))
-		for i, col := range m.sel.OrderBy {
-			// We really need to look at any funcs?   walk this out
-			switch col.Order {
-			case "ASC":
-				m.sort[i] = bson.M{col.As: 1}
-			case "DESC":
-				m.sort[i] = bson.M{col.As: -1}
-			default:
-				// default sorder order = ?
-				m.sort[i] = bson.M{col.As: -1}
+		if len(req.GroupBy) > 0 {
+			err = m.WalkGroupBy()
+			if err != nil {
+				u.Warnf("Could Not evaluate GroupBys %s %v", req.GroupBy.String(), err)
+				return nil, err
 			}
 		}
-		var sort interface{}
-		if len(m.sort) == 1 {
-			sort = m.sort[0]
-		} else {
-			sort = m.sort
-		}
-		if len(m.filter) > 0 {
-			m.filter = bson.M{"$query": m.filter, "$orderby": sort}
-		} else {
-			m.filter = bson.M{"$query": bson.M{}, "$orderby": sort}
-		}
-	}
 
-	filterBy, _ := json.Marshal(m.filter)
-	u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v", m.schema.Db, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
-	query := m.sess.DB(m.schema.Db).C(m.tbl.Name).Find(m.filter).Limit(limit)
+		//u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
+		if len(m.sel.OrderBy) > 0 {
+			m.sort = make([]bson.M, len(m.sel.OrderBy))
+			for i, col := range m.sel.OrderBy {
+				// We really need to look at any funcs?   walk this out
+				switch col.Order {
+				case "ASC":
+					m.sort[i] = bson.M{col.As: 1}
+				case "DESC":
+					m.sort[i] = bson.M{col.As: -1}
+				default:
+					// default sorder order = ?
+					m.sort[i] = bson.M{col.As: -1}
+				}
+			}
+			var sort interface{}
+			if len(m.sort) == 1 {
+				sort = m.sort[0]
+			} else {
+				sort = m.sort
+			}
+			if len(m.filter) > 0 {
+				m.filter = bson.M{"$query": m.filter, "$orderby": sort}
+			} else {
+				m.filter = bson.M{"$query": bson.M{}, "$orderby": sort}
+			}
+		}
 
-	resultReader := NewResultReader(m, query)
-	m.resp = resultReader
-	resultReader.Finalize()
-	return resultReader, nil
+		filterBy, _ := json.Marshal(m.filter)
+		u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v", m.schema.Db, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
+		query := m.sess.DB(m.schema.Db).C(m.tbl.Name).Find(m.filter).Limit(limit)
+
+		resultReader := NewResultReader(m, query)
+		m.resp = resultReader
+		resultReader.Finalize()
+		return resultReader, nil
+	*/
+	return nil, fmt.Errorf("not implemented")
 }
 
-func (m *SqlToMgo) Accept(visitor expr.SubVisitor) (datasource.Scanner, error) {
+func (m *SqlToDatstore) Accept(visitor expr.SubVisitor) (datasource.Scanner, error) {
 	//u.Debugf("Accept(): %T  %#v", visitor, visitor)
 	// TODO:   this is really bad, this should not be a type switch
 	//         something pretty wrong upstream, that the Plan doesn't do the walk visitor
@@ -142,11 +142,12 @@ func (m *SqlToMgo) Accept(visitor expr.SubVisitor) (datasource.Scanner, error) {
 	return nil, expr.ErrNotImplemented
 }
 
+/*
 // Aggregations from the <select_list>
 //
 //    SELECT <select_list> FROM ... WHERE
 //
-func (m *SqlToMgo) WalkSelectList() error {
+func (m *SqlToDatstore) WalkSelectList() error {
 
 	m.aggs = bson.M{}
 	for i := len(m.sel.Columns) - 1; i >= 0; i-- {
@@ -194,7 +195,7 @@ func (m *SqlToMgo) WalkSelectList() error {
 //
 //    WHERE .. GROUP BY x,y,z
 //
-func (m *SqlToMgo) WalkGroupBy() error {
+func (m *SqlToDatstore) WalkGroupBy() error {
 
 	for i, col := range m.sel.GroupBy {
 		if col.Expr != nil {
@@ -230,7 +231,7 @@ func (m *SqlToMgo) WalkGroupBy() error {
 // WalkAggs() aggregate expressions when used ast part of <select_list>
 //  - For Aggregates (functions) it builds aggs
 //  - For Projectsion (non-functions) it does nothing, that will be done later during projection
-func (m *SqlToMgo) WalkAggs(cur expr.Node) (q bson.M, _ error) {
+func (m *SqlToDatstore) WalkAggs(cur expr.Node) (q bson.M, _ error) {
 	switch curNode := cur.(type) {
 	// case *expr.NumberNode:
 	// 	return nil, value.NewNumberValue(curNode.Float64), nil
@@ -259,11 +260,12 @@ func (m *SqlToMgo) WalkAggs(cur expr.Node) (q bson.M, _ error) {
 	return q, nil
 }
 
+*/
 // Walk() an expression, and its AND/OR/() logic to create an appropriately
-//  nested bson document for mongo queries
+//  nested json document for elasticsearch queries
 //
 //  TODO:  think we need to separate Value Nodes from those that return types?
-func (m *SqlToMgo) WalkNode(cur expr.Node, q *bson.M) (value.Value, error) {
+func (m *SqlToDatstore) WalkNode(cur expr.Node) (value.Value, error) {
 	u.Debugf("WalkNode: %#v", cur)
 	switch curNode := cur.(type) {
 	case *expr.NumberNode, *expr.StringNode:
@@ -276,90 +278,31 @@ func (m *SqlToMgo) WalkNode(cur expr.Node, q *bson.M) (value.Value, error) {
 		return nodeVal, nil
 		// What do we do here?
 	case *expr.BinaryNode:
-		return m.walkFilterBinary(curNode, q)
+		return m.walkFilterBinary(curNode)
 	case *expr.TriNode: // Between
-		return m.walkFilterTri(curNode, q)
+		panic("not implemented")
+		//return m.walkFilterTri(curNode)
 	case *expr.UnaryNode:
 		//return m.walkUnary(curNode)
 		u.Warnf("not implemented: %#v", curNode)
 		return nil, fmt.Errorf("Not implemented urnary function: %v", curNode.StringAST())
 	case *expr.FuncNode:
-		return m.walkFilterFunc(curNode, q)
+		panic("not implemented")
+		//return m.walkFilterFunc(curNode)
 	case *expr.IdentityNode:
 		u.Warnf("wat????   %v", curNode.StringAST())
-		*q = bson.M{"terms": bson.M{"field": curNode.String()}}
 		return value.NewStringValue(curNode.String()), nil
 	case *expr.MultiArgNode:
-		return m.walkMultiFilter(curNode, q)
+		panic("not implemented")
+		//return m.walkMultiFilter(curNode)
 	default:
 		u.Errorf("unrecognized T:%T  %v", cur, cur)
 		panic("Unrecognized node type")
 	}
-	// if cur.Negate {
-	// 	q = bson.M{"not": q}
-	// }
 	return nil, nil
 }
 
-func (m *SqlToMgo) walkFilterTri(node *expr.TriNode, q *bson.M) (value.Value, error) {
-
-	arg1val, aok := vm.Eval(nil, node.Args[0])
-	//u.Debugf("arg1? %v  ok?%v", arg1val, aok)
-	arg2val, bok := vm.Eval(nil, node.Args[1])
-	arg3val, cok := vm.Eval(nil, node.Args[2])
-	u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
-	if !aok || !bok || !cok {
-		return nil, fmt.Errorf("Could not evaluate args: %v", node.StringAST())
-	}
-	u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
-	switch node.Operator.T {
-	case lex.TokenBetween:
-		*q = bson.M{arg1val.ToString(): bson.M{"$gte": arg2val.Value(), "$lte": arg3val.Value()}}
-	default:
-		u.Warnf("not implemented ")
-	}
-	if q != nil {
-		return nil, nil
-	}
-	return nil, fmt.Errorf("not implemented")
-}
-
-// Mutli Arg expressions:
-//
-//		year IN (1990,1992)  =>
-//
-func (m *SqlToMgo) walkMultiFilter(node *expr.MultiArgNode, q *bson.M) (value.Value, error) {
-
-	// First argument must be field name in this context
-	fldName := node.Args[0].String()
-	u.Debugf("walkMulti: %v", node.StringAST())
-	switch node.Operator.T {
-	case lex.TokenIN:
-		//q = bson.M{"range": bson.M{arg1val.ToString(): bson.M{"gte": arg2val.ToString(), "lte": arg3val.ToString()}}}
-		terms := make([]interface{}, len(node.Args)-1)
-		*q = bson.M{fldName: bson.M{"$in": terms}}
-		for i := 1; i < len(node.Args); i++ {
-			// Do we eval here?
-			v, ok := vm.Eval(nil, node.Args[i])
-			if ok {
-				u.Debugf("in? %T %v value=%v", v, v, v.Value())
-				terms[i-1] = v.Value()
-			} else {
-				u.Warnf("could not evaluate arg: %v", node.Args[i])
-			}
-		}
-	default:
-		u.Warnf("not implemented %v", node.StringAST())
-		return nil, fmt.Errorf("Not implemented: %v", node.StringAST())
-	}
-	if q != nil {
-		u.Debug(string(u.JsonHelper(*q).PrettyJson()))
-		return nil, nil
-	}
-	return nil, fmt.Errorf("Uknown Error")
-}
-
-// Simple Binary Node
+// Walk Binary Node:   convert to mostly Filters if possible
 //
 //	x = y             =>   {field: {"$eq": value}}
 //  x != y            =>   db.inventory.find( { qty: { $ne: 20 } } )
@@ -367,7 +310,7 @@ func (m *SqlToMgo) walkMultiFilter(node *expr.MultiArgNode, q *bson.M) (value.Va
 //  x like "list%"    =>   db.users.find( { user_id: /^list/ } )
 //  x like "%list%"   =>   db.users.find( { user_id: /bc/ } )
 //
-func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Value, error) {
+func (m *SqlToDatstore) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Value, error) {
 
 	lhval, lhok := vm.Eval(nil, node.Args[0])
 	rhval, rhok := vm.Eval(nil, node.Args[1])
@@ -453,13 +396,74 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 	return nil, fmt.Errorf("not implemented %v", node.StringAST())
 }
 
+/*
+func (m *SqlToDatstore) walkFilterTri(node *expr.TriNode, q *bson.M) (value.Value, error) {
+
+	arg1val, aok := vm.Eval(nil, node.Args[0])
+	//u.Debugf("arg1? %v  ok?%v", arg1val, aok)
+	arg2val, bok := vm.Eval(nil, node.Args[1])
+	arg3val, cok := vm.Eval(nil, node.Args[2])
+	u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
+	if !aok || !bok || !cok {
+		return nil, fmt.Errorf("Could not evaluate args: %v", node.StringAST())
+	}
+	u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
+	switch node.Operator.T {
+	case lex.TokenBetween:
+		*q = bson.M{arg1val.ToString(): bson.M{"$gte": arg2val.Value(), "$lte": arg3val.Value()}}
+	default:
+		u.Warnf("not implemented ")
+	}
+	if q != nil {
+		return nil, nil
+	}
+	return nil, fmt.Errorf("not implemented")
+}
+
+// Mutli Arg expressions:
+//
+//		year IN (1990,1992)  =>
+//
+func (m *SqlToDatstore) walkMultiFilter(node *expr.MultiArgNode, q *bson.M) (value.Value, error) {
+
+	// First argument must be field name in this context
+	fldName := node.Args[0].String()
+	u.Debugf("walkMulti: %v", node.StringAST())
+	switch node.Operator.T {
+	case lex.TokenIN:
+		//q = bson.M{"range": bson.M{arg1val.ToString(): bson.M{"gte": arg2val.ToString(), "lte": arg3val.ToString()}}}
+		terms := make([]interface{}, len(node.Args)-1)
+		*q = bson.M{fldName: bson.M{"$in": terms}}
+		for i := 1; i < len(node.Args); i++ {
+			// Do we eval here?
+			v, ok := vm.Eval(nil, node.Args[i])
+			if ok {
+				u.Debugf("in? %T %v value=%v", v, v, v.Value())
+				terms[i-1] = v.Value()
+			} else {
+				u.Warnf("could not evaluate arg: %v", node.Args[i])
+			}
+		}
+	default:
+		u.Warnf("not implemented %v", node.StringAST())
+		return nil, fmt.Errorf("Not implemented: %v", node.StringAST())
+	}
+	if q != nil {
+		u.Debug(string(u.JsonHelper(*q).PrettyJson()))
+		return nil, nil
+	}
+	return nil, fmt.Errorf("Uknown Error")
+}
+
+
+
 // Take an expression func, ensure we don't do runtime-checking (as the function)
-//   doesn't really exist, then map that function to a mongo operation
+//   doesn't really exist, then map that function to an ES Filter
 //
 //    exists(fieldname)
 //    regex(fieldname,value)
 //
-func (m *SqlToMgo) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, error) {
+func (m *SqlToDatstore) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, error) {
 	switch funcName := strings.ToLower(node.Name); funcName {
 	case "exists", "missing":
 		op := true
@@ -514,7 +518,7 @@ func (m *SqlToMgo) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, 
 }
 
 // Take an expression func, ensure we don't do runtime-checking (as the function)
-//   doesn't really exist, then map that function to an Mongo Map function
+//   doesn't really exist, then map that function to an ES aggregation
 //
 //    min, max, avg, sum, cardinality, terms
 //
@@ -524,7 +528,7 @@ func (m *SqlToMgo) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, 
 //  MultiValue aggregats:
 //      terms, ??
 //
-func (m *SqlToMgo) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {
+func (m *SqlToDatstore) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {
 	switch funcName := strings.ToLower(node.Name); funcName {
 	case "max", "min", "avg", "sum", "cardinality":
 		m.hasSingleValue = true
@@ -595,3 +599,6 @@ func eval(cur expr.Node) (value.Value, bool) {
 	}
 	return value.NilValueVal, false
 }
+
+
+*/
