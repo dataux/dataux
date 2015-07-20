@@ -74,10 +74,10 @@ type Article struct {
 }
 
 type User struct {
-	Id      string
-	Name    string
-	Deleted bool
-	Roles   []string
-	Created time.Time
-	Updated *time.Time
+	Id      string     `datastore:"id"`
+	Name    string     `datastore:"name"`
+	Deleted bool       `datastore:"deleted,noindex"`
+	Roles   []string   `datastore:"roles,noindex"`
+	Created time.Time  `datastore:"created"`
+	Updated *time.Time `datastore:"created"`
 }

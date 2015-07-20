@@ -186,7 +186,7 @@ func (m *GoogleDSDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask
 	}
 
 	sqlDs := NewSqlToDatstore(tbl, m.dsCtx)
-	u.Debugf("SqlToDatstore: %#v", sqlDs)
+	//u.Debugf("SqlToDatstore: %#v", sqlDs)
 	resp, err := sqlDs.Query(stmt)
 	if err != nil {
 		u.Errorf("Google datastore query interpreter failed: %v", err)
@@ -270,15 +270,16 @@ func (m *GoogleDSDataSource) loadTableSchema(table string) (*models.Table, error
 		u.Debugf("current table: %v", k)
 	}
 	props := pageQuery(datastore.NewQuery(table).Limit(20).Run(m.dsCtx))
-	for _, prop := range props {
-		//u.Warnf("%#v   %#v", prop.key, prop.props)
-		for _, p := range prop.props {
+	for _, row := range props {
+		//u.Warnf("%#v   %#v", prop.key, row.props)
+		for _, p := range row.props {
 
 			colName := strings.ToLower(p.Name)
-			//u.Debugf("found col: %s %T=%v", colName, iVal, iVal)
+
 			if tbl.HasField(colName) {
 				continue
 			}
+			//u.Debugf("%d found col: %s %T=%v", i, colName, p.Value, p.Value)
 			switch val := p.Value.(type) {
 			case *datastore.Key:
 				//u.Debugf("found datastore.Key: %v='%#v'", colName, val)
@@ -308,7 +309,7 @@ func (m *GoogleDSDataSource) loadTableSchema(table string) (*models.Table, error
 				//u.Debugf("found time.Time: %v='%v'", colName, val)
 				tbl.AddField(models.NewField(colName, value.TimeType, 32, "datetime"))
 				tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
-			// case *time.Time:
+			// case *time.Time: // datastore doesn't allow pointers
 			// 	//u.Debugf("found time.Time: %v='%v'", colName, val)
 			// 	tbl.AddField(models.NewField(colName, value.TimeType, 32, "datetime"))
 			// 	tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
@@ -326,107 +327,6 @@ func (m *GoogleDSDataSource) loadTableSchema(table string) (*models.Table, error
 		return tbl, nil
 	}
 
-	u.Warnf("table not implemented %v  %p", table, tbl)
-
-	/*
-		tbl := models.NewTable(table, m.schema)
-		coll := m.sess.DB(m.db).C(table)
-
-		var sampleRows []map[string]interface{}
-		if err := coll.Find(nil).Limit(30).All(&sampleRows); err != nil {
-			u.Errorf("could not query collection")
-		}
-		//u.Debugf("loading %s", table)
-		for _, sampleRow := range sampleRows {
-			//u.Infof("%#v", sampleRow)
-			for colName, iVal := range sampleRow {
-
-				colName = strings.ToLower(colName)
-				//u.Debugf("found col: %s %T=%v", colName, iVal, iVal)
-				if tbl.HasField(colName) {
-					continue
-				}
-				switch val := iVal.(type) {
-				case bson.ObjectId:
-					//u.Debugf("found bson.ObjectId: %v='%v'", colName, val)
-					tbl.AddField(models.NewField(colName, value.StringType, 24, "bson.ObjectID AUTOGEN"))
-					tbl.AddValues([]driver.Value{colName, "string", "NO", "PRI", "AUTOGEN", ""})
-				case bson.M:
-					//u.Debugf("found bson.M: %v='%v'", colName, val)
-					tbl.AddField(models.NewField(colName, value.MapValueType, 24, "bson.M"))
-					tbl.AddValues([]driver.Value{colName, "object", "NO", "", "", "Nested Map Type"})
-				case map[string]interface{}:
-					//u.Debugf("found map[string]interface{}: %v='%v'", colName, val)
-					tbl.AddField(models.NewField(colName, value.MapValueType, 24, "map[string]interface{}"))
-					tbl.AddValues([]driver.Value{colName, "object", "NO", "", "", "Nested Map Type"})
-				case int:
-					//u.Debugf("found int: %v='%v'", colName, val)
-					tbl.AddField(models.NewField(colName, value.IntType, 32, "int"))
-					tbl.AddValues([]driver.Value{colName, "int", "NO", "", "", "int"})
-				case int64:
-					//u.Debugf("found int64: %v='%v'", colName, val)
-					tbl.AddField(models.NewField(colName, value.IntType, 32, "long"))
-					tbl.AddValues([]driver.Value{colName, "long", "NO", "", "", "long"})
-				case float64:
-					//u.Debugf("found float64: %v='%v'", colName, val)
-					tbl.AddField(models.NewField(colName, value.NumberType, 32, "float64"))
-					tbl.AddValues([]driver.Value{colName, "float64", "NO", "", "", "float64"})
-				case string:
-					//u.Debugf("found string: %v='%v'", colName, val)
-					tbl.AddField(models.NewField(colName, value.StringType, 32, "string"))
-					tbl.AddValues([]driver.Value{colName, "string", "NO", "", "", "string"})
-				case bool:
-					//u.Debugf("found string: %v='%v'", colName, val)
-					tbl.AddField(models.NewField(colName, value.BoolType, 1, "bool"))
-					tbl.AddValues([]driver.Value{colName, "bool", "NO", "", "", "bool"})
-				case time.Time:
-					//u.Debugf("found time.Time: %v='%v'", colName, val)
-					tbl.AddField(models.NewField(colName, value.TimeType, 32, "datetime"))
-					tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
-				case *time.Time:
-					//u.Debugf("found time.Time: %v='%v'", colName, val)
-					tbl.AddField(models.NewField(colName, value.TimeType, 32, "datetime"))
-					tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
-				case []uint8:
-					// This is most likely binary data, json.RawMessage, or []bytes
-					//u.Debugf("found []uint8: %v='%v'", colName, val)
-					tbl.AddField(models.NewField(colName, value.ByteSliceType, 24, "[]byte"))
-					tbl.AddValues([]driver.Value{colName, "binary", "NO", "", "", "Binary data:  []byte"})
-				case []string:
-					u.Warnf("NOT IMPLEMENTED:  found []string %v='%v'", colName, val)
-				case []interface{}:
-					// We don't currently allow infinite recursion.  Probably should same as ES with
-					//  a prefix
-					//u.Debugf("SEMI IMPLEMENTED:   found []interface{}: %v='%v'", colName, val)
-					typ := value.NilType
-					for _, sliceVal := range val {
-						typ = discoverType(sliceVal)
-					}
-					switch typ {
-					case value.StringType:
-						tbl.AddField(models.NewField(colName, value.StringsType, 24, "[]string"))
-						tbl.AddValues([]driver.Value{colName, "[]string", "NO", "", "", "[]string"})
-					default:
-						u.Infof("SEMI IMPLEMENTED:   found []interface{}: %v='%v'  %T %v", colName, val, val, typ.String())
-						tbl.AddField(models.NewField(colName, value.SliceValueType, 24, "[]value"))
-						tbl.AddValues([]driver.Value{colName, "[]value", "NO", "", "", "[]value"})
-					}
-
-				default:
-					if iVal != nil {
-						u.Warnf("not recognized type: %v %T", colName, iVal)
-					} else {
-						u.Warnf("could not infer from nil: %v", colName)
-					}
-				}
-			}
-		}
-
-		// buildMongoFields(s, tbl, jh, "", 0)
-		m.schema.Tables[table] = tbl
-
-		return tbl, nil
-	*/
 	return nil, fmt.Errorf("not found")
 }
 

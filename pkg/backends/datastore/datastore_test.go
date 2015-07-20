@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
@@ -34,6 +35,8 @@ var (
 	DbConn = "root@tcp(127.0.0.1:13307)/datauxtest"
 
 	loadTestDataOnce sync.Once
+
+	now = time.Now()
 )
 
 func init() {
@@ -110,16 +113,16 @@ func (m *Article) Save() ([]datastore.Property, error) {
 	props[3] = datastore.Property{Name: "count64", Value: m.Count64}
 	props[4] = datastore.Property{Name: "deleted", Value: m.Deleted}
 	cat, _ := json.Marshal(m.Category)
-	props[5] = datastore.Property{Name: "category", Value: cat}
+	props[5] = datastore.Property{Name: "category", Value: cat, NoIndex: true}
 	props[6] = datastore.Property{Name: "created", Value: m.Created}
 	props[7] = datastore.Property{Name: "updated", Value: *m.Updated}
 	props[8] = datastore.Property{Name: "f", Value: m.F}
 	embed, _ := json.Marshal(m.Embedded)
-	props[9] = datastore.Property{Name: "embedded", Value: embed}
+	props[9] = datastore.Property{Name: "embedded", Value: embed, NoIndex: true}
 	if m.Body != nil {
-		props[10] = datastore.Property{Name: "body", Value: []byte(*m.Body)}
+		props[10] = datastore.Property{Name: "body", Value: []byte(*m.Body), NoIndex: true}
 	} else {
-		props[10] = datastore.Property{Name: "body", Value: []byte{}}
+		props[10] = datastore.Property{Name: "body", Value: []byte{}, NoIndex: true}
 	}
 
 	return props, nil
@@ -155,7 +158,7 @@ func (m *User) Save() ([]datastore.Property, error) {
 	props[1] = datastore.Property{Name: "name", Value: m.Id}
 	props[2] = datastore.Property{Name: "deleted", Value: m.Deleted}
 	roles, _ := json.Marshal(m.Roles)
-	props[3] = datastore.Property{Name: "roles", Value: roles}
+	props[3] = datastore.Property{Name: "roles", Value: roles, NoIndex: true}
 	props[4] = datastore.Property{Name: "created", Value: m.Created}
 	props[5] = datastore.Property{Name: "updated", Value: *m.Updated}
 	return props, nil
@@ -165,13 +168,29 @@ func loadTestData(t *testing.T) {
 	loadTestDataOnce.Do(func() {
 		for _, article := range testutil.Articles {
 			key, err := datastore.Put(ctx, articleKey(article.Title), &Article{article})
-			u.Infof("key: %v", key)
+			//u.Infof("key: %v", key)
+			assert.Tf(t, key != nil, "%v", key)
 			assert.Tf(t, err == nil, "must put %v", err)
+		}
+		for i := 0; i < -1; i++ {
+			n := time.Now()
+			ev := struct {
+				Tag string
+				ICt int
+			}{"tag", i}
+			body := json.RawMessage([]byte(fmt.Sprintf(`{"name":"more %v"}`, i)))
+			a := &testutil.Article{fmt.Sprintf("article_%v", i), "auto", 22, 75, false, []string{"news", "sports"}, n, &n, 55.5, ev, &body}
+			key, err := datastore.Put(ctx, articleKey(a.Title), &Article{a})
+			//u.Infof("key: %v", key)
+			assert.Tf(t, key != nil, "%v", key)
+			assert.Tf(t, err == nil, "must put %v", err)
+			//u.Warnf("made article: %v", a.Title)
 		}
 		for _, user := range testutil.Users {
 			key, err := datastore.Put(ctx, userKey(user.Id), &User{user})
-			u.Infof("key: %v", key)
+			//u.Infof("key: %v", key)
 			assert.Tf(t, err == nil, "must put %v", err)
+			assert.Tf(t, key != nil, "%v", key)
 		}
 	})
 }
@@ -388,6 +407,7 @@ func TestDescribeTable(t *testing.T) {
 }
 
 func TestSimpleRowSelect(t *testing.T) {
+	loadTestData(t)
 	data := struct {
 		Title   string
 		Count   int
@@ -396,7 +416,7 @@ func TestSimpleRowSelect(t *testing.T) {
 		// Category []string  // Crap, downside of sqlx/mysql is no complex types
 	}{}
 	validateQuerySpec(t, QuerySpec{
-		Sql:         "select title, count, deleted, author from DataUxTestArticle WHERE author = \"aaron\" ",
+		Sql:         "select title, count, deleted, author from DataUxTestArticle WHERE author = \"aaron\" LIMIT 1",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
@@ -431,5 +451,54 @@ func TestSelectLimit(t *testing.T) {
 		ExpectRowCt:     1,
 		ValidateRowData: func() {},
 		RowData:         &data,
+	})
+}
+
+func TestSelectWhereLike(t *testing.T) {
+	data := struct {
+		Title string
+		Ct    int
+	}{}
+	validateQuerySpec(t, QuerySpec{
+		Sql:         `SELECT title, count as ct from DataUxTestArticle WHERE title like "list%"`,
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			assert.Tf(t, data.Title == "listicle1", "%v", data)
+		},
+		RowData: &data,
+	})
+	// TODO:  poly fill this, as doesn't work in datastore
+	// validateQuerySpec(t, QuerySpec{
+	// 	Sql:         `SELECT title, count as ct from article WHERE title like "%stic%"`,
+	// 	ExpectRowCt: 1,
+	// 	ValidateRowData: func() {
+	// 		assert.Tf(t, data.Title == "listicle1", "%v", data)
+	// 	},
+	// 	RowData: &data,
+	// })
+}
+
+func TestSelectOrderBy(t *testing.T) {
+	data := struct {
+		Title string
+		Ct    int
+	}{}
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "select title, count64 AS ct FROM DataUxTestArticle ORDER BY count64 DESC LIMIT 1;",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			assert.Tf(t, data.Title == "article3", "%v", data)
+			assert.Tf(t, data.Ct == 100, "%v", data)
+		},
+		RowData: &data,
+	})
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "select title, count64 AS ct FROM DataUxTestArticle ORDER BY count64 ASC LIMIT 1;",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			assert.Tf(t, data.Title == "listicle1", "%v", data)
+			assert.Tf(t, data.Ct == 12, "%v", data)
+		},
+		RowData: &data,
 	})
 }

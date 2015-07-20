@@ -148,8 +148,11 @@ func NewTable(table string, s *SourceSchema) *Table {
 		FieldMapMySql: make(map[string]*mysql.Field),
 	}
 	t.SetRefreshed()
+	t.init()
 	return t
 }
+
+func (m *Table) init() {}
 
 func (m *Table) DescribeResultset() *mysql.Resultset {
 	rs := new(mysql.Resultset)

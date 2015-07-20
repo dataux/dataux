@@ -56,8 +56,8 @@ func (m *SqlToDatstore) Host() string {
 
 func (m *SqlToDatstore) Query(req *expr.SqlSelect) (*ResultReader, error) {
 
-	u.Debugf("%s", m.tbl.Name)
 	m.query = datastore.NewQuery(m.tbl.NameOriginal)
+	u.Debugf("%s   query:%p", m.tbl.Name, m.query)
 	var err error
 	m.sel = req
 	limit := req.Limit
@@ -79,55 +79,29 @@ func (m *SqlToDatstore) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	// 	u.Warnf("Could Not evaluate Columns/Aggs %s %v", req.Columns.String(), err)
 	// 	return nil, err
 	// }
-	/*
 
+	// if len(req.GroupBy) > 0 {
+	// 	err = m.WalkGroupBy()
+	// 	if err != nil {
+	// 		u.Warnf("Could Not evaluate GroupBys %s %v", req.GroupBy.String(), err)
+	// 		return nil, err
+	// 	}
+	// }
 
-		if len(req.GroupBy) > 0 {
-			err = m.WalkGroupBy()
-			if err != nil {
-				u.Warnf("Could Not evaluate GroupBys %s %v", req.GroupBy.String(), err)
-				return nil, err
+	//u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
+	if len(m.sel.OrderBy) > 0 {
+		for _, col := range m.sel.OrderBy {
+			// We really need to look at any funcs?   walk this out
+			switch col.Order {
+			case "ASC":
+				m.query = m.query.Order(fmt.Sprintf("%q", col.Key()))
+			case "DESC":
+				m.query = m.query.Order(fmt.Sprintf("-%q", col.Key()))
+			default:
+				m.query = m.query.Order(fmt.Sprintf("%q", col.Key()))
 			}
 		}
-
-		//u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
-		if len(m.sel.OrderBy) > 0 {
-			m.sort = make([]bson.M, len(m.sel.OrderBy))
-			for i, col := range m.sel.OrderBy {
-				// We really need to look at any funcs?   walk this out
-				switch col.Order {
-				case "ASC":
-					m.sort[i] = bson.M{col.As: 1}
-				case "DESC":
-					m.sort[i] = bson.M{col.As: -1}
-				default:
-					// default sorder order = ?
-					m.sort[i] = bson.M{col.As: -1}
-				}
-			}
-			var sort interface{}
-			if len(m.sort) == 1 {
-				sort = m.sort[0]
-			} else {
-				sort = m.sort
-			}
-			if len(m.filter) > 0 {
-				m.filter = bson.M{"$query": m.filter, "$orderby": sort}
-			} else {
-				m.filter = bson.M{"$query": bson.M{}, "$orderby": sort}
-			}
-		}
-
-		filterBy, _ := json.Marshal(m.filter)
-		u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v", m.schema.Db, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
-		query := m.sess.DB(m.schema.Db).C(m.tbl.Name).Find(m.filter).Limit(limit)
-
-		resultReader := NewResultReader(m, query)
-		m.resp = resultReader
-		resultReader.Finalize()
-		return resultReader, nil
-	*/
-	//return nil, fmt.Errorf("not implemented")
+	}
 
 	resultReader := NewResultReader(m)
 	m.resp = resultReader
@@ -339,21 +313,24 @@ func (m *SqlToDatstore) walkFilterBinary(node *expr.BinaryNode) error {
 	case lex.TokenLogicOr:
 		return fmt.Errorf("DataStore does not implement OR: %v", node.StringAST())
 	case lex.TokenEqual, lex.TokenEqualEqual:
-		m.query.Filter(fmt.Sprintf("%q =", lhval.ToString()), rhval.Value())
+		//u.Debugf("query: %p", m.query)
+		m.query = m.query.Filter(fmt.Sprintf("%q =", lhval.ToString()), rhval.Value())
 	case lex.TokenNE:
 		// WARNING:  datastore only allows 1, warn?
-		m.query.Filter(fmt.Sprintf("%q !=", lhval.ToString()), rhval.Value())
+		m.query = m.query.Filter(fmt.Sprintf("%q !=", lhval.ToString()), rhval.Value())
 	case lex.TokenLE:
-		m.query.Filter(fmt.Sprintf("%q <=", lhval.ToString()), rhval.Value())
+		m.query = m.query.Filter(fmt.Sprintf("%q <=", lhval.ToString()), rhval.Value())
 	case lex.TokenLT:
-		m.query.Filter(fmt.Sprintf("%q <", lhval.ToString()), rhval.Value())
+		m.query = m.query.Filter(fmt.Sprintf("%q <", lhval.ToString()), rhval.Value())
 	case lex.TokenGE:
-		m.query.Filter(fmt.Sprintf("%q >=", lhval.ToString()), rhval.Value())
+		m.query = m.query.Filter(fmt.Sprintf("%q >=", lhval.ToString()), rhval.Value())
 	case lex.TokenGT:
-		m.query.Filter(fmt.Sprintf("%q >", lhval.ToString()), rhval.Value())
+		m.query = m.query.Filter(fmt.Sprintf("%q >", lhval.ToString()), rhval.Value())
 	case lex.TokenLike:
 		// Ancestors support some type of prefix query?
-		return fmt.Errorf("Like not implemented %v", node.StringAST())
+		// this only works on String columns?
+		m.query = m.query.Filter(fmt.Sprintf("%q >=", lhval.ToString()), rhval.Value())
+		//return fmt.Errorf("Like not implemented %v", node.StringAST())
 	default:
 		u.Warnf("not implemented: %v", node.Operator)
 		return fmt.Errorf("not implemented %v", node.StringAST())

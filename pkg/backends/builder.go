@@ -51,7 +51,7 @@ func BuildSqlJob(svr *models.ServerCtx, schemaDb, sqlText string) (*Builder, err
 
 	stmt, err := expr.ParseSql(sqlText)
 	if err != nil {
-		u.Errorf("Could not parse: %v", err)
+		u.Warnf("Could not parse: %v", err)
 		return nil, err
 	}
 
@@ -60,7 +60,7 @@ func BuildSqlJob(svr *models.ServerCtx, schemaDb, sqlText string) (*Builder, err
 	ex, err := stmt.Accept(builder)
 
 	if err != nil {
-		u.Errorf("Could not build %v", err)
+		u.Warnf("Could not build %v", err)
 		return nil, err
 	}
 	if ex == nil {

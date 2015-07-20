@@ -133,6 +133,7 @@ func (m *ResultReader) Finalize() error {
 	}()
 
 	sql := m.Req.sel
+	//u.Infof("query: %p", m.Req.query)
 	q := m.Req.query
 
 	m.Vals = make([][]driver.Value, 0)
@@ -151,14 +152,36 @@ func (m *ResultReader) Finalize() error {
 	}
 
 	cols := m.proj.Columns
+	needsProjection := false
+	posMap := make([]int, len(cols))
 	if len(cols) == 0 {
 		u.Errorf("WTF?  no cols? %v", cols)
 	} else {
-		//q = q.Project(m.cols...)
-		//q.Project(m.cols...)
-	}
+		// Doing projection on server side datastore really seems to
+		// introduce all kinds of weird errors and rules, so mostly just
+		// do projection here in proxy
 
+		// q = q.Project(m.cols...)
+		// q.Project(m.cols...)
+
+		needsProjection = true
+		for i, col := range cols {
+			for fieldIndex, fld := range m.Req.tbl.Fields {
+				//u.Debugf("name: %v orig:%v   name:%v", fld.Name, fieldIndex, col.Name)
+				if col.Name == fld.Name {
+					posMap[i] = fieldIndex
+					break
+				}
+			}
+		}
+	}
+	if m.Req.sel.Limit > 0 {
+		//u.Infof("setting limit: %v", m.Req.sel.Limit)
+		q = q.Limit(m.Req.sel.Limit)
+	}
 	n := time.Now()
+	//u.Infof("query: %p", q)
+	//q.DebugInfo()
 	iter := q.Run(m.Req.dsCtx)
 	for {
 		row := Row{}
@@ -171,8 +194,28 @@ func (m *ResultReader) Finalize() error {
 			break
 		}
 		row.key = key
-		m.Vals = append(m.Vals, row.Vals)
-		u.Debugf("vals:  %v", row.Vals)
+		if needsProjection {
+			vals := make([]driver.Value, len(cols))
+			for i, idx := range posMap {
+				vals[i] = row.Vals[idx]
+				//u.Debugf("posMap  %v", posMap[i])
+				// switch vt := vals[i].(type) {
+				// case []uint8:
+				// 	u.Infof("json? %d  %s  val: col:%d  %T  %s", i, col.As, col.Col.Index, vals[i], string(vt))
+				// case string:
+				// 	u.Infof("STR %d  %s  val: col:%d  %T  %v", i, col.As, col.Col.Index, vals[i], vals[i])
+				// default:
+				// 	u.Infof("??? %d  %s  val: col:%d  %T  %v", i, col.As, col.Col.Index, vals[i], vals[i])
+				// }
+
+			}
+			//u.Debugf("%v", vals)
+			m.Vals = append(m.Vals, vals)
+		} else {
+			m.Vals = append(m.Vals, row.Vals)
+		}
+
+		//u.Debugf("vals:  %v", row.Vals)
 	}
 	u.Infof("finished query, took: %v for %v rows", time.Now().Sub(n), len(m.Vals))
 	return nil
@@ -241,7 +284,7 @@ func (m *Row) Load(props []datastore.Property) error {
 	m.props = props
 	//u.Infof("Load: %#v", props)
 	for i, p := range props {
-		//u.Infof("prop: %#v", p)
+		//u.Infof("%d prop: %#v", i, p)
 		m.Vals[i] = p.Value
 	}
 	return nil
