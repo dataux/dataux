@@ -20,7 +20,7 @@ var (
 	DescribeHeaders = NewDescribeHeaders()
 
 	// Schema Refresh Interval
-	SchemaRefreshInterval = -time.Minute * 1
+	SchemaRefreshInterval = -time.Minute * 5
 )
 
 // Schema is a "Virtual" Database.  Made up of
@@ -55,7 +55,8 @@ type SourceSchema struct {
 //   It belongs to a Schema and can be used to
 //   create a Datasource used to read this table
 type Table struct {
-	Name            string                  // Name of table
+	Name            string                  // Name of table lower
+	NameOriginal    string                  // Name of table
 	FieldPositions  map[string]int          // Position of field name to column list
 	Fields          []*Field                // List of Fields, in order
 	FieldMap        map[string]*Field       // List of Fields, in order
@@ -140,11 +141,13 @@ func (m *Schema) Since(dur time.Duration) bool {
 func NewTable(table string, s *SourceSchema) *Table {
 	t := &Table{
 		Name:          strings.ToLower(table),
+		NameOriginal:  table,
 		Fields:        make([]*Field, 0),
 		FieldMap:      make(map[string]*Field),
 		SourceSchema:  s,
 		FieldMapMySql: make(map[string]*mysql.Field),
 	}
+	t.SetRefreshed()
 	return t
 }
 
@@ -170,12 +173,12 @@ func (m *Table) DescribeTable() (*datasource.StaticDataSource, *expr.Projection)
 		p := expr.NewProjection()
 		for _, f := range DescribeHeaders {
 			p.AddColumnShort(string(f.Name), f.Type)
-			u.Infof("found field:  vals=%#v", f)
+			//u.Debugf("found field:  vals=%#v", f)
 		}
 		m.tableVals = datasource.NewStaticDataSource("describetable", m.DescribeValues, nil)
 		m.tableProjection = p
 	}
-	u.Infof("describe table:  %v", m.tableVals)
+	u.Debugf("describe table:  %v", m.tableVals)
 	return m.tableVals, m.tableProjection
 }
 
@@ -230,6 +233,11 @@ func (m *Table) Since(dur time.Duration) bool {
 		return true
 	}
 	return false
+}
+
+// Is this schema object within time window described by @dur time ago ?
+func (m *Table) SetRefreshed() {
+	m.lastRefreshed = time.Now()
 }
 
 func NewField(name string, valType value.ValueType, size int, description string) *Field {

@@ -1,13 +1,15 @@
 package datastore_test
 
 import (
-	"flag"
+	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
+	"strings"
+	"sync"
 	"testing"
-	"time"
 
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
@@ -17,34 +19,26 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
-	"github.com/araddon/qlbridge/expr"
 	"github.com/bmizerany/assert"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 
 	gds "github.com/dataux/dataux/pkg/backends/datastore"
 	"github.com/dataux/dataux/pkg/frontends/testmysql"
-	//"github.com/dataux/dataux/pkg/testutil"
+	"github.com/dataux/dataux/pkg/testutil"
 )
 
 var (
 	ctx context.Context
 
-	veryVerbose *bool   = flag.Bool("vv", false, "very verbose output")
-	logLevel    *string = flag.String("logging", "debug", "Which log level: [debug,info,warn,error,fatal]")
+	DbConn = "root@tcp(127.0.0.1:13307)/datauxtest"
+
+	loadTestDataOnce sync.Once
 )
 
 func init() {
 
-	flag.Parse()
-	if *veryVerbose {
-		u.SetupLogging(*logLevel)
-		u.SetColorOutput()
-	} else {
-		u.SetupLogging("warn")
-		u.SetColorOutput()
-	}
-	u.SetColorIfTerminal()
+	testutil.Setup()
 
 	if *gds.GoogleJwt == "" {
 		u.Errorf("must have google oauth jwt")
@@ -61,26 +55,125 @@ func init() {
 		os.Exit(1)
 	}
 	ctx = loadAuth(jsonKey)
+
 }
 
 const (
-	QueryKind string = "Query"
+	ArticleKind string = "DataUxTestArticle"
+	UserKind    string = "DataUxTestUser"
 )
 
-type QueryData struct {
-	Aid         int            `datastore:"aid"`
-	Alias       string         `datastore:"alias"`
-	Table       string         `datastore:"table"`
-	Description string         `datastore:"description,noindex"`
-	QueryText   string         `datastore:"query_text,noindex"`
-	Author      *datastore.Key `datastore:"author,noindex"`
-	Created     time.Time      `datastore:"created,noindex"`
-	Updated     time.Time      `datastore:"updated,noindex"`
+func articleKey(title string) *datastore.Key {
+	return datastore.NewKey(ctx, ArticleKind, title, 0, nil)
 }
 
-func (q *QueryData) Key() *datastore.Key {
-	aidAlias := fmt.Sprintf("%d-%s", q.Aid, q.Alias)
-	return datastore.NewKey(ctx, QueryKind, aidAlias, 0, nil)
+func userKey(id string) *datastore.Key {
+	return datastore.NewKey(ctx, UserKind, id, 0, nil)
+}
+
+/*
+type Article struct {
+	Title    string
+	Author   string
+	Count    int
+	Count64  int64
+	Deleted  bool
+	Category []string
+	Created  time.Time
+	Updated  *time.Time
+	F        float64
+	Embedded struct {
+		Tag string
+		ICt int
+	}
+	Body *json.RawMessage
+}
+*/
+type Article struct {
+	*testutil.Article
+}
+
+func (m *Article) Load(props []datastore.Property) error {
+	for _, p := range props {
+		switch p.Name {
+		default:
+			u.Warnf("unmapped: %v  %T", p.Name, p.Value)
+		}
+	}
+	return nil
+}
+func (m *Article) Save() ([]datastore.Property, error) {
+	props := make([]datastore.Property, 11)
+	props[0] = datastore.Property{Name: "title", Value: m.Title}
+	props[1] = datastore.Property{Name: "author", Value: m.Author}
+	props[2] = datastore.Property{Name: "count", Value: m.Count}
+	props[3] = datastore.Property{Name: "count64", Value: m.Count64}
+	props[4] = datastore.Property{Name: "deleted", Value: m.Deleted}
+	cat, _ := json.Marshal(m.Category)
+	props[5] = datastore.Property{Name: "category", Value: cat}
+	props[6] = datastore.Property{Name: "created", Value: m.Created}
+	props[7] = datastore.Property{Name: "updated", Value: *m.Updated}
+	props[8] = datastore.Property{Name: "f", Value: m.F}
+	embed, _ := json.Marshal(m.Embedded)
+	props[9] = datastore.Property{Name: "embedded", Value: embed}
+	if m.Body != nil {
+		props[10] = datastore.Property{Name: "body", Value: []byte(*m.Body)}
+	} else {
+		props[10] = datastore.Property{Name: "body", Value: []byte{}}
+	}
+
+	return props, nil
+}
+
+/*
+type User struct {
+	Id      string
+	Name    string
+	Deleted bool
+	Roles   []string
+	Created time.Time
+	Updated *time.Time
+}
+
+*/
+type User struct {
+	*testutil.User
+}
+
+func (m *User) Load(props []datastore.Property) error {
+	for _, p := range props {
+		switch p.Name {
+		default:
+			u.Warnf("unmapped: %v  %T", p.Name, p.Value)
+		}
+	}
+	return nil
+}
+func (m *User) Save() ([]datastore.Property, error) {
+	props := make([]datastore.Property, 6)
+	props[0] = datastore.Property{Name: "id", Value: m.Id}
+	props[1] = datastore.Property{Name: "name", Value: m.Id}
+	props[2] = datastore.Property{Name: "deleted", Value: m.Deleted}
+	roles, _ := json.Marshal(m.Roles)
+	props[3] = datastore.Property{Name: "roles", Value: roles}
+	props[4] = datastore.Property{Name: "created", Value: m.Created}
+	props[5] = datastore.Property{Name: "updated", Value: *m.Updated}
+	return props, nil
+}
+
+func loadTestData(t *testing.T) {
+	loadTestDataOnce.Do(func() {
+		for _, article := range testutil.Articles {
+			key, err := datastore.Put(ctx, articleKey(article.Title), &Article{article})
+			u.Infof("key: %v", key)
+			assert.Tf(t, err == nil, "must put %v", err)
+		}
+		for _, user := range testutil.Users {
+			key, err := datastore.Put(ctx, userKey(user.Id), &User{user})
+			u.Infof("key: %v", key)
+			assert.Tf(t, err == nil, "must put %v", err)
+		}
+	})
 }
 
 func loadAuth(jsonKey []byte) context.Context {
@@ -96,7 +189,7 @@ func loadAuth(jsonKey []byte) context.Context {
 	if err != nil {
 		log.Fatal(err)
 	}
-	ctx := cloud.NewContext("lytics-dev", conf.Client(oauth2.NoContext))
+	ctx := cloud.NewContext(*gds.GoogleProject, conf.Client(oauth2.NoContext))
 	// Use the context (see other examples)
 	return ctx
 }
@@ -177,204 +270,166 @@ func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 	//u.Infof("rows: %v", cols)
 }
 
-type MapDataStore struct {
-	Vals  map[string]interface{}
-	props []datastore.Property
-	key   *datastore.Key
-}
-
-func (m *MapDataStore) Load(props []datastore.Property) error {
-	m.Vals = make(map[string]interface{}, len(props))
-	m.props = props
-	//u.Infof("Load: %#v", props)
-	for _, p := range props {
-		u.Infof("prop: %#v", p)
-		m.Vals[p.Name] = p.Value
-	}
-	return nil
-}
-
-func (m *MapDataStore) Save() ([]datastore.Property, error) {
-	return nil, nil
-}
-
+// We are testing that we can register this Google Datasource
+// as a qlbridge-Datasource
 func TestDataSourceInterface(t *testing.T) {
 
-	datasource.Register("datstore-test", &gds.GoogleDSDataSource{})
-
-	ds, err := datasource.OpenConn("datstore-test", "")
-	assert.Tf(t, err == nil, "no error on conn: %v", err)
-	u.Infof("ds: %T  %v", ds, ds)
+	// By running testserver, we will load schema/config
 	testmysql.RunTestServer(t)
-	// This is a connection to RunTestServer, which starts on port 13307
-	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
-	assert.Tf(t, err == nil, "%v", err)
-	defer dbx.Close()
-	//u.Debugf("%v", testSpec.Sql)
-	rows, err := dbx.Queryx("select * from Query")
-	assert.Tf(t, err == nil, "%v", err)
-	defer rows.Close()
+	loadTestData(t)
+
+	// Now make sure that the datastore source has been registered
+	// and meets api for qlbridge.DataSource
+	ds, err := datasource.OpenConn(gds.DataSourceLabel, ArticleKind)
+	assert.Tf(t, err == nil, "no error on conn: %v", err)
+	assert.Tf(t, ds != nil, "Found datastore")
+}
+
+func TestInvalidQuery(t *testing.T) {
+	testmysql.RunTestServer(t)
+	db, err := sql.Open("mysql", DbConn)
+	assert.T(t, err == nil)
+	// It is parsing the SQL on server side (proxy) not in client
+	//  so hence that is what this is testing, making sure proxy responds gracefully
+	rows, err := db.Query("select `stuff`, NOTAKEYWORD fake_tablename NOTWHERE `description` LIKE \"database\";")
+	assert.Tf(t, err != nil, "%v", err)
+	assert.Tf(t, rows == nil, "must not get rows")
+}
+
+func TestShowTables(t *testing.T) {
+	data := struct {
+		Table string `db:"Table"`
+	}{}
+	found := false
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "show tables;",
+		ExpectRowCt: -1,
+		ValidateRowData: func() {
+			u.Infof("%v", data)
+			assert.Tf(t, data.Table != "", "%v", data)
+			if data.Table == strings.ToLower(ArticleKind) {
+				found = true
+			}
+		},
+		RowData: &data,
+	})
+	assert.Tf(t, found, "Must have found %s", ArticleKind)
 }
 
 func TestBasic(t *testing.T) {
-	queryPut(t, `
-		SELECT 
-		    fname
-		    , lname AS last_name
-		    , count(host(_ses)) IF contains(_ses,"google.com")
-		    , now() AS created_ts
-		    , name          -- comment 
-		    , valuect(event) 
-		    , todate(reg_date)
-		    , todate(`+"`field xyz $%`"+`)
-		FROM mystream 
-		WHERE 
-		   ne(event,"stuff") AND ge(party, 1)
-		ALIAS query_users1;
-	`)
-	aidAlias := fmt.Sprintf("%d-%s", 123, "query_users1")
-	key := datastore.NewKey(ctx, QueryKind, aidAlias, 0, nil)
-	qd := &QueryData{}
-	err := datastore.Get(ctx, key, qd)
-	assert.Tf(t, err == nil, "no error: %v", err)
-	assert.Tf(t, qd.Alias == "query_users1", "has alias")
 
-	queryMeta()
+	// By running testserver, we will load schema/config
+	testmysql.RunTestServer(t)
+	loadTestData(t)
+
+	// This is a connection to RunTestServer, which starts on port 13307
+	dbx, err := sqlx.Connect("mysql", DbConn)
+	assert.Tf(t, err == nil, "%v", err)
+	defer dbx.Close()
+	//u.Debugf("%v", testSpec.Sql)
+	rows, err := dbx.Queryx(fmt.Sprintf("select * from %s", ArticleKind))
+	assert.Tf(t, err == nil, "%v", err)
+	defer rows.Close()
+
+	/*
+		aidAlias := fmt.Sprintf("%d-%s", 123, "query_users1")
+		key := datastore.NewKey(ctx, QueryKind, aidAlias, 0, nil)
+		qd := &QueryData{}
+		err := datastore.Get(ctx, key, qd)
+		assert.Tf(t, err == nil, "no error: %v", err)
+		assert.Tf(t, qd.Alias == "query_users1", "has alias")
+		queryMeta()
+	*/
 }
-func pageQuery(iter *datastore.Iterator) {
-	for {
-		mv := MapDataStore{}
-		if key, err := iter.Next(&mv); err != nil {
-			if err == datastore.Done {
-				break
+
+func TestDescribeTable(t *testing.T) {
+
+	loadTestData(t)
+
+	data := struct {
+		Field   string `db:"Field"`
+		Type    string `db:"Type"`
+		Null    string `db:"Null"`
+		Key     string `db:"Key"`
+		Default string `db:"Default"`
+		Extra   string `db:"Extra"`
+	}{}
+	describedCt := 0
+	validateQuerySpec(t, QuerySpec{
+		Sql:         fmt.Sprintf("describe %s;", ArticleKind),
+		ExpectRowCt: 11,
+		ValidateRowData: func() {
+			//u.Infof("%s   %#v", data.Field, data)
+			assert.Tf(t, data.Field != "", "%v", data)
+			switch data.Field {
+			case "embedded":
+				assert.Tf(t, data.Type == "binary", "%#v", data)
+				describedCt++
+			case "author":
+				assert.Tf(t, data.Type == "string", "data: %#v", data)
+				describedCt++
+			case "created":
+				assert.Tf(t, data.Type == "datetime", "data: %#v", data)
+				describedCt++
+			case "category":
+				assert.Tf(t, data.Type == "binary", "data: %#v", data)
+				describedCt++
+			case "body":
+				assert.Tf(t, data.Type == "binary", "data: %#v", data)
+				describedCt++
+			case "deleted":
+				assert.Tf(t, data.Type == "bool", "data: %#v", data)
+				describedCt++
 			}
-			u.Errorf("error: %v", err)
-			break
-		} else {
-			mv.key = key
-			if len(mv.props) == 0 {
-				u.Infof("%#v", key)
-			} else {
-				u.Infof("\n\tkey:\t%#v\n\tvals:\t%#v", key, mv.Vals)
-			}
-
-		}
-	}
+		},
+		RowData: &data,
+	})
+	assert.Tf(t, describedCt == 6, "Should have found/described 6 but was %v", describedCt)
 }
 
-func queryMeta() {
-	u.Infof("getting __namespace__")
-	pageQuery(datastore.NewQuery("__namespace__").Run(ctx))
-	u.Infof("getting __kind__")
-	pageQuery(datastore.NewQuery("__kind__").Run(ctx))
-	u.Infof("getting __property__")
-	pageQuery(datastore.NewQuery("__property__").Limit(1000).Run(ctx))
-	u.Infof("getting Query")
-	pageQuery(datastore.NewQuery("Query").Limit(1000).Run(ctx))
+func TestSimpleRowSelect(t *testing.T) {
+	data := struct {
+		Title   string
+		Count   int
+		Deleted bool
+		Author  string
+		// Category []string  // Crap, downside of sqlx/mysql is no complex types
+	}{}
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "select title, count, deleted, author from DataUxTestArticle WHERE author = \"aaron\" ",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			//u.Infof("%v", data)
+			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
+			assert.Tf(t, data.Title == "article1", "%v", data)
+		},
+		RowData: &data,
+	})
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "select title, count,deleted from DataUxTestArticle WHERE count = 22;",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			assert.Tf(t, data.Title == "article1", "%v", data)
+		},
+		RowData: &data,
+	})
+	validateQuerySpec(t, QuerySpec{
+		Sql:             "select title, count, deleted from DataUxTestArticle LIMIT 10;",
+		ExpectRowCt:     4,
+		ValidateRowData: func() {},
+		RowData:         &data,
+	})
 }
 
-func queryPut(t *testing.T, query string) {
-	q, err := expr.ParseSql(query)
-	assert.Tf(t, err == nil, "must parse %v", err)
-	sel, ok := q.(*expr.SqlSelect)
-	assert.T(t, ok)
-
-	n := time.Now()
-	qd := &QueryData{
-		Aid:         123,
-		Alias:       sel.Alias,
-		Description: "description",
-		QueryText:   sel.Raw,
-		Author:      datastore.NewKey(ctx, "Author", "aaron", 0, nil),
-		Created:     n,
-		Updated:     n,
-	}
-	//newKey := datastore.NewIncompleteKey(ctx, "Query", nil)
-	key, err := datastore.Put(ctx, qd.Key(), qd)
-	u.Infof("key: %v", key)
-	assert.Tf(t, err == nil, "must put %v", err)
-}
-
-func ExampleDelete() {
-
-	key := datastore.NewKey(ctx, "Article", "articled1", 0, nil)
-	if err := datastore.Delete(ctx, key); err != nil {
-		log.Fatal(err)
-	}
-}
-
-type Post struct {
-	Title       string
-	PublishedAt time.Time
-	Comments    int
-}
-
-func ExampleGetMulti() {
-
-	keys := []*datastore.Key{
-		datastore.NewKey(ctx, "Post", "post1", 0, nil),
-		datastore.NewKey(ctx, "Post", "post2", 0, nil),
-		datastore.NewKey(ctx, "Post", "post3", 0, nil),
-	}
-	posts := make([]Post, 3)
-	if err := datastore.GetMulti(ctx, keys, posts); err != nil {
-		log.Println(err)
-	}
-}
-
-func ExamplePutMulti_slice() {
-
-	keys := []*datastore.Key{
-		datastore.NewKey(ctx, "Post", "post1", 0, nil),
-		datastore.NewKey(ctx, "Post", "post2", 0, nil),
-	}
-
-	// PutMulti with a Post slice.
-	posts := []*Post{
-		{Title: "Post 1", PublishedAt: time.Now()},
-		{Title: "Post 2", PublishedAt: time.Now()},
-	}
-	if _, err := datastore.PutMulti(ctx, keys, posts); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func ExamplePutMulti_interfaceSlice() {
-
-	keys := []*datastore.Key{
-		datastore.NewKey(ctx, "Post", "post1", 0, nil),
-		datastore.NewKey(ctx, "Post", "post2", 0, nil),
-	}
-
-	// PutMulti with an empty interface slice.
-	posts := []interface{}{
-		&Post{Title: "Post 1", PublishedAt: time.Now()},
-		&Post{Title: "Post 2", PublishedAt: time.Now()},
-	}
-	if _, err := datastore.PutMulti(ctx, keys, posts); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func ExampleQuery() {
-
-	// Count the number of the post entities.
-	n, err := datastore.NewQuery("Post").Count(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Println("There are %d posts.", n)
-
-	// List the posts published since yesterday.
-	yesterday := time.Now().Add(-24 * time.Hour)
-
-	it := datastore.NewQuery("Post").Filter("PublishedAt >", yesterday).Run(ctx)
-	// Use the iterator.
-	_ = it
-
-	// Order the posts by the number of comments they have recieved.
-	datastore.NewQuery("Post").Order("-Comments")
-
-	// Start listing from an offset and limit the results.
-	datastore.NewQuery("Post").Offset(20).Limit(10)
+func TestSelectLimit(t *testing.T) {
+	data := struct {
+		Title string
+		Count int
+	}{}
+	validateQuerySpec(t, QuerySpec{
+		Sql:             "select title, count from DataUxTestArticle LIMIT 1;",
+		ExpectRowCt:     1,
+		ValidateRowData: func() {},
+		RowData:         &data,
+	})
 }

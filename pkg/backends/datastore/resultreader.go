@@ -33,12 +33,8 @@ type ResultReader struct {
 	cursor        int
 	proj          *expr.Projection
 	cols          []string
-	Docs          []u.JsonHelper
 	Vals          [][]driver.Value
 	Total         int
-	Aggs          u.JsonHelper
-	ScrollId      string
-	query         *datastore.Query
 	Req           *SqlToDatstore
 }
 
@@ -48,9 +44,8 @@ type ResultReaderNext struct {
 	*ResultReader
 }
 
-func NewResultReader(req *SqlToDatstore, q *datastore.Query) *ResultReader {
+func NewResultReader(req *SqlToDatstore) *ResultReader {
 	m := &ResultReader{}
-	m.query = q
 	m.Req = req
 	return m
 }
@@ -77,7 +72,7 @@ func (m *ResultReader) buildProjection() {
 	} else {
 		for _, col := range m.Req.sel.Columns {
 			if fld, ok := m.Req.tbl.FieldMap[col.SourceField]; ok {
-				u.Debugf("column: %#v", col)
+				//u.Debugf("column: %#v", col)
 				cols = append(cols, expr.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
 			} else {
 				u.Debugf("Could not find: '%v' in %#v", col.SourceField, m.Req.tbl.FieldMap)
@@ -138,13 +133,14 @@ func (m *ResultReader) Finalize() error {
 	}()
 
 	sql := m.Req.sel
+	q := m.Req.query
 
 	m.Vals = make([][]driver.Value, 0)
 
 	if sql.CountStar() {
 		// Count *
 		vals := make([]driver.Value, 1)
-		ct, err := m.query.Count(m.Req.dsCtx)
+		ct, err := q.Count(m.Req.dsCtx)
 		if err != nil {
 			u.Errorf("could not get count: %v", err)
 			return err
@@ -157,10 +153,13 @@ func (m *ResultReader) Finalize() error {
 	cols := m.proj.Columns
 	if len(cols) == 0 {
 		u.Errorf("WTF?  no cols? %v", cols)
+	} else {
+		//q = q.Project(m.cols...)
+		//q.Project(m.cols...)
 	}
 
 	n := time.Now()
-	iter := m.query.Run(m.Req.dsCtx)
+	iter := q.Run(m.Req.dsCtx)
 	for {
 		row := Row{}
 		key, err := iter.Next(&row)
@@ -173,6 +172,7 @@ func (m *ResultReader) Finalize() error {
 		}
 		row.key = key
 		m.Vals = append(m.Vals, row.Vals)
+		u.Debugf("vals:  %v", row.Vals)
 	}
 	u.Infof("finished query, took: %v for %v rows", time.Now().Sub(n), len(m.Vals))
 	return nil
@@ -184,7 +184,7 @@ func (m *ResultReader) Next(row []driver.Value) error {
 		return io.EOF
 	}
 	m.cursor++
-	//u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
+	u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
 	for i, val := range m.Vals[m.cursor-1] {
 		row[i] = val
 	}
@@ -245,4 +245,7 @@ func (m *Row) Load(props []datastore.Property) error {
 		m.Vals[i] = p.Value
 	}
 	return nil
+}
+func (m *Row) Save() ([]datastore.Property, error) {
+	return nil, nil
 }

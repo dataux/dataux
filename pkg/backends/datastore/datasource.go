@@ -66,6 +66,7 @@ func NewGoogleDataStoreDataSource(schema *models.SourceSchema, conf *models.Conf
 	m.db = strings.ToLower(schema.Db)
 	// Register our datasource.Datasources in registry
 	m.Init()
+	u.Infof("datasource.Register: %v", DataSourceLabel)
 	datasource.Register(DataSourceLabel, &m)
 	return &m
 }
@@ -146,15 +147,17 @@ func (m *GoogleDSDataSource) Tables() []string {
 	return m.schema.TableNames
 }
 
-func (m *GoogleDSDataSource) Open(collectionName string) (datasource.SourceConn, error) {
-	u.Debugf("Open(%v)", collectionName)
+func (m *GoogleDSDataSource) Open(tableName string) (datasource.SourceConn, error) {
+	u.Debugf("Open(%v)", tableName)
 	if m.schema == nil {
+		u.Warnf("no schema?")
 		return nil, nil
 	}
-	tbl := m.schema.Tables[collectionName]
+	tableName = strings.ToLower(tableName)
+	tbl := m.schema.Tables[tableName]
 	if tbl == nil {
-		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Db, collectionName)
-		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, collectionName)
+		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Db, tableName)
+		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, tableName)
 	}
 
 	//es := NewSqlToMgo(tbl, m.sess)
@@ -165,6 +168,9 @@ func (m *GoogleDSDataSource) Open(collectionName string) (datasource.SourceConn,
 	// 	return nil, err
 	// }
 	//return es, nil
+	sqlDs := NewSqlToDatstore(tbl, m.dsCtx)
+	return sqlDs, nil
+
 	return nil, nil
 }
 
@@ -183,7 +189,7 @@ func (m *GoogleDSDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask
 	u.Debugf("SqlToDatstore: %#v", sqlDs)
 	resp, err := sqlDs.Query(stmt)
 	if err != nil {
-		u.Error(err)
+		u.Errorf("Google datastore query interpreter failed: %v", err)
 		return nil, err
 	}
 
@@ -222,8 +228,9 @@ func (m *GoogleDSDataSource) loadTableNames() error {
 	rows := pageQuery(datastore.NewQuery("__kind__").Run(m.dsCtx))
 	for _, row := range rows {
 		if !strings.HasPrefix(row.key.Name(), "__") {
-			u.Warnf("%#v", row.key)
-			tables = append(tables, strings.ToLower(row.key.Name()))
+			//u.Warnf("%#v", row.key)
+			tables = append(tables, row.key.Name())
+			m.loadTableSchema(row.key.Name())
 		}
 
 	}
@@ -240,11 +247,13 @@ func titleCase(table string) string {
 
 func (m *GoogleDSDataSource) loadTableSchema(table string) (*models.Table, error) {
 
+	//u.LogTracef(u.WARN, "hello %q", table)
 	if m.schema == nil {
 		return nil, fmt.Errorf("no schema in use")
 	}
 	// check cache first
-	if tbl, ok := m.schema.Tables[table]; ok && tbl.Current() {
+	tableLower := strings.ToLower(table)
+	if tbl, ok := m.schema.Tables[tableLower]; ok && tbl.Current() {
 		return tbl, nil
 	}
 
@@ -255,26 +264,65 @@ func (m *GoogleDSDataSource) loadTableSchema(table string) (*models.Table, error
 			- Need to recurse through enough records to get good idea of types
 	*/
 	tbl := models.NewTable(table, m.schema)
-	table = titleCase(table)
-	u.Infof("gettint table info: %s", table)
+	//table = titleCase(table)
+	u.Infof("gettint table info for schema:%p  %s", m.schema, table)
+	for k, _ := range m.schema.Tables {
+		u.Debugf("current table: %v", k)
+	}
 	props := pageQuery(datastore.NewQuery(table).Limit(20).Run(m.dsCtx))
 	for _, prop := range props {
-		u.Warnf("%#v   %#v", prop.key, prop.props)
+		//u.Warnf("%#v   %#v", prop.key, prop.props)
 		for _, p := range prop.props {
 
-			//tables = append(tables, strings.ToLower(row.key.Name()))
-			colName := p.Name
+			colName := strings.ToLower(p.Name)
+			//u.Debugf("found col: %s %T=%v", colName, iVal, iVal)
+			if tbl.HasField(colName) {
+				continue
+			}
 			switch val := p.Value.(type) {
 			case *datastore.Key:
-				u.Debugf("found datastore.Key: %v='%#v'", colName, val)
+				//u.Debugf("found datastore.Key: %v='%#v'", colName, val)
 				tbl.AddField(models.NewField(p.Name, value.StringType, 24, "Key"))
 				tbl.AddValues([]driver.Value{p.Name, "string", "NO", "PRI", "Key", ""})
+			case string:
+				//u.Debugf("found property.Value string: %v='%#v'", colName, val)
+				tbl.AddField(models.NewField(colName, value.StringType, 32, "string"))
+				tbl.AddValues([]driver.Value{colName, "string", "NO", "", "", "string"})
+			case int:
+				//u.Debugf("found int: %v='%v'", colName, val)
+				tbl.AddField(models.NewField(colName, value.IntType, 32, "int"))
+				tbl.AddValues([]driver.Value{colName, "int", "NO", "", "", "int"})
+			case int64:
+				//u.Debugf("found int64: %v='%v'", colName, val)
+				tbl.AddField(models.NewField(colName, value.IntType, 32, "long"))
+				tbl.AddValues([]driver.Value{colName, "long", "NO", "", "", "long"})
+			case float64:
+				//u.Debugf("found float64: %v='%v'", colName, val)
+				tbl.AddField(models.NewField(colName, value.NumberType, 32, "float64"))
+				tbl.AddValues([]driver.Value{colName, "float64", "NO", "", "", "float64"})
+			case bool:
+				//u.Debugf("found string: %v='%v'", colName, val)
+				tbl.AddField(models.NewField(colName, value.BoolType, 1, "bool"))
+				tbl.AddValues([]driver.Value{colName, "bool", "NO", "", "", "bool"})
+			case time.Time:
+				//u.Debugf("found time.Time: %v='%v'", colName, val)
+				tbl.AddField(models.NewField(colName, value.TimeType, 32, "datetime"))
+				tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
+			// case *time.Time:
+			// 	//u.Debugf("found time.Time: %v='%v'", colName, val)
+			// 	tbl.AddField(models.NewField(colName, value.TimeType, 32, "datetime"))
+			// 	tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
+			case []uint8:
+				tbl.AddField(models.NewField(colName, value.ByteSliceType, 256, "[]byte"))
+				tbl.AddValues([]driver.Value{colName, "binary", "NO", "", "", "[]byte"})
 			default:
-				u.Warnf("%#v", p)
+				u.Warnf("%T  %#v", val, p)
 			}
 		}
 	}
 	if len(tbl.FieldMap) > 0 {
+		u.Infof("caching schem:%p   %q", m.schema, tableLower)
+		m.schema.Tables[tableLower] = tbl
 		return tbl, nil
 	}
 

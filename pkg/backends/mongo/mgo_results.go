@@ -76,11 +76,11 @@ func (m *ResultReader) buildProjection() {
 	} else {
 		for _, col := range m.Req.sel.Columns {
 			if fld, ok := m.Req.tbl.FieldMap[col.SourceField]; ok {
-				u.Debugf("column: %#v", col)
+				//u.Debugf("column: %#v", col)
 				cols = append(cols, expr.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
 			} else {
 				u.Debugf("Could not find: '%v' in %#v", col.SourceField, m.Req.tbl.FieldMap)
-				u.Warnf("%#v", col)
+				//u.Warnf("%#v", col)
 			}
 		}
 	}

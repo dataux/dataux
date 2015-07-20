@@ -167,7 +167,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	switch stmt := builder.Job.Stmt.(type) {
 	case *expr.SqlSelect, *expr.SqlShow, *expr.SqlDescribe:
 
-		u.Debugf("adding mysql result writer: %#v", builder.Projection)
+		//u.Debugf("adding mysql result writer: %#v", builder.Projection)
 		resultWriter := NewMysqlResultWriter(writer, builder.Projection, m.schema)
 		builder.Job.Tasks.Add(resultWriter)
 

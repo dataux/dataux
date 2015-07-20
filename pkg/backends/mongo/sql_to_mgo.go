@@ -121,6 +121,7 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	}
 
 	filterBy, _ := json.Marshal(m.filter)
+	u.Infof("filter: %#v", m.filter)
 	u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v", m.schema.Db, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
 	query := m.sess.DB(m.schema.Db).C(m.tbl.Name).Find(m.filter).Limit(limit)
 
@@ -264,7 +265,7 @@ func (m *SqlToMgo) WalkAggs(cur expr.Node) (q bson.M, _ error) {
 //
 //  TODO:  think we need to separate Value Nodes from those that return types?
 func (m *SqlToMgo) WalkNode(cur expr.Node, q *bson.M) (value.Value, error) {
-	u.Debugf("WalkNode: %#v", cur)
+	//u.Debugf("WalkNode: %#v", cur)
 	switch curNode := cur.(type) {
 	case *expr.NumberNode, *expr.StringNode:
 		nodeVal, ok := vm.Eval(nil, cur)
@@ -303,17 +304,19 @@ func (m *SqlToMgo) WalkNode(cur expr.Node, q *bson.M) (value.Value, error) {
 
 func (m *SqlToMgo) walkFilterTri(node *expr.TriNode, q *bson.M) (value.Value, error) {
 
+	//u.Infof("args: %#v", node.Args)
 	arg1val, aok := vm.Eval(nil, node.Args[0])
 	//u.Debugf("arg1? %v  ok?%v", arg1val, aok)
 	arg2val, bok := vm.Eval(nil, node.Args[1])
 	arg3val, cok := vm.Eval(nil, node.Args[2])
-	u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
+	//u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
 	if !aok || !bok || !cok {
 		return nil, fmt.Errorf("Could not evaluate args: %v", node.StringAST())
 	}
-	u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
+	//u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
 	switch node.Operator.T {
 	case lex.TokenBetween:
+		//u.Warnf("between? %T", arg2val.Value())
 		*q = bson.M{arg1val.ToString(): bson.M{"$gte": arg2val.Value(), "$lte": arg3val.Value()}}
 	default:
 		u.Warnf("not implemented ")
@@ -332,7 +335,7 @@ func (m *SqlToMgo) walkMultiFilter(node *expr.MultiArgNode, q *bson.M) (value.Va
 
 	// First argument must be field name in this context
 	fldName := node.Args[0].String()
-	u.Debugf("walkMulti: %v", node.StringAST())
+	//u.Debugf("walkMulti: %v", node.StringAST())
 	switch node.Operator.T {
 	case lex.TokenIN:
 		//q = bson.M{"range": bson.M{arg1val.ToString(): bson.M{"gte": arg2val.ToString(), "lte": arg3val.ToString()}}}

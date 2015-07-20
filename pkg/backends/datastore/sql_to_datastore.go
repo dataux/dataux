@@ -3,10 +3,8 @@ package datastore
 import (
 	"encoding/json"
 	"fmt"
-	//"strings"
 
 	"golang.org/x/net/context"
-	//"google.golang.org/cloud"
 	"google.golang.org/cloud/datastore"
 
 	u "github.com/araddon/gou"
@@ -14,7 +12,7 @@ import (
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
-	"github.com/araddon/qlbridge/value"
+	//"github.com/araddon/qlbridge/value"
 	"github.com/araddon/qlbridge/vm"
 	"github.com/dataux/dataux/pkg/models"
 )
@@ -58,7 +56,8 @@ func (m *SqlToDatstore) Host() string {
 
 func (m *SqlToDatstore) Query(req *expr.SqlSelect) (*ResultReader, error) {
 
-	m.query = datastore.NewQuery(titleCase(m.tbl.Name))
+	u.Debugf("%s", m.tbl.Name)
+	m.query = datastore.NewQuery(m.tbl.NameOriginal)
 	var err error
 	m.sel = req
 	limit := req.Limit
@@ -67,20 +66,21 @@ func (m *SqlToDatstore) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	}
 
 	if req.Where != nil {
-		_, err = m.WalkNode(req.Where.Expr)
+		err = m.WalkWhereNode(req.Where.Expr)
 		if err != nil {
 			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.StringAST(), err)
 			return nil, err
 		}
 	}
 
+	// Evaluate the Select columns
+	//err = m.WalkSelectList()
+	// if err != nil {
+	// 	u.Warnf("Could Not evaluate Columns/Aggs %s %v", req.Columns.String(), err)
+	// 	return nil, err
+	// }
 	/*
-		// Evaluate the Select columns
-		err = m.WalkSelectList()
-		if err != nil {
-			u.Warnf("Could Not evaluate Columns/Aggs %s %v", req.Columns.String(), err)
-			return nil, err
-		}
+
 
 		if len(req.GroupBy) > 0 {
 			err = m.WalkGroupBy()
@@ -127,7 +127,13 @@ func (m *SqlToDatstore) Query(req *expr.SqlSelect) (*ResultReader, error) {
 		resultReader.Finalize()
 		return resultReader, nil
 	*/
-	return nil, fmt.Errorf("not implemented")
+	//return nil, fmt.Errorf("not implemented")
+
+	resultReader := NewResultReader(m)
+	m.resp = resultReader
+	resultReader.Finalize()
+	return resultReader, nil
+	return nil, nil
 }
 
 func (m *SqlToDatstore) Accept(visitor expr.SubVisitor) (datasource.Scanner, error) {
@@ -190,6 +196,7 @@ func (m *SqlToDatstore) WalkSelectList() error {
 	}
 	return nil
 }
+
 
 // Aggregations from the <select_list>
 //
@@ -261,139 +268,97 @@ func (m *SqlToDatstore) WalkAggs(cur expr.Node) (q bson.M, _ error) {
 }
 
 */
-// Walk() an expression, and its AND/OR/() logic to create an appropriately
-//  nested json document for elasticsearch queries
+// WalkWhereNode() an expression, and its AND logic to create an appropriately
+//  request for google datastore queries
 //
-//  TODO:  think we need to separate Value Nodes from those that return types?
-func (m *SqlToDatstore) WalkNode(cur expr.Node) (value.Value, error) {
-	u.Debugf("WalkNode: %#v", cur)
+//  Limititations of Google Datastore
+//  - https://cloud.google.com/datastore/docs/concepts/queries#Datastore_Restrictions_on_queries
+//  - no OR filters
+//  -
+func (m *SqlToDatstore) WalkWhereNode(cur expr.Node) error {
+	u.Debugf("WalkWhereNode: %s", cur)
 	switch curNode := cur.(type) {
 	case *expr.NumberNode, *expr.StringNode:
 		nodeVal, ok := vm.Eval(nil, cur)
 		if !ok {
 			u.Warnf("not ok %v", cur)
-			return nil, fmt.Errorf("could not evaluate: %v", cur.StringAST())
+			return fmt.Errorf("could not evaluate: %v", cur.StringAST())
 		}
 		u.Infof("nodeval? %v", nodeVal)
-		return nodeVal, nil
+		return nil
 		// What do we do here?
 	case *expr.BinaryNode:
 		return m.walkFilterBinary(curNode)
 	case *expr.TriNode: // Between
-		panic("not implemented")
-		//return m.walkFilterTri(curNode)
+		return fmt.Errorf("Between and other Tri-Node ops not implemented")
 	case *expr.UnaryNode:
-		//return m.walkUnary(curNode)
-		u.Warnf("not implemented: %#v", curNode)
-		return nil, fmt.Errorf("Not implemented urnary function: %v", curNode.StringAST())
+		return fmt.Errorf("Not implemented urnary function: %v", curNode.StringAST())
 	case *expr.FuncNode:
-		panic("not implemented")
-		//return m.walkFilterFunc(curNode)
+		return fmt.Errorf("Not implemented function: %v", curNode.StringAST())
 	case *expr.IdentityNode:
-		u.Warnf("wat????   %v", curNode.StringAST())
-		return value.NewStringValue(curNode.String()), nil
+		u.Warnf("what uses identity node in Where?  %v", curNode.StringAST())
+		return fmt.Errorf("Not implemented identity node: %v", curNode.StringAST())
 	case *expr.MultiArgNode:
-		panic("not implemented")
-		//return m.walkMultiFilter(curNode)
+		return fmt.Errorf("Not implemented multi arg: %v", curNode.StringAST())
 	default:
-		u.Errorf("unrecognized T:%T  %v", cur, cur)
-		panic("Unrecognized node type")
+		return fmt.Errorf("Not implemented node: %v", curNode.StringAST())
 	}
-	return nil, nil
+	return nil
 }
 
 // Walk Binary Node:   convert to mostly Filters if possible
 //
-//	x = y             =>   {field: {"$eq": value}}
-//  x != y            =>   db.inventory.find( { qty: { $ne: 20 } } )
+//	x = y             =>   x = y
+//  x != y            =>   there are special limits in Google Datastore, must only have one unequal filter
+//  x like "list%"    =    prefix filter in
 //
-//  x like "list%"    =>   db.users.find( { user_id: /^list/ } )
-//  x like "%list%"   =>   db.users.find( { user_id: /bc/ } )
-//
-func (m *SqlToDatstore) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Value, error) {
+// TODO:  Poly Fill features
+//  x like "%list%"
+//  - ancestor filters?
+func (m *SqlToDatstore) walkFilterBinary(node *expr.BinaryNode) error {
 
+	// How do we detect if this is a prefix query?  Probably would
+	// have a column-level flag on schema?
 	lhval, lhok := vm.Eval(nil, node.Args[0])
 	rhval, rhok := vm.Eval(nil, node.Args[1])
 	if !lhok || !rhok {
 		u.Warnf("not ok: %v  l:%v  r:%v", node, lhval, rhval)
-		return nil, fmt.Errorf("could not evaluate: %v", node.StringAST())
+		return fmt.Errorf("could not evaluate: %v", node.StringAST())
 	}
 	u.Debugf("walkBinary: %v  l:%v  r:%v  %T  %T", node, lhval, rhval, lhval, rhval)
 	switch node.Operator.T {
 	case lex.TokenLogicAnd:
-		// this doesn't yet implement x AND y AND z
-		lhq, rhq := bson.M{}, bson.M{}
-		_, err := m.WalkNode(node.Args[0], &lhq)
-		_, err2 := m.WalkNode(node.Args[1], &rhq)
-		if err != nil || err2 != nil {
-			u.Errorf("could not get children nodes? %v %v %v", err, err2, node)
-			return nil, fmt.Errorf("could not evaluate: %v", node.StringAST())
+		// AND is assumed by datastore
+		for _, arg := range node.Args {
+			err := m.WalkWhereNode(arg)
+			if err != nil {
+				u.Errorf("could not evaluate where nodes? %v %s", err, arg)
+				return fmt.Errorf("could not evaluate: %s", arg.StringAST())
+			}
 		}
-		*q = bson.M{"and": []bson.M{lhq, rhq}}
 	case lex.TokenLogicOr:
-		// this doesn't yet implement x AND y AND z
-		lhq, rhq := bson.M{}, bson.M{}
-		_, err := m.WalkNode(node.Args[0], &lhq)
-		_, err2 := m.WalkNode(node.Args[1], &rhq)
-		if err != nil || err2 != nil {
-			u.Errorf("could not get children nodes? %v %v %v", err, err2, node)
-			return nil, fmt.Errorf("could not evaluate: %v", node.StringAST())
-		}
-		*q = bson.M{"or": []bson.M{lhq, rhq}}
+		return fmt.Errorf("DataStore does not implement OR: %v", node.StringAST())
 	case lex.TokenEqual, lex.TokenEqualEqual:
-		// The $eq expression is equivalent to { field: <value> }.
-		if lhval != nil && rhval != nil {
-			*q = bson.M{lhval.ToString(): rhval.Value()}
-			//u.Infof("m=%#v type=%v", q, rhval.Type())
-			return nil, nil
-		}
-		if lhval != nil || rhval != nil {
-			u.Infof("has stuff?  %v", node.StringAST())
-		}
+		m.query.Filter(fmt.Sprintf("%q =", lhval.ToString()), rhval.Value())
 	case lex.TokenNE:
-		// db.inventory.find( { qty: { $ne: 20 } } )
-		*q = bson.M{lhval.ToString(): bson.M{"$ne": rhval.Value()}}
+		// WARNING:  datastore only allows 1, warn?
+		m.query.Filter(fmt.Sprintf("%q !=", lhval.ToString()), rhval.Value())
 	case lex.TokenLE:
-		// db.inventory.find( { qty: { $lte: 20 } } )
-		*q = bson.M{lhval.ToString(): bson.M{"$lte": rhval.Value()}}
+		m.query.Filter(fmt.Sprintf("%q <=", lhval.ToString()), rhval.Value())
 	case lex.TokenLT:
-		// db.inventory.find( { qty: { $lt: 20 } } )
-		*q = bson.M{lhval.ToString(): bson.M{"$lt": rhval.Value()}}
+		m.query.Filter(fmt.Sprintf("%q <", lhval.ToString()), rhval.Value())
 	case lex.TokenGE:
-		// db.inventory.find( { qty: { $gte: 20 } } )
-		*q = bson.M{lhval.ToString(): bson.M{"$gte": rhval.Value()}}
+		m.query.Filter(fmt.Sprintf("%q >=", lhval.ToString()), rhval.Value())
 	case lex.TokenGT:
-		// db.inventory.find( { qty: { $gt: 20 } } )
-		*q = bson.M{lhval.ToString(): bson.M{"$gt": rhval.Value()}}
+		m.query.Filter(fmt.Sprintf("%q >", lhval.ToString()), rhval.Value())
 	case lex.TokenLike:
-		// { $text: { $search: <string>, $language: <string> } }
-		// { <field>: { $regex: /pattern/, $options: '<options>' } }
-
-		rhs := rhval.ToString()
-		startsPct := strings.Index(rhs, "%") == 0
-		endsPct := strings.LastIndex(rhs, "%") == len(rhs)-1
-		rhs = strings.Replace(rhs, "%", "", -1)
-		u.Infof("LIKE:  %v  startsPCt?%v  endsPct?%v", rhs, startsPct, endsPct)
-		// TODO:   this isn't working.   Not sure why
-		if startsPct && endsPct {
-			// user_id like "%bc%"
-			// db.users.find( { user_id: /bc/ } )
-			*q = bson.M{lhval.ToString(): bson.RegEx{fmt.Sprintf(`%s`, rhs), "i"}}
-		} else if endsPct {
-			//  WHERE user_id like "bc%"
-			// db.users.find( { user_id: /^bc/ } )
-			*q = bson.M{lhval.ToString(): bson.RegEx{fmt.Sprintf(`^%s`, rhs), "i"}}
-		} else {
-			*q = bson.M{lhval.ToString(): bson.RegEx{fmt.Sprintf(`%s`, rhs), "i"}}
-		}
-
+		// Ancestors support some type of prefix query?
+		return fmt.Errorf("Like not implemented %v", node.StringAST())
 	default:
 		u.Warnf("not implemented: %v", node.Operator)
+		return fmt.Errorf("not implemented %v", node.StringAST())
 	}
-	if q != nil {
-		return nil, nil
-	}
-	return nil, fmt.Errorf("not implemented %v", node.StringAST())
+	return nil
 }
 
 /*
