@@ -176,8 +176,8 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	//	return m.handleShow(sql, stmt)
 	// case *sqlparser.SimpleSelect:
 	// 		return m.handleSimpleSelect(sql, stmt)
-	// case *sqlparser.Insert:
-	// 	return m.handleExec(stmt, sql, nil)
+	// case *expr.SqlInsert:
+	// 	return m.handleInsert(stmt, sql, nil)
 	// case *sqlparser.Update:
 	// 	return m.handleExec(stmt, sql, nil)
 	// case *sqlparser.Delete:
