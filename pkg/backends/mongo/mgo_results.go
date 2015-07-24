@@ -169,7 +169,13 @@ func (m *ResultReader) Finalize() error {
 		vals := make([]driver.Value, len(cols))
 		for i, col := range cols {
 			if val, ok := bm[col.Name]; ok {
-				vals[i] = val
+				switch vt := val.(type) {
+				case bson.ObjectId:
+					vals[i] = vt.Hex()
+				default:
+					vals[i] = vt
+				}
+
 			} else {
 				// Not returned in query, sql hates missing fields
 				// Should we zero/empty fill here or in mysql handler?
