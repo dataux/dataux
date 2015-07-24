@@ -256,6 +256,26 @@ func TestSimpleRowSelect(t *testing.T) {
 		RowData: &data,
 	})
 	validateQuerySpec(t, QuerySpec{
+		Sql:         "select title, count, deleted from article WHERE `author` = \"aaron\" AND count = 22 ",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			//u.Infof("%v", data)
+			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
+			assert.Tf(t, data.Title == "article1", "%v", data)
+		},
+		RowData: &data,
+	})
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "select title, count, deleted from article WHERE `author` = \"notarealname\" OR count = 22 ",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			//u.Infof("%v", data)
+			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
+			assert.Tf(t, data.Title == "article1", "%v", data)
+		},
+		RowData: &data,
+	})
+	validateQuerySpec(t, QuerySpec{
 		Sql:         "select title, count,deleted from article WHERE count = 22;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {

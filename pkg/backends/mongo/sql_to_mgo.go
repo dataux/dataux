@@ -386,7 +386,7 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 			u.Errorf("could not get children nodes? %v %v %v", err, err2, node)
 			return nil, fmt.Errorf("could not evaluate: %v", node.StringAST())
 		}
-		*q = bson.M{"and": []bson.M{lhq, rhq}}
+		*q = bson.M{"$and": []bson.M{lhq, rhq}}
 	case lex.TokenLogicOr:
 		// this doesn't yet implement x AND y AND z
 		lhq, rhq := bson.M{}, bson.M{}
@@ -396,7 +396,7 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 			u.Errorf("could not get children nodes? %v %v %v", err, err2, node)
 			return nil, fmt.Errorf("could not evaluate: %v", node.StringAST())
 		}
-		*q = bson.M{"or": []bson.M{lhq, rhq}}
+		*q = bson.M{"$or": []bson.M{lhq, rhq}}
 	case lex.TokenEqual, lex.TokenEqualEqual:
 		// The $eq expression is equivalent to { field: <value> }.
 		if lhval != nil && rhval != nil {
