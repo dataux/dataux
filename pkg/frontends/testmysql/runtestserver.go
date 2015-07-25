@@ -7,6 +7,7 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
+
 	"github.com/dataux/dataux/pkg/frontends"
 	"github.com/dataux/dataux/pkg/models"
 	"github.com/dataux/dataux/vendor/mixer/client"
@@ -45,7 +46,7 @@ frontends [
 schemas : [
   {
     name : datauxtest
-    sources : [ "mgo_datauxtest", "es_test", "csvlocal" ]
+    sources : [ "mgo_datauxtest", "es_test", "csvlocal" , "google_ds_test"]
   }
 ]
 
@@ -62,6 +63,10 @@ sources : [
   {
     name : csvlocal
     type : csv
+  },
+  {
+    name : google_ds_test
+    type : google-datastore
   },
   {
     name : mysql_test
@@ -85,6 +90,11 @@ nodes : [
     name    : csvlocal1
     type    : csv
     address : "$GOPATH/src/github.com/dataux/dataux/data"
+  },
+  {
+    name    : googleds1
+    type    : google-datastore
+    address : "$GOOGLEJWT"
   }
 ]
 

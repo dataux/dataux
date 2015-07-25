@@ -4,7 +4,7 @@ import (
 	"flag"
 
 	u "github.com/araddon/gou"
-	"github.com/dataux/dataux/pkg/testutil"
+	"github.com/dataux/dataux/pkg/testdata"
 )
 
 /*
@@ -26,5 +26,5 @@ func init() {
 
 func main() {
 	flag.Parse()
-	testutil.LoadOnce(*eshost)
+	testdata.LoadGithubToEsOnce(*eshost)
 }

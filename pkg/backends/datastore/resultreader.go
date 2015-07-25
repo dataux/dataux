@@ -1,12 +1,13 @@
-package mongo
+package datastore
 
 import (
 	"database/sql/driver"
 	"io"
 	"time"
 
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+	//"golang.org/x/net/context"
+	//"google.golang.org/cloud"
+	"google.golang.org/cloud/datastore"
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
@@ -23,7 +24,7 @@ var (
 	_ datasource.Scanner    = (*ResultReader)(nil)
 )
 
-// Mongo ResultReader implements result paging, reading
+// Google Datastore ResultReader implements result paging, reading
 // - driver.Rows
 type ResultReader struct {
 	exit          <-chan bool
@@ -32,13 +33,9 @@ type ResultReader struct {
 	cursor        int
 	proj          *expr.Projection
 	cols          []string
-	Docs          []u.JsonHelper
 	Vals          [][]driver.Value
 	Total         int
-	Aggs          u.JsonHelper
-	ScrollId      string
-	query         *mgo.Query
-	Req           *SqlToMgo
+	Req           *SqlToDatstore
 }
 
 // A wrapper, allowing us to implement sql/driver Next() interface
@@ -47,9 +44,8 @@ type ResultReaderNext struct {
 	*ResultReader
 }
 
-func NewResultReader(req *SqlToMgo, q *mgo.Query) *ResultReader {
+func NewResultReader(req *SqlToDatstore) *ResultReader {
 	m := &ResultReader{}
-	m.query = q
 	m.Req = req
 	return m
 }
@@ -80,7 +76,7 @@ func (m *ResultReader) buildProjection() {
 				cols = append(cols, expr.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
 			} else {
 				u.Debugf("Could not find: '%v' in %#v", col.SourceField, m.Req.tbl.FieldMap)
-				//u.Warnf("%#v", col)
+				u.Warnf("%#v", col)
 			}
 		}
 	}
@@ -137,13 +133,15 @@ func (m *ResultReader) Finalize() error {
 	}()
 
 	sql := m.Req.sel
+	//u.Infof("query: %p", m.Req.query)
+	q := m.Req.query
 
 	m.Vals = make([][]driver.Value, 0)
 
 	if sql.CountStar() {
 		// Count *
 		vals := make([]driver.Value, 1)
-		ct, err := m.query.Count()
+		ct, err := q.Count(m.Req.dsCtx)
 		if err != nil {
 			u.Errorf("could not get count: %v", err)
 			return err
@@ -154,42 +152,70 @@ func (m *ResultReader) Finalize() error {
 	}
 
 	cols := m.proj.Columns
+	needsProjection := false
+	posMap := make([]int, len(cols))
 	if len(cols) == 0 {
 		u.Errorf("WTF?  no cols? %v", cols)
-	}
+	} else {
+		// Doing projection on server side datastore really seems to
+		// introduce all kinds of weird errors and rules, so mostly just
+		// do projection here in proxy
 
-	n := time.Now()
-	iter := m.query.Iter()
-	for {
-		var bm bson.M
-		if !iter.Next(&bm) {
-			break
-		}
-		//u.Debugf("col? %v", bm)
-		vals := make([]driver.Value, len(cols))
+		// q = q.Project(m.cols...)
+		// q.Project(m.cols...)
+
+		needsProjection = true
 		for i, col := range cols {
-			if val, ok := bm[col.Name]; ok {
-				switch vt := val.(type) {
-				case bson.ObjectId:
-					vals[i] = vt.Hex()
-				default:
-					vals[i] = vt
-				}
-
-			} else {
-				// Not returned in query, sql hates missing fields
-				// Should we zero/empty fill here or in mysql handler?
-				if col.Type == value.StringType {
-					vals[i] = ""
+			for fieldIndex, fld := range m.Req.tbl.Fields {
+				//u.Debugf("name: %v orig:%v   name:%v", fld.Name, fieldIndex, col.Name)
+				if col.Name == fld.Name {
+					posMap[i] = fieldIndex
+					break
 				}
 			}
 		}
-		//u.Debugf("vals=%#v", vals)
-		m.Vals = append(m.Vals, vals)
 	}
-	if err := iter.Close(); err != nil {
-		u.Errorf("could not iter: %v", err)
-		return err
+	if m.Req.sel.Limit > 0 {
+		//u.Infof("setting limit: %v", m.Req.sel.Limit)
+		q = q.Limit(m.Req.sel.Limit)
+	}
+	n := time.Now()
+	//u.Infof("query: %p", q)
+	//q.DebugInfo()
+	iter := q.Run(m.Req.dsCtx)
+	for {
+		row := Row{}
+		key, err := iter.Next(&row)
+		if err != nil {
+			if err == datastore.Done {
+				break
+			}
+			u.Errorf("error: %v", err)
+			break
+		}
+		row.key = key
+		if needsProjection {
+			vals := make([]driver.Value, len(cols))
+			for i, idx := range posMap {
+				vals[i] = row.Vals[idx]
+				//u.Debugf("posMap  %v", posMap[i])
+				// switch vt := vals[i].(type) {
+				// case []uint8:
+				// 	u.Infof("json? %d  %s  val: col:%d  %T  %s", i, col.As, col.Col.Index, vals[i], string(vt))
+				// case string:
+				// 	u.Infof("STR %d  %s  val: col:%d  %T  %v", i, col.As, col.Col.Index, vals[i], vals[i])
+				// default:
+				// 	u.Infof("??? %d  %s  val: col:%d  %T  %v", i, col.As, col.Col.Index, vals[i], vals[i])
+				// }
+
+			}
+			//u.Debugf("%v", vals)
+			m.Vals = append(m.Vals, vals)
+		} else {
+			m.Vals = append(m.Vals, row.Vals)
+		}
+
+		//u.Debugf("vals:  %v", row.Vals)
 	}
 	u.Infof("finished query, took: %v for %v rows", time.Now().Sub(n), len(m.Vals))
 	return nil
@@ -201,7 +227,7 @@ func (m *ResultReader) Next(row []driver.Value) error {
 		return io.EOF
 	}
 	m.cursor++
-	//u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
+	u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
 	for i, val := range m.Vals[m.cursor-1] {
 		row[i] = val
 	}
@@ -226,4 +252,43 @@ func (m *ResultReaderNext) Next() datasource.Message {
 		//u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
 		return &datasource.SqlDriverMessage{m.Vals[m.cursor-1], uint64(m.cursor)}
 	}
+}
+
+func pageRowsQuery(iter *datastore.Iterator) []Row {
+	rows := make([]Row, 0)
+	for {
+		row := Row{}
+		if key, err := iter.Next(&row); err != nil {
+			if err == datastore.Done {
+				break
+			}
+			u.Errorf("error: %v", err)
+			break
+		} else {
+			row.key = key
+			//u.Debugf("key:  %#v", key)
+			rows = append(rows, row)
+		}
+	}
+	return rows
+}
+
+type Row struct {
+	Vals  []driver.Value
+	props []datastore.Property
+	key   *datastore.Key
+}
+
+func (m *Row) Load(props []datastore.Property) error {
+	m.Vals = make([]driver.Value, len(props))
+	m.props = props
+	//u.Infof("Load: %#v", props)
+	for i, p := range props {
+		//u.Infof("%d prop: %#v", i, p)
+		m.Vals[i] = p.Value
+	}
+	return nil
+}
+func (m *Row) Save() ([]datastore.Property, error) {
+	return nil, nil
 }

@@ -6,7 +6,6 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/expr"
-	//"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/backends"
 	"github.com/dataux/dataux/pkg/models"
@@ -168,7 +167,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	switch stmt := builder.Job.Stmt.(type) {
 	case *expr.SqlSelect, *expr.SqlShow, *expr.SqlDescribe:
 
-		u.Debugf("adding mysql result writer: %#v", builder.Projection)
+		//u.Debugf("adding mysql result writer: %#v", builder.Projection)
 		resultWriter := NewMysqlResultWriter(writer, builder.Projection, m.schema)
 		builder.Job.Tasks.Add(resultWriter)
 

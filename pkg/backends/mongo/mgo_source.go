@@ -207,9 +207,9 @@ func (m *MongoDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, e
 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, tblName)
 	}
 
-	es := NewSqlToMgo(tbl, m.sess)
-	u.Debugf("SqlToMgo: %#v", es)
-	resp, err := es.Query(stmt)
+	sqlToMgo := NewSqlToMgo(tbl, m.sess)
+	u.Debugf("SqlToMgo: %#v", sqlToMgo)
+	resp, err := sqlToMgo.Query(stmt)
 	if err != nil {
 		u.Error(err)
 		return nil, err

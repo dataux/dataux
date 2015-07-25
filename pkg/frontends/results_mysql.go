@@ -2,13 +2,13 @@ package frontends
 
 import (
 	"database/sql/driver"
-	//"io"
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
+
 	"github.com/dataux/dataux/pkg/models"
 	"github.com/dataux/dataux/vendor/mixer/mysql"
 )
@@ -108,7 +108,7 @@ func (m *MysqlResultWriter) WriteHeaders() error {
 		u.Warnf("no projection")
 	}
 	cols := m.projection.Columns
-	u.Debugf("writing mysql headers: %v", cols)
+	//u.Debugf("writing mysql headers: %v", cols)
 	if len(cols) == 0 {
 		u.Warnf("Wat?   no columns?   %v", 0)
 		return nil
@@ -140,7 +140,7 @@ func (m *MysqlResultWriter) WriteHeaders() error {
 		default:
 			u.Warnf("Field type not known: type=%v  %#v", col.Type.String(), col)
 		}
-		u.Debugf("added field: %v", col.Name)
+		//u.Debugf("added field: %v", col.Name)
 	}
 
 	u.Debugf("writeheaders: %#v", m.Rs.FieldNames)
@@ -175,7 +175,7 @@ func (m *MysqlResultWriter) Finalize() error {
 func NewEmptyResultset(proj *expr.Projection) *mysql.Resultset {
 
 	r := new(mysql.Resultset)
-	u.Infof("projection: %#v", proj)
+	//u.Debugf("projection: %#v", proj)
 	r.Fields = make([]*mysql.Field, len(proj.Columns))
 
 	for i, col := range proj.Columns {

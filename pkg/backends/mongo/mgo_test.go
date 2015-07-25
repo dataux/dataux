@@ -2,91 +2,41 @@ package mongo_test
 
 import (
 	"database/sql"
-	"encoding/json"
 	"flag"
 	"testing"
-	"time"
 
-	"gopkg.in/mgo.v2"
-
-	"github.com/araddon/dateparse"
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
-	"github.com/dataux/dataux/pkg/frontends/testmysql"
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
+	"gopkg.in/mgo.v2"
+
+	"github.com/dataux/dataux/pkg/frontends/testmysql"
+	"github.com/dataux/dataux/pkg/testutil"
 )
 
 var (
-	veryVerbose *bool   = flag.Bool("vv", false, "very verbose output")
-	mongoHost   *string = flag.String("host", "localhost", "mongo Server Host Address")
-	mongoDb     *string = flag.String("db", "mgo_datauxtest", "mongo database to use for testing")
-	logging     *string = flag.String("logging", "debug", "very verbose output")
+	mongoHost *string = flag.String("host", "localhost", "mongo Server Host Address")
+	mongoDb   *string = flag.String("db", "mgo_datauxtest", "mongo database to use for testing")
 )
 
 func init() {
-	flag.Parse()
-	if *veryVerbose {
-		u.SetupLogging(*logging)
-		u.SetColorOutput()
-	} else {
-		u.SetupLogging("warn")
-		u.SetColorOutput()
-	}
+	testutil.Setup()
 	loadTestData()
-}
-
-type article struct {
-	Title    string
-	Author   string
-	Count    int
-	Count64  int64
-	Deleted  bool
-	Category []string
-	Created  time.Time
-	Updated  *time.Time
-	F        float64
-	Embedded struct {
-		Tag string
-		ICt int
-	}
-	Body *json.RawMessage
-}
-
-type user struct {
-	Id      string
-	Name    string
-	Deleted bool
-	Roles   []string
-	Created time.Time
-	Updated *time.Time
 }
 
 func loadTestData() {
 	sess, _ := mgo.Dial(*mongoHost)
-	userCol := sess.DB("mgo_datauxtest").C("user")
-	userCol.DropCollection()
+	userColl := sess.DB("mgo_datauxtest").C("user")
+	userColl.DropCollection()
 	articleColl := sess.DB("mgo_datauxtest").C("article")
 	articleColl.DropCollection()
-	t := time.Now()
-	ev := struct {
-		Tag string
-		ICt int
-	}{"tag", 1}
-	t1, _ := dateparse.ParseAny("2010-10-01")
-	t2, _ := dateparse.ParseAny("2011-10-01")
-	t3, _ := dateparse.ParseAny("2012-10-01")
-	t4, _ := dateparse.ParseAny("2013-10-01")
-	body := json.RawMessage([]byte(`{"name":"morestuff"}`))
-
-	articleColl.Insert(&article{"article1", "aaron", 22, 75, false, []string{"news", "sports"}, t1, &t, 55.5, ev, &body})
-	articleColl.Insert(&article{"article2", "james", 2, 64, true, []string{"news", "sports"}, t2, &t, 55.5, ev, &body})
-	articleColl.Insert(&article{"article3", "bjorn", 55, 100, true, []string{"politics"}, t3, &t, 21.5, ev, &body})
-	articleColl.Insert(&article{"listicle1", "bjorn", 7, 12, true, []string{"world"}, t4, &t, 21.5, ev, &body})
-	// Users
-	userCol.Insert(&user{"user123", "aaron", false, []string{"admin", "author"}, time.Now(), &t})
-	userCol.Insert(&user{"user456", "james", true, []string{"admin", "author"}, time.Now().Add(-time.Hour * 100), &t})
-	userCol.Insert(&user{"user789", "bjorn", true, []string{"author"}, time.Now().Add(-time.Hour * 220), &t})
+	for _, article := range testutil.Articles {
+		articleColl.Insert(article)
+	}
+	for _, user := range testutil.Users {
+		userColl.Insert(user)
+	}
 }
 
 type QuerySpec struct {
@@ -525,21 +475,41 @@ func TestSelectWhereBetween(t *testing.T) {
 
 	// Now one that is date based
 	validateQuerySpec(t, QuerySpec{
-		Sql:         `select title, count, author from article where created BETWEEN "2011-08-01" AND "2013-08-03";`,
+		Sql:         `select title, count, author from article where created BETWEEN todate("2011-08-01") AND todate("2013-08-03");`,
 		ExpectRowCt: 2,
 		ValidateRowData: func() {
-			u.Debugf("%#v", data)
+			//u.Debugf("%#v", data)
 			switch data.Title {
-			case "article1":
-				assert.Tf(t, data.Count == 22, "%v", data)
-			case "listicle1":
-				assert.Tf(t, data.Count == 7, "%v", data)
+			case "article2":
+				assert.Tf(t, data.Count == 2, "%v", data)
+			case "article3":
+				assert.Tf(t, data.Count == 55, "%v", data)
 			default:
 				t.Errorf("Should not be in results: %#v", data)
 			}
 		},
 		RowData: &data,
 	})
+
+	// Now try that again but without todate
+	// TODO - need to convert to date by virtue of schema knowing it is date?
+	// validateQuerySpec(t, QuerySpec{
+	// 	Sql:         `select title, count, author from article where created BETWEEN "2011-08-01" AND "2013-08-03";`,
+	// 	ExpectRowCt: 2,
+	// 	ValidateRowData: func() {
+	// 		u.Debugf("%#v", data)
+	// 		switch data.Title {
+	// 		case "article1":
+	// 			assert.Tf(t, data.Count == 22, "%v", data)
+	// 		case "listicle1":
+	// 			assert.Tf(t, data.Count == 7, "%v", data)
+	// 		default:
+	// 			t.Errorf("Should not be in results: %#v", data)
+	// 		}
+	// 	},
+	// 	RowData: &data,
+	// })
+
 	datact := struct {
 		Actor string
 		Name  string `db:"repository.name"`
