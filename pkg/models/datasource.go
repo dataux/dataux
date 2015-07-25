@@ -35,6 +35,7 @@ type DataSourceCreator func(*SourceSchema, *Config) DataSource
 func DataSourceRegister(sourceType string, fn DataSourceCreator) {
 	sourceMu.Lock()
 	defer sourceMu.Unlock()
+	//u.LogTracef(u.WARN, "hello")
 	sourceProviders[strings.ToLower(sourceType)] = fn
 }
 

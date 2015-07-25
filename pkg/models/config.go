@@ -70,6 +70,8 @@ type SourceConfig struct {
 	TablesToLoad  []string `json:"tables_to_load"` // if non empty, only load these tables
 	tablesLoadMap map[string]struct{}
 
+	//Auth map[string]string
+
 	// Do we deprecate this?
 	DownAfterNoAlive int    `json:"down_after_noalive"`
 	IdleConns        int    `json:"idle_conns"`

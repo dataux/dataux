@@ -134,6 +134,8 @@ func (m *ServerCtx) loadSourceSchema(tableName string, schema *Schema, source *S
 		tbl, err := source.DS.Table(tableName)
 		if err != nil {
 			u.Errorf("Could not find table? %v", err)
+		} else if tbl == nil {
+			u.Errorf("Could not find table, nil: %v", tableName)
 		} else {
 			tbl.Schema = schema
 			tbl.SourceSchema = source

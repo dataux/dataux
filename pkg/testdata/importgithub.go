@@ -1,4 +1,4 @@
-package testutil
+package testdata
 
 import (
 	"bufio"
@@ -18,12 +18,13 @@ import (
 )
 
 var (
-	loaded sync.Once
+	esGithubLoaded sync.Once
 )
 
-func LoadOnce(host string) {
-	loaded.Do(func() {
-		LoadTestData(host, 2014, 12, 2, 24)
+func LoadGithubToEsOnce(host string) {
+	esGithubLoaded.Do(func() {
+		// Load 2014 December 01, 02 full 24 hours for those days
+		LoadGithubToEs(host, 2014, 12, 2, 24)
 	})
 }
 
@@ -37,6 +38,7 @@ func (g *GithubEvent) Type() string {
 	return strings.Replace(strings.ToLower(g.TypeVal), "event", "", -1)
 }
 
+// Create an Elasticsearch Put Mapping for customizing field mappings
 func PutGithubMappings(host string) {
 
 	for _, evType := range []string{"release", "watch", "fork"} {
@@ -74,11 +76,15 @@ func PutGithubMappings(host string) {
 
 }
 
-//    LoadTestData("localhost",2015,1,2,24)
-func LoadTestData(host string, year, month, daysToImport, hoursToImport int) {
-	defer func() {
-		time.Sleep(time.Second * 3)
-	}()
+//  Load a set of historical data from Github into Elasticsearch
+//
+//  LoadGithubToEs("localhost",2015,1,2,24)
+//   @host = elasticsearch host address
+//   @year = 2015   ie which year of github history
+//   @month = 01    ie month of year
+//   @daysToImport = Number of days worth of data to import
+//   @hoursToImport = number of hours of data to import
+func LoadGithubToEs(host string, year, month, daysToImport, hoursToImport int) {
 
 	PutGithubMappings(host)
 	docCt := 0
@@ -90,6 +96,10 @@ func LoadTestData(host string, year, month, daysToImport, hoursToImport int) {
 		return indexer.Send(buf)
 	}
 	indexer.Start()
+
+	defer func() {
+		indexer.Flush()
+	}()
 
 	//http://data.githubarchive.org/2015-01-01-15.json.g
 	for day := 1; day <= daysToImport; day++ {
