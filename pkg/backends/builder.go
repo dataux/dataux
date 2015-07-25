@@ -163,3 +163,8 @@ func (m *Builder) VisitPreparedStmt(stmt *expr.PreparedStatement) (interface{}, 
 	u.Debugf("VisitPreparedStmt %+v", stmt)
 	return nil, ErrNotImplemented
 }
+
+func (m *Builder) VisitCommand(stmt *expr.SqlCommand) (interface{}, error) {
+	u.Debugf("SqlCommand %+v", stmt)
+	return nil, ErrNotImplemented
+}
