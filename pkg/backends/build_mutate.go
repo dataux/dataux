@@ -31,15 +31,9 @@ func (m *Builder) VisitUpdate(stmt *expr.SqlUpdate) (interface{}, error) {
 }
 
 func (m *Builder) VisitInsert(stmt *expr.SqlInsert) (interface{}, error) {
+
 	u.Debugf("VisitInsert %+v", stmt)
-
-	source, proj := m.schema.ShowTables()
-	m.Projection = proj
-
 	tasks := make(exec.Tasks, 0)
-	sourceTask := exec.NewSource(nil, source)
-	u.Infof("source:  %#v", source)
-	tasks.Add(sourceTask)
 
 	return tasks, nil
 }

@@ -502,3 +502,16 @@ func TestSelectOrderBy(t *testing.T) {
 		RowData: &data,
 	})
 }
+
+func TestInsertSimple(t *testing.T) {
+	data := struct {
+		Title string
+		Count int
+	}{}
+	validateQuerySpec(t, QuerySpec{
+		Sql:             `INSERT INTO users (id, name, email) VALUES(1, "name","bob@email.com");`,
+		ExpectRowCt:     1,
+		ValidateRowData: func() {},
+		RowData:         &data,
+	})
+}

@@ -168,23 +168,25 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	case *expr.SqlSelect, *expr.SqlShow, *expr.SqlDescribe:
 
 		//u.Debugf("adding mysql result writer: %#v", builder.Projection)
-		resultWriter := NewMysqlResultWriter(writer, builder.Projection, m.schema)
+		resultWriter := NewMySqlResultWriter(writer, builder.Projection, m.schema)
 		builder.Job.Tasks.Add(resultWriter)
 
 	//case *expr.SqlShow:
 	//	return m.handleShow(sql, stmt)
 	// case *sqlparser.SimpleSelect:
 	// 		return m.handleSimpleSelect(sql, stmt)
-	// case *expr.SqlInsert:
-	// 	return m.handleInsert(stmt, sql, nil)
+	case *expr.SqlInsert:
+		//u.Debugf("adding mysql result writer: %#v", builder.Projection)
+		resultWriter := NewMySqlExecResultWriter(writer, m.schema)
+		builder.Job.Tasks.Add(resultWriter)
 	// case *sqlparser.Update:
 	// 	return m.handleExec(stmt, sql, nil)
 	// case *sqlparser.Delete:
 	// 	return m.handleExec(stmt, sql, nil)
 	// case *sqlparser.Replace:
 	// 	return m.handleExec(stmt, sql, nil)
-	// case *sqlparser.Set:
-	// 	return m.handleSet(stmt)
+	//case *expr.SqlCommand:
+	//	return m.handleSet(stmt)
 	// case *sqlparser.Begin:
 	// 	return m.handleBegin()
 	//case *sqlparser.Commit:

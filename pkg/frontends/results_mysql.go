@@ -14,13 +14,11 @@ import (
 )
 
 var (
-	// What is the interface we want to implement here?
-	_ exec.TaskRunner = (*MysqlResultWriter)(nil)
+	_ exec.TaskRunner = (*MySqlResultWriter)(nil)
+	_ exec.TaskRunner = (*MySqlExecResultWriter)(nil)
 )
 
-type MysqlResultWriter struct {
-	//resp         models.ResultProvider
-	//cols         []*models.ResultColumn
+type MySqlResultWriter struct {
 	writer       models.ResultWriter
 	schema       *models.Schema
 	Rs           *mysql.Resultset
@@ -29,15 +27,22 @@ type MysqlResultWriter struct {
 	*exec.TaskBase
 }
 
-func NewMysqlResultWriter(writer models.ResultWriter, proj *expr.Projection, schema *models.Schema) *MysqlResultWriter {
+type MySqlExecResultWriter struct {
+	writer models.ResultWriter
+	schema *models.Schema
+	Rs     *mysql.Result
+	*exec.TaskBase
+}
 
-	m := &MysqlResultWriter{writer: writer, projection: proj, schema: schema}
-	m.TaskBase = exec.NewTaskBase("MysqlResultWriter")
+func NewMySqlResultWriter(writer models.ResultWriter, proj *expr.Projection, schema *models.Schema) *MySqlResultWriter {
+
+	m := &MySqlResultWriter{writer: writer, projection: proj, schema: schema}
+	m.TaskBase = exec.NewTaskBase("MySqlResultWriter")
 	m.Rs = mysql.NewResultSet()
 	m.Handler = resultWrite(m)
 	return m
 }
-func (m *MysqlResultWriter) Close() error {
+func (m *MySqlResultWriter) Close() error {
 
 	if m.Rs == nil || len(m.Rs.Fields) == 0 {
 		m.Rs = NewEmptyResultset(m.projection)
@@ -49,7 +54,7 @@ func (m *MysqlResultWriter) Close() error {
 	return nil
 }
 
-func resultWrite(m *MysqlResultWriter) exec.MessageHandler {
+func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 	return func(_ *exec.Context, msg datasource.Message) bool {
 
@@ -101,7 +106,7 @@ func resultWrite(m *MysqlResultWriter) exec.MessageHandler {
 	}
 }
 
-func (m *MysqlResultWriter) WriteHeaders() error {
+func (m *MySqlResultWriter) WriteHeaders() error {
 
 	//u.LogTracef(u.WARN, "wat?")
 	if m.projection == nil {
@@ -147,7 +152,7 @@ func (m *MysqlResultWriter) WriteHeaders() error {
 	return nil
 }
 
-func (m *MysqlResultWriter) Finalize() error {
+func (m *MySqlResultWriter) Finalize() error {
 	if !m.wroteHeaders {
 		err := m.WriteHeaders()
 		if err != nil {
@@ -199,4 +204,20 @@ func NewEmptyResultset(proj *expr.Projection) *mysql.Resultset {
 	r.RowDatas = make([]mysql.RowData, 0)
 
 	return r
+}
+
+func NewMySqlExecResultWriter(writer models.ResultWriter, schema *models.Schema) *MySqlExecResultWriter {
+
+	m := &MySqlExecResultWriter{writer: writer, schema: schema}
+	m.TaskBase = exec.NewTaskBase("MySqlExecResultWriter")
+	m.Rs = new(mysql.Result)
+	//m.Handler = resultWrite(m)
+	return m
+}
+func (m *MySqlExecResultWriter) Close() error {
+	m.writer.WriteResult(m.Rs)
+	return nil
+}
+func (m *MySqlExecResultWriter) Finalize() error {
+	return nil
 }
