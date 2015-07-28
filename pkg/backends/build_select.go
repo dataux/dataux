@@ -6,6 +6,7 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/datasource/inmemmap"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
@@ -124,7 +125,7 @@ func (m *Builder) VisitSelectDatabase(stmt *expr.SqlSelect) (interface{}, error)
 	if m.schema != nil {
 		val = m.schema.Name
 	}
-	static := datasource.NewStaticDataValue(val, "database")
+	static := inmemmap.NewStaticDataValue(val, "database")
 	sourceTask := exec.NewSource(nil, static)
 	tasks.Add(sourceTask)
 	m.Projection = StaticProjection("database", value.StringType)

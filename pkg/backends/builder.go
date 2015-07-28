@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	u "github.com/araddon/gou"
-	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/datasource/inmemmap"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
@@ -112,7 +112,7 @@ func (m *Builder) VisitSysVariable(stmt *expr.SqlSelect) (interface{}, error) {
 //
 func (m *Builder) sysVarTasks(name string, val interface{}) (interface{}, error) {
 	tasks := make(exec.Tasks, 0)
-	static := datasource.NewStaticDataValue(val, name)
+	static := inmemmap.NewStaticDataValue(val, name)
 	sourceTask := exec.NewSource(nil, static)
 	tasks.Add(sourceTask)
 	switch val.(type) {

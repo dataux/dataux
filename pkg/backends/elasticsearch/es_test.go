@@ -16,23 +16,11 @@ import (
 
 var (
 	loadTestData *bool   = flag.Bool("loadtestdata", false, "Load elasticsearch test data, only needed once")
-	veryVerbose  *bool   = flag.Bool("vv", false, "very verbose output")
 	eshost       *string = flag.String("host", "localhost", "Elasticsearch Server Host Address")
-	logging      *string = flag.String("logging", "info", "very verbose output")
 )
 
 func init() {
-	flag.Parse()
-	if *veryVerbose {
-		u.SetupLogging(*logging)
-		u.SetColorOutput()
-	} else {
-		u.SetupLogging("warn")
-		u.SetColorOutput()
-	}
-	if *loadTestData {
-		testutil.LoadOnce(*eshost)
-	}
+	testutil.Setup()
 }
 
 type QuerySpec struct {

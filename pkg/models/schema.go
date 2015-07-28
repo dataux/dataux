@@ -8,8 +8,10 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/datasource/inmemmap"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
+
 	"github.com/dataux/dataux/vendor/mixer/mysql"
 )
 
@@ -21,6 +23,9 @@ var (
 
 	// Schema Refresh Interval
 	SchemaRefreshInterval = -time.Minute * 5
+
+	// Staic list of describe header columns
+	describeCols = []string{"Field", "Type", "Null", "Key", "Default", "Extra"}
 )
 
 // Schema is a "Virtual" Database.  Made up of
@@ -35,7 +40,7 @@ type Schema struct {
 	TableNames          []string                 // Table name
 	lastRefreshed       time.Time                // Last time we refreshed this schema
 	showTableProjection *expr.Projection
-	showTableVals       *datasource.StaticDataSource
+	showTableVals       *inmemmap.StaticDataSource
 }
 
 // SourceSchema is a schema for a single backend source
@@ -68,7 +73,7 @@ type Table struct {
 	Charset         uint16                  // Character set, default = utf8
 	lastRefreshed   time.Time               // Last time we refreshed this schema
 	tableProjection *expr.Projection
-	tableVals       *datasource.StaticDataSource
+	tableVals       *inmemmap.StaticDataSource
 }
 
 type FieldData []byte
@@ -91,7 +96,7 @@ func (m *SourceSchema) ChooseBackend() string {
 	return m.address
 }
 
-func (m *Schema) ShowTables() (*datasource.StaticDataSource, *expr.Projection) {
+func (m *Schema) ShowTables() (*inmemmap.StaticDataSource, *expr.Projection) {
 
 	if m.showTableVals == nil {
 		vals := make([][]driver.Value, len(m.TableNames))
@@ -104,7 +109,7 @@ func (m *Schema) ShowTables() (*datasource.StaticDataSource, *expr.Projection) {
 			//u.Infof("found table: %v   vals=%v", tbl, vals[idx])
 			idx++
 		}
-		m.showTableVals = datasource.NewStaticDataSource("schematables", vals, []string{"Table"})
+		m.showTableVals = inmemmap.NewStaticDataSource("schematables", 0, vals, []string{"Table"})
 		p := expr.NewProjection()
 		p.AddColumnShort("Table", value.StringType)
 		m.showTableProjection = p
@@ -164,7 +169,7 @@ func (m *Table) DescribeResultset() *mysql.Resultset {
 	return rs
 }
 
-func (m *Table) DescribeTable() (*datasource.StaticDataSource, *expr.Projection) {
+func (m *Table) DescribeTable() (*inmemmap.StaticDataSource, *expr.Projection) {
 
 	//tbl.AddField(models.NewField("_score", value.NumberType, 24, "Created per Search By Elasticsearch"))
 	//tbl.AddValues([]driver.Value{"_id", "string", "NO", "PRI", "AUTOGEN", ""})
@@ -178,7 +183,7 @@ func (m *Table) DescribeTable() (*datasource.StaticDataSource, *expr.Projection)
 			p.AddColumnShort(string(f.Name), f.Type)
 			//u.Debugf("found field:  vals=%#v", f)
 		}
-		m.tableVals = datasource.NewStaticDataSource("describetable", m.DescribeValues, nil)
+		m.tableVals = inmemmap.NewStaticDataSource("describetable", 0, m.DescribeValues, describeCols)
 		m.tableProjection = p
 	}
 	u.Debugf("describe table:  %v", m.tableVals)
