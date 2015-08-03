@@ -2,6 +2,7 @@ package backends
 
 import (
 	"fmt"
+	"strings"
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource/inmemmap"
@@ -99,9 +100,13 @@ func NewBuilder(svr *models.ServerCtx, db string) *Builder {
 func (m *Builder) VisitSysVariable(stmt *expr.SqlSelect) (interface{}, error) {
 	u.Debugf("VisitSysVariable %+v", stmt)
 
-	switch sysVar := stmt.SysVariable(); sysVar {
+	switch sysVar := strings.ToLower(stmt.SysVariable()); sysVar {
 	case "@@max_allowed_packet":
 		return m.sysVarTasks(sysVar, MaxAllowedPacket)
+	case "current_user()", "current_user":
+		return m.sysVarTasks(sysVar, "user")
+	case "connection_id()":
+		return m.sysVarTasks(sysVar, 1)
 	default:
 		u.Errorf("unknown var: %v", sysVar)
 		return nil, fmt.Errorf("Unrecognized System Variable: %v", sysVar)
@@ -147,5 +152,7 @@ func (m *Builder) VisitPreparedStmt(stmt *expr.PreparedStatement) (interface{}, 
 
 func (m *Builder) VisitCommand(stmt *expr.SqlCommand) (interface{}, error) {
 	u.Debugf("SqlCommand %+v", stmt)
-	return nil, ErrNotImplemented
+	tasks := make(exec.Tasks, 0)
+	return tasks, nil
+	//return nil, ErrNotImplemented
 }

@@ -118,6 +118,24 @@ func (m *Schema) ShowTables() (*inmemmap.StaticDataSource, *expr.Projection) {
 	return m.showTableVals, m.showTableProjection
 }
 
+func (m *Schema) ShowVariables(name string, val driver.Value) (*inmemmap.StaticDataSource, *expr.Projection) {
+	/*
+	   MariaDB [(none)]> SHOW SESSION VARIABLES LIKE 'lower_case_table_names';
+	   +------------------------+-------+
+	   | Variable_name          | Value |
+	   +------------------------+-------+
+	   | lower_case_table_names | 0     |
+	   +------------------------+-------+
+	*/
+	vals := make([][]driver.Value, 1)
+	vals[0] = []driver.Value{name, val}
+	dataSource := inmemmap.NewStaticDataSource("schematables", 0, vals, []string{"Variable_name", "Value"})
+	p := expr.NewProjection()
+	p.AddColumnShort("Variable_name", value.StringType)
+	p.AddColumnShort("Value", value.StringType)
+	return dataSource, p
+}
+
 func (m *Schema) Table(tableName string) (*Table, error) {
 	tbl := m.Tables[tableName]
 	if tbl != nil {

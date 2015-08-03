@@ -47,7 +47,7 @@ func (m *ServerCtx) loadConfig() error {
 
 	for _, schemaConf := range m.Config.Schemas {
 
-		u.Debugf("parse schemas: %v", schemaConf)
+		//u.Debugf("parse schemas: %v", schemaConf)
 		if _, ok := m.schemas[schemaConf.Name]; ok {
 			panic(fmt.Sprintf("duplicate schema '%s'", schemaConf.Name))
 		}
@@ -130,7 +130,7 @@ func (m *ServerCtx) loadSourceSchema(tableName string, schema *Schema, source *S
 		_, tableLoad = source.Conf.tablesLoadMap[tableName]
 	}
 	if tableLoad {
-		u.Debugf("loading table %s", tableName)
+		//u.Debugf("loading table %s", tableName)
 		tbl, err := source.DS.Table(tableName)
 		if err != nil {
 			u.Errorf("Could not find table? %v", err)

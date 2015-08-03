@@ -4,10 +4,16 @@ import (
 	"encoding/json"
 	"flag"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/araddon/dateparse"
 	u "github.com/araddon/gou"
+	"github.com/bmizerany/assert"
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
+
+	"github.com/dataux/dataux/pkg/frontends/testmysql"
 )
 
 var (
@@ -80,4 +86,95 @@ type User struct {
 	Roles   []string   `datastore:"roles,noindex"`
 	Created time.Time  `datastore:"created"`
 	Updated *time.Time `datastore:"created"`
+}
+
+type QuerySpec struct {
+	Sql             string
+	Exec            string
+	Cols            []string
+	ValidateRow     func([]interface{})
+	ExpectRowCt     int
+	ExpectColCt     int
+	RowData         interface{}
+	ValidateRowData func()
+}
+
+func ValidateQuery(t *testing.T, querySql string, expectCols []string, expectColCt, expectRowCt int, rowValidate func([]interface{})) {
+	ValidateQuerySpec(t, QuerySpec{Sql: querySql,
+		Cols:        expectCols,
+		ExpectRowCt: expectRowCt, ExpectColCt: expectColCt,
+		ValidateRow: rowValidate})
+}
+
+func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
+
+	testmysql.RunTestServer(t)
+
+	// This is a connection to RunTestServer, which starts on port 13307
+	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
+	assert.Tf(t, err == nil, "%v", err)
+	defer dbx.Close()
+	//u.Debugf("%v", testSpec.Sql)
+	switch {
+	case len(testSpec.Exec) > 0:
+		result, err := dbx.Exec(testSpec.Exec)
+		assert.Tf(t, err == nil, "%v", err)
+		u.Infof("result: %Ev", result)
+		if testSpec.ExpectRowCt > -1 {
+			affected, err := result.RowsAffected()
+			assert.Tf(t, err == nil, "%v", err)
+			assert.Tf(t, affected == int64(testSpec.ExpectRowCt), "expected %v affected but got %v", testSpec.ExpectRowCt, affected)
+		}
+
+	case len(testSpec.Sql) > 0:
+		rows, err := dbx.Queryx(testSpec.Sql)
+		assert.Tf(t, err == nil, "%v", err)
+		defer rows.Close()
+
+		cols, err := rows.Columns()
+		assert.Tf(t, err == nil, "%v", err)
+		if len(testSpec.Cols) > 0 {
+			for _, expectCol := range testSpec.Cols {
+				found := false
+				for _, colName := range cols {
+					if colName == expectCol {
+						found = true
+					}
+				}
+				assert.Tf(t, found, "Should have found column: %v", expectCol)
+			}
+		}
+		rowCt := 0
+		for rows.Next() {
+			if testSpec.RowData != nil {
+				err = rows.StructScan(testSpec.RowData)
+				//u.Infof("rowVals: %#v", testSpec.RowData)
+				assert.Tf(t, err == nil, "%v", err)
+				rowCt++
+				if testSpec.ValidateRowData != nil {
+					testSpec.ValidateRowData()
+				}
+
+			} else {
+				// rowVals is an []interface{} of all of the column results
+				rowVals, err := rows.SliceScan()
+				//u.Infof("rowVals: %#v", rowVals)
+				assert.Tf(t, err == nil, "%v", err)
+				assert.Tf(t, len(rowVals) == testSpec.ExpectColCt, "wanted cols but got %v", len(rowVals))
+				rowCt++
+				if testSpec.ValidateRow != nil {
+					testSpec.ValidateRow(rowVals)
+				}
+			}
+
+		}
+
+		if testSpec.ExpectRowCt > -1 {
+			assert.Tf(t, rowCt == testSpec.ExpectRowCt, "expected %v rows but got %v", testSpec.ExpectRowCt, rowCt)
+		}
+
+		assert.T(t, rows.Err() == nil)
+		//u.Infof("rows: %v", cols)
+	}
+
 }

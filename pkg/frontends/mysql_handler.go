@@ -79,7 +79,7 @@ func (m *MySqlHandler) SchemaUse(db string) *models.Schema {
 	schema := m.svr.Schema(db)
 	if schema != nil {
 		m.schema = schema
-		u.Debugf("Use Schema: %v", db)
+		//u.Debugf("Use Schema: %v", db)
 	} else {
 		u.Warnf("Could not find schema for db=%s", db)
 	}
@@ -91,7 +91,7 @@ func (m *MySqlHandler) chooseCommand(writer models.ResultWriter, req *models.Req
 	cmd := req.Raw[0]
 	req.Raw = req.Raw[1:]
 
-	u.Debugf("chooseCommand: %v:%v", cmd, mysql.CommandString(cmd))
+	//u.Debugf("chooseCommand: %v:%v", cmd, mysql.CommandString(cmd))
 	switch cmd {
 	case mysql.COM_QUERY, mysql.COM_STMT_PREPARE:
 		return m.handleQuery(writer, string(req.Raw))
@@ -126,7 +126,7 @@ func (m *MySqlHandler) chooseCommand(writer models.ResultWriter, req *models.Req
 }
 
 func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err error) {
-	u.Debugf("handleQuery: %v", sql)
+	//u.Debugf("handleQuery: %v", sql)
 	if !m.conf.SupressRecover {
 		//u.Debugf("running recovery? ")
 		defer func() {
@@ -155,6 +155,8 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		case strings.Contains(sql, "set session transaction isolation"):
 			// SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ
 			return m.conn.WriteOK(nil)
+		case strings.HasPrefix(sql, "set "):
+			return m.conn.WriteOK(nil)
 		}
 		u.Debugf("error on parse sql statement: %v", err)
 		return err
@@ -166,27 +168,19 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 
 	switch stmt := builder.Job.Stmt.(type) {
 	case *expr.SqlSelect, *expr.SqlShow, *expr.SqlDescribe:
-
 		//u.Debugf("adding mysql result writer: %#v", builder.Projection)
 		resultWriter := NewMySqlResultWriter(writer, builder.Projection, m.schema)
 		builder.Job.Tasks.Add(resultWriter)
-
-	//case *expr.SqlShow:
-	//	return m.handleShow(sql, stmt)
-	// case *sqlparser.SimpleSelect:
-	// 		return m.handleSimpleSelect(sql, stmt)
-	case *expr.SqlInsert:
+	case *expr.SqlInsert, *expr.SqlUpsert, *expr.SqlUpdate, *expr.SqlDelete:
 		//u.Debugf("adding mysql result writer: %#v", builder.Projection)
 		resultWriter := NewMySqlExecResultWriter(writer, m.schema)
 		builder.Job.Tasks.Add(resultWriter)
-	// case *sqlparser.Update:
-	// 	return m.handleExec(stmt, sql, nil)
 	// case *sqlparser.Delete:
 	// 	return m.handleExec(stmt, sql, nil)
 	// case *sqlparser.Replace:
 	// 	return m.handleExec(stmt, sql, nil)
-	//case *expr.SqlCommand:
-	//	return m.handleSet(stmt)
+	case *expr.SqlCommand:
+		return m.conn.WriteOK(nil)
 	// case *sqlparser.Begin:
 	// 	return m.handleBegin()
 	//case *sqlparser.Commit:

@@ -13,13 +13,14 @@ import (
 )
 
 func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
-	u.Debugf("VisitSelect %+v", stmt)
 
 	if sysVar := stmt.SysVariable(); len(sysVar) > 0 {
 		return m.VisitSysVariable(stmt)
 	} else if len(stmt.From) == 0 && len(stmt.Columns) == 1 && strings.ToLower(stmt.Columns[0].As) == "database" {
 		return m.VisitSelectDatabase(stmt)
 	}
+
+	u.Debugf("VisitSelect %+v", stmt)
 
 	tasks := make(exec.Tasks, 0)
 

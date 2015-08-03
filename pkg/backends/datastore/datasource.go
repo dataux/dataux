@@ -36,6 +36,8 @@ var (
 
 	// Ensure our Google DataStore implements datasource.DataSource interface
 	_ datasource.DataSource = (*GoogleDSDataSource)(nil)
+	_ datasource.Upsert     = (*GoogleDSDataSource)(nil)
+	_ datasource.Deletion   = (*GoogleDSDataSource)(nil)
 	//_ datasource.Scanner    = (*ResultReader)(nil)
 	// source
 	_ models.DataSource = (*GoogleDSDataSource)(nil)
@@ -73,7 +75,7 @@ func NewGoogleDataStoreDataSource(schema *models.SourceSchema, conf *models.Conf
 
 func (m *GoogleDSDataSource) Init() error {
 
-	u.Infof("Init:  %#v", m.schema.Conf)
+	//u.Infof("Init:  %#v", m.schema.Conf)
 	if m.schema.Conf == nil {
 		return fmt.Errorf("Schema conf not found")
 	}
@@ -81,10 +83,6 @@ func (m *GoogleDSDataSource) Init() error {
 	// This will return an error if the database name we are using nis not found
 	if err := m.connect(); err != nil {
 		return err
-	}
-
-	if m.schema != nil {
-		u.Debugf("Post Init() google datstore schema P=%p tblct=%d", m.schema, len(m.schema.Tables))
 	}
 
 	return m.loadSchema()
@@ -115,8 +113,8 @@ func (m *GoogleDSDataSource) Close() error {
 }
 
 func (m *GoogleDSDataSource) connect() error {
-	host := m.schema.ChooseBackend()
-	u.Infof("connecting GoogleDSDataSource: host='%s'  conf=%#v", host, m.schema.Conf)
+	//host := m.schema.ChooseBackend()
+	//u.Infof("connecting GoogleDSDataSource: host='%s'  conf=%#v", host, m.schema.Conf)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -201,6 +199,66 @@ func (m *GoogleDSDataSource) Table(table string) (*models.Table, error) {
 	return m.loadTableSchema(table)
 }
 
+// interface for Upsert.Put()
+func (m *GoogleDSDataSource) Put(ctx context.Context, key datasource.Key, row interface{}) (datasource.Key, error) {
+	// TODO:
+	if key == nil {
+		return nil, fmt.Errorf("Must have key for inserts in DataStore")
+	}
+	return nil, nil
+}
+func (m *GoogleDSDataSource) PutMulti(ctx context.Context, keys []datasource.Key, src interface{}) ([]datasource.Key, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+// Interface for Deletion
+func (m *GoogleDSDataSource) Delete(key driver.Value) (int, error) {
+	return 0, fmt.Errorf("not implemented")
+}
+func (m *GoogleDSDataSource) DeleteExpression(where expr.Node) (int, error) {
+	/*
+		evaluator := vm.Evaluator(where)
+		deletedKeys := make([]driver.Value, 0)
+		for idx, row := range m.data {
+			msgCtx := datasource.NewSqlDriverMessageMapVals(uint64(idx), row, m.cols)
+			whereValue, ok := evaluator(msgCtx)
+			if !ok {
+				u.Debugf("could not evaluate where: %v   %v", idx, msgCtx.Values())
+				//return deletedCt, fmt.Errorf("Could not evaluate where clause")
+				continue
+			}
+			switch whereVal := whereValue.(type) {
+			case value.BoolValue:
+				if whereVal.Val() == false {
+					//this means do NOT delete
+				} else {
+					// Delete!
+					indexVal := row[m.indexCol]
+					deletedKeys = append(deletedKeys, indexVal)
+				}
+			case nil:
+				// ??
+			default:
+				if whereVal.Nil() {
+					// Doesn't match, so don't delete
+				} else {
+					u.Warnf("unknown type? %T", whereVal)
+				}
+			}
+		}
+		for _, deleteKey := range deletedKeys {
+			//u.Debugf("calling delete: %v", deleteKey)
+			if ct, err := m.Delete(deleteKey); err != nil {
+				u.Errorf("Could not delete key: %v", deleteKey)
+			} else if ct != 1 {
+				u.Errorf("delete should have removed 1 key %v", deleteKey)
+			}
+		}
+		return len(deletedKeys), nil
+	*/
+	return 0, fmt.Errorf("not implemented")
+}
+
 func (m *GoogleDSDataSource) loadDatabases() error {
 
 	dbs := make([]string, 0)
@@ -236,7 +294,7 @@ func (m *GoogleDSDataSource) loadTableNames() error {
 	}
 	sort.Strings(tables)
 	m.schema.TableNames = tables
-	u.Debugf("found tables: %v", m.schema.TableNames)
+	//u.Debugf("found tables: %v", m.schema.TableNames)
 	return nil
 }
 
@@ -264,16 +322,14 @@ func (m *GoogleDSDataSource) loadTableSchema(table string) (*models.Table, error
 			- Need to recurse through enough records to get good idea of types
 	*/
 	tbl := models.NewTable(table, m.schema)
-	//table = titleCase(table)
-	u.Infof("gettint table info for schema:%p  %s", m.schema, table)
-	for k, _ := range m.schema.Tables {
-		u.Debugf("current table: %v", k)
-	}
+
+	// We are going to scan this table, introspecting a few rows
+	// to see what types they might be
 	props := pageQuery(datastore.NewQuery(table).Limit(20).Run(m.dsCtx))
 	for _, row := range props {
-		//u.Warnf("%#v   %#v", prop.key, row.props)
-		for _, p := range row.props {
 
+		for _, p := range row.props {
+			//u.Warnf("%#v ", p)
 			colName := strings.ToLower(p.Name)
 
 			if tbl.HasField(colName) {
@@ -322,7 +378,7 @@ func (m *GoogleDSDataSource) loadTableSchema(table string) (*models.Table, error
 		}
 	}
 	if len(tbl.FieldMap) > 0 {
-		u.Infof("caching schem:%p   %q", m.schema, tableLower)
+		//u.Infof("caching schem:%p   %q", m.schema, tableLower)
 		m.schema.Tables[tableLower] = tbl
 		return tbl, nil
 	}

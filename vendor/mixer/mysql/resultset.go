@@ -27,6 +27,11 @@ type Resultset struct {
 	RowDatas   []RowData        // The serialized mysql byte value of a row
 }
 
+func NewResult() *Result {
+	return &Result{
+		Status: 0,
+	}
+}
 func NewResultSet() *Resultset {
 	return &Resultset{
 		FieldNames: make(map[string]int),

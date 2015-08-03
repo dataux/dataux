@@ -289,7 +289,7 @@ func (c *Conn) readHandshakeResponse() error {
 }
 
 func (c *Conn) UseDb(db string) error {
-	u.Debugf("listener connection UseDB: %v", db)
+	//u.Debugf("listener connection UseDB: %v", db)
 	if s := c.handler.SchemaUse(db); s == nil {
 		u.Errorf("could not load schema: %v", db)
 		return mysql.NewDefaultError(mysql.ER_BAD_DB_ERROR, db)
@@ -313,7 +313,7 @@ func (c *Conn) WriteOK(r *mysql.Result) error {
 	data = append(data, mysql.PutLengthEncodedInt(r.InsertId)...)
 
 	if c.capability&mysql.CLIENT_PROTOCOL_41 > 0 {
-		u.Debugf("protocol > 4.1")
+		//u.Debugf("protocol > 4.1")
 		data = append(data, byte(r.Status), byte(r.Status>>8))
 		data = append(data, 0, 0)
 	}

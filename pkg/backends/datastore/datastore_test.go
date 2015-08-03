@@ -26,7 +26,7 @@ import (
 
 	gds "github.com/dataux/dataux/pkg/backends/datastore"
 	"github.com/dataux/dataux/pkg/frontends/testmysql"
-	"github.com/dataux/dataux/pkg/testutil"
+	tu "github.com/dataux/dataux/pkg/testutil"
 )
 
 var (
@@ -37,11 +37,15 @@ var (
 	loadTestDataOnce sync.Once
 
 	now = time.Now()
+
+	// we are too lazy to type
+	validateQuerySpec = tu.ValidateQuerySpec
+	validateQuery     = tu.ValidateQuery
 )
 
 func init() {
 
-	testutil.Setup()
+	tu.Setup()
 
 	if *gds.GoogleJwt == "" {
 		u.Errorf("must have google oauth jwt")
@@ -58,7 +62,6 @@ func init() {
 		os.Exit(1)
 	}
 	ctx = loadAuth(jsonKey)
-
 }
 
 const (
@@ -93,7 +96,7 @@ type Article struct {
 }
 */
 type Article struct {
-	*testutil.Article
+	*tu.Article
 }
 
 func (m *Article) Load(props []datastore.Property) error {
@@ -140,7 +143,7 @@ type User struct {
 
 */
 type User struct {
-	*testutil.User
+	*tu.User
 }
 
 func (m *User) Load(props []datastore.Property) error {
@@ -166,7 +169,7 @@ func (m *User) Save() ([]datastore.Property, error) {
 
 func loadTestData(t *testing.T) {
 	loadTestDataOnce.Do(func() {
-		for _, article := range testutil.Articles {
+		for _, article := range tu.Articles {
 			key, err := datastore.Put(ctx, articleKey(article.Title), &Article{article})
 			//u.Infof("key: %v", key)
 			assert.Tf(t, key != nil, "%v", key)
@@ -179,14 +182,14 @@ func loadTestData(t *testing.T) {
 				ICt int
 			}{"tag", i}
 			body := json.RawMessage([]byte(fmt.Sprintf(`{"name":"more %v"}`, i)))
-			a := &testutil.Article{fmt.Sprintf("article_%v", i), "auto", 22, 75, false, []string{"news", "sports"}, n, &n, 55.5, ev, &body}
+			a := &tu.Article{fmt.Sprintf("article_%v", i), "auto", 22, 75, false, []string{"news", "sports"}, n, &n, 55.5, ev, &body}
 			key, err := datastore.Put(ctx, articleKey(a.Title), &Article{a})
 			//u.Infof("key: %v", key)
 			assert.Tf(t, key != nil, "%v", key)
 			assert.Tf(t, err == nil, "must put %v", err)
 			//u.Warnf("made article: %v", a.Title)
 		}
-		for _, user := range testutil.Users {
+		for _, user := range tu.Users {
 			key, err := datastore.Put(ctx, userKey(user.Id), &User{user})
 			//u.Infof("key: %v", key)
 			assert.Tf(t, err == nil, "must put %v", err)
@@ -211,82 +214,6 @@ func loadAuth(jsonKey []byte) context.Context {
 	ctx := cloud.NewContext(*gds.GoogleProject, conf.Client(oauth2.NoContext))
 	// Use the context (see other examples)
 	return ctx
-}
-
-type QuerySpec struct {
-	Sql             string
-	Cols            []string
-	ValidateRow     func([]interface{})
-	ExpectRowCt     int
-	ExpectColCt     int
-	RowData         interface{}
-	ValidateRowData func()
-}
-
-func validateQuery(t *testing.T, querySql string, expectCols []string, expectColCt, expectRowCt int, rowValidate func([]interface{})) {
-	validateQuerySpec(t, QuerySpec{Sql: querySql,
-		Cols:        expectCols,
-		ExpectRowCt: expectRowCt, ExpectColCt: expectColCt,
-		ValidateRow: rowValidate})
-}
-
-func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
-
-	testmysql.RunTestServer(t)
-
-	// This is a connection to RunTestServer, which starts on port 13307
-	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
-	assert.Tf(t, err == nil, "%v", err)
-	defer dbx.Close()
-	//u.Debugf("%v", testSpec.Sql)
-	rows, err := dbx.Queryx(testSpec.Sql)
-	assert.Tf(t, err == nil, "%v", err)
-	defer rows.Close()
-
-	cols, err := rows.Columns()
-	assert.Tf(t, err == nil, "%v", err)
-	if len(testSpec.Cols) > 0 {
-		for _, expectCol := range testSpec.Cols {
-			found := false
-			for _, colName := range cols {
-				if colName == expectCol {
-					found = true
-				}
-			}
-			assert.Tf(t, found, "Should have found column: %v", expectCol)
-		}
-	}
-	rowCt := 0
-	for rows.Next() {
-		if testSpec.RowData != nil {
-			err = rows.StructScan(testSpec.RowData)
-			//u.Infof("rowVals: %#v", testSpec.RowData)
-			assert.Tf(t, err == nil, "%v", err)
-			rowCt++
-			if testSpec.ValidateRowData != nil {
-				testSpec.ValidateRowData()
-			}
-
-		} else {
-			// rowVals is an []interface{} of all of the column results
-			rowVals, err := rows.SliceScan()
-			//u.Infof("rowVals: %#v", rowVals)
-			assert.Tf(t, err == nil, "%v", err)
-			assert.Tf(t, len(rowVals) == testSpec.ExpectColCt, "wanted cols but got %v", len(rowVals))
-			rowCt++
-			if testSpec.ValidateRow != nil {
-				testSpec.ValidateRow(rowVals)
-			}
-		}
-
-	}
-
-	if testSpec.ExpectRowCt > -1 {
-		assert.Tf(t, rowCt == testSpec.ExpectRowCt, "expected %v rows but got %v", testSpec.ExpectRowCt, rowCt)
-	}
-
-	assert.T(t, rows.Err() == nil)
-	//u.Infof("rows: %v", cols)
 }
 
 // We are testing that we can register this Google Datasource
@@ -320,7 +247,7 @@ func TestShowTables(t *testing.T) {
 		Table string `db:"Table"`
 	}{}
 	found := false
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "show tables;",
 		ExpectRowCt: -1,
 		ValidateRowData: func() {
@@ -374,7 +301,7 @@ func TestDescribeTable(t *testing.T) {
 		Extra   string `db:"Extra"`
 	}{}
 	describedCt := 0
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         fmt.Sprintf("describe %s;", ArticleKind),
 		ExpectRowCt: 11,
 		ValidateRowData: func() {
@@ -415,7 +342,7 @@ func TestSimpleRowSelect(t *testing.T) {
 		Author  string
 		// Category []string  // Crap, downside of sqlx/mysql is no complex types
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select title, count, deleted, author from DataUxTestArticle WHERE author = \"aaron\" LIMIT 1",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -425,7 +352,7 @@ func TestSimpleRowSelect(t *testing.T) {
 		},
 		RowData: &data,
 	})
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select title, count,deleted from DataUxTestArticle WHERE count = 22;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -433,7 +360,7 @@ func TestSimpleRowSelect(t *testing.T) {
 		},
 		RowData: &data,
 	})
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:             "select title, count, deleted from DataUxTestArticle LIMIT 10;",
 		ExpectRowCt:     4,
 		ValidateRowData: func() {},
@@ -446,7 +373,7 @@ func TestSelectLimit(t *testing.T) {
 		Title string
 		Count int
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:             "select title, count from DataUxTestArticle LIMIT 1;",
 		ExpectRowCt:     1,
 		ValidateRowData: func() {},
@@ -459,7 +386,7 @@ func TestSelectWhereLike(t *testing.T) {
 		Title string
 		Ct    int
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         `SELECT title, count as ct from DataUxTestArticle WHERE title like "list%"`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -468,7 +395,7 @@ func TestSelectWhereLike(t *testing.T) {
 		RowData: &data,
 	})
 	// TODO:  poly fill this, as doesn't work in datastore
-	// validateQuerySpec(t, QuerySpec{
+	// validateQuerySpec(t, tu.QuerySpec{
 	// 	Sql:         `SELECT title, count as ct from article WHERE title like "%stic%"`,
 	// 	ExpectRowCt: 1,
 	// 	ValidateRowData: func() {
@@ -483,7 +410,7 @@ func TestSelectOrderBy(t *testing.T) {
 		Title string
 		Ct    int
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select title, count64 AS ct FROM DataUxTestArticle ORDER BY count64 DESC LIMIT 1;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -492,7 +419,7 @@ func TestSelectOrderBy(t *testing.T) {
 		},
 		RowData: &data,
 	})
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select title, count64 AS ct FROM DataUxTestArticle ORDER BY count64 ASC LIMIT 1;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -504,14 +431,20 @@ func TestSelectOrderBy(t *testing.T) {
 }
 
 func TestInsertSimple(t *testing.T) {
-	data := struct {
-		Title string
-		Count int
-	}{}
-	validateQuerySpec(t, QuerySpec{
-		Sql:             `INSERT INTO users (id, name, email) VALUES(1, "name","bob@email.com");`,
-		ExpectRowCt:     1,
+	validateQuerySpec(t, tu.QuerySpec{
+		Exec:            `INSERT INTO DataUxTestUser (id, name, deleted, created, updated) VALUES ("user814", "test_name",false, now(), now());`,
 		ValidateRowData: func() {},
-		RowData:         &data,
+		ExpectRowCt:     1,
 	})
 }
+
+/*
+type User struct {
+	Id      string     `datastore:"id"`
+	Name    string     `datastore:"name"`
+	Deleted bool       `datastore:"deleted,noindex"`
+	Roles   []string   `datastore:"roles,noindex"`
+	Created time.Time  `datastore:"created"`
+	Updated *time.Time `datastore:"created"`
+}
+*/

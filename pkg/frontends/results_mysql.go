@@ -48,7 +48,7 @@ func (m *MySqlResultWriter) Close() error {
 		m.Rs = NewEmptyResultset(m.projection)
 		//u.Infof("nil resultwriter Close() has RS?%v rowct:%v", m.Rs == nil, len(m.Rs.RowDatas))
 	} else {
-		u.Infof("in mysql resultwriter Close() has RS?%v rowct:%v", m.Rs == nil, len(m.Rs.RowDatas))
+		//u.Infof("in mysql resultwriter Close() has RS?%v rowct:%v", m.Rs == nil, len(m.Rs.RowDatas))
 	}
 	m.writer.WriteResult(m.Rs)
 	return nil
@@ -148,7 +148,7 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 		//u.Debugf("added field: %v", col.Name)
 	}
 
-	u.Debugf("writeheaders: %#v", m.Rs.FieldNames)
+	//u.Debugf("writeheaders: %#v", m.Rs.FieldNames)
 	return nil
 }
 

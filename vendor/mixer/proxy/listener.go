@@ -46,7 +46,7 @@ func NewMysqlListener(feConf *models.ListenerConfig, conf *models.Config) (*Mysq
 		return nil, err
 	}
 
-	u.Debugf("Server run MySql Protocol Listen(%s) at '%s'", netProto, myl.addr)
+	//u.Debugf("Server run MySql Protocol Listen(%s) at '%s'", netProto, myl.addr)
 	return myl, nil
 }
 
@@ -66,7 +66,7 @@ type MysqlListener struct {
 func (m *MysqlListener) Run(handler models.Handler, stop chan bool) error {
 
 	m.handler = handler
-	u.Debugf("using handler:  %T", handler)
+	//u.Debugf("using handler:  %T", handler)
 	m.running = true
 
 	for m.running {
