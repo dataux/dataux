@@ -78,8 +78,10 @@ type Table struct {
 
 type FieldData []byte
 
-// Field is a Descriptor of a Field/Column within a table
+// Field is a Descriptor of a Field/Column within a table used
+// for meta-data schema definition
 type Field struct {
+	Table              string
 	Name               string
 	Description        string
 	Data               FieldData

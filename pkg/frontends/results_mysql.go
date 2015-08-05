@@ -215,6 +215,10 @@ func NewMySqlExecResultWriter(writer models.ResultWriter, schema *models.Schema)
 	return m
 }
 func (m *MySqlExecResultWriter) Close() error {
+	if m.Rs == nil {
+		// error?
+
+	}
 	m.writer.WriteResult(m.Rs)
 	return nil
 }
