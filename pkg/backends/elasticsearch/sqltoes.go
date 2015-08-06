@@ -138,7 +138,9 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 		for field, _ := range m.projections {
 			fields = append(fields, field)
 		}
-		qs.Set("fields", strings.Join(fields, ","))
+		// We really can't do this although we would like to because
+		// es doesn't support projection on non-leaf (scalar) fields
+		// qs.Set("fields", strings.Join(fields, ","))
 	}
 	query := fmt.Sprintf("%s/%s/_search?%s", m.Host(), m.tbl.Name, qs.Encode())
 
