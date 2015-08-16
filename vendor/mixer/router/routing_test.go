@@ -12,42 +12,43 @@ func newTestDBRule() *Router {
 	var s = `
 schemas : [
   {
-    db : mixer
+    schema : test1
     backends: [node1,node2,node3,node4,node5,node6,node7,node8,node9,node10]
     backend_type : mysql
-    # list of rules
-    rules : {
-      default : node1
-      # shards
-      shard : [
-        {
-          table : test1
-          key : id
-          backends: [node1,node2,node3,node4,node5,node6,node7,node8,node9,node10]
-          type : hash
-        },
-        {   
-          table: test2
-          key: id
-          type: range
-          backends: [node1,node2,node3]
-          range: "-10000-20000-"
-        }
-      ]
-    }
   }
 ]
+
+# list of rules
+rules : {
+  default : node1
+  # shards
+  shard : [
+    {
+      table : test1
+      key : id
+      backends: [node1,node2,node3,node4,node5,node6,node7,node8,node9,node10]
+      type : hash
+    },
+    {   
+      table: test2
+      key: id
+      type: range
+      backends: [node1,node2,node3]
+      range: "-10000-20000-"
+    }
+  ]
+}
 `
 
-	cfg, err := models.LoadConfig(s)
+	conf, err := models.LoadConfig(s)
 	if err != nil {
 		println(err.Error())
 		panic(err)
 	}
 
 	var r *Router
-
-	r, err = NewRouter(cfg.Schemas[0])
+	ctx := models.NewServerCtx(conf)
+	r, err = NewRouter(conf, ctx.Schema("test1"))
 	if err != nil {
 		println(err.Error())
 		panic(err)

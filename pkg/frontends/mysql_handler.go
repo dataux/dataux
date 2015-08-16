@@ -7,11 +7,12 @@ import (
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
+	"github.com/kr/pretty"
+
 	"github.com/dataux/dataux/pkg/backends"
 	"github.com/dataux/dataux/pkg/models"
 	"github.com/dataux/dataux/vendor/mixer/mysql"
 	"github.com/dataux/dataux/vendor/mixer/proxy"
-	"github.com/kr/pretty"
 )
 
 const (

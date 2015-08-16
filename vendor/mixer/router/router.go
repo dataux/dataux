@@ -2,9 +2,12 @@ package router
 
 import (
 	"fmt"
-	u "github.com/araddon/gou"
-	"github.com/dataux/dataux/pkg/models"
 	"strings"
+
+	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/datasource"
+
+	"github.com/dataux/dataux/pkg/models"
 )
 
 var _ = u.EMPTY
@@ -58,22 +61,22 @@ type Router struct {
 	nodes       []string //just for human visiblity
 }
 
-func NewRouter(schemaConfig *models.SchemaConfig) (*Router, error) {
+func NewRouter(conf *models.Config, schema *datasource.Schema) (*Router, error) {
 
 	panic("not implemented nodes")
 
-	if !includeNode(schemaConfig.Nodes, schemaConfig.RulesConifg.Default) {
+	if !includeNodeConfig(conf.Nodes, conf.Rules.Default) {
 		return nil, fmt.Errorf("default node[%s] not in the nodes list.",
-			schemaConfig.RulesConifg.Default)
+			conf.Rules.Default)
 	}
 
 	rt := new(Router)
-	rt.DB = schemaConfig.Name
-	//rt.nodes = schemaConfig.Nodes
-	rt.Rules = make(map[string]*Rule, len(schemaConfig.RulesConifg.ShardRule))
-	rt.DefaultRule = NewDefaultRule(rt.DB, schemaConfig.RulesConifg.Default)
+	rt.DB = schema.Name
+	//rt.nodes = conf.Nodes
+	rt.Rules = make(map[string]*Rule, len(conf.Rules.ShardRule))
+	rt.DefaultRule = NewDefaultRule(rt.DB, conf.Rules.Default)
 
-	for _, shard := range schemaConfig.RulesConifg.ShardRule {
+	for _, shard := range conf.Rules.ShardRule {
 		u.Infof("shard: %v", shard)
 		rc := &RuleConfig{shard}
 		for _, node := range shard.Nodes {
@@ -102,6 +105,15 @@ func NewRouter(schemaConfig *models.SchemaConfig) (*Router, error) {
 func includeNode(nodes []string, node string) bool {
 	for _, n := range nodes {
 		if n == node {
+			return true
+		}
+	}
+	return false
+}
+
+func includeNodeConfig(nodes []*datasource.NodeConfig, node string) bool {
+	for _, n := range nodes {
+		if n.Name == node {
 			return true
 		}
 	}

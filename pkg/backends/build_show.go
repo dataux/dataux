@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	u "github.com/araddon/gou"
-	"github.com/araddon/qlbridge/datasource/inmemmap"
+	"github.com/araddon/qlbridge/datasource/membtree"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
@@ -17,7 +17,7 @@ var (
 )
 
 func (m *Builder) emptyTask(name string) (exec.Tasks, error) {
-	source := inmemmap.NewStaticDataSource(name, 0, nil, []string{name})
+	source := membtree.NewStaticDataSource(name, 0, nil, []string{name})
 	m.Projection = expr.NewProjection()
 	m.Projection.AddColumnShort(name, value.StringType)
 	tasks := make(exec.Tasks, 0)
@@ -34,7 +34,7 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 		// SHOW databases;
 		vals := make([][]driver.Value, 1)
 		vals[0] = []driver.Value{m.schema.Name}
-		source := inmemmap.NewStaticDataSource("databases", 0, vals, []string{"Database"})
+		source := membtree.NewStaticDataSource("databases", 0, vals, []string{"Database"})
 		m.Projection = expr.NewProjection()
 		m.Projection.AddColumnShort("Database", value.StringType)
 		tasks := make(exec.Tasks, 0)
@@ -59,7 +59,7 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 				vals[row] = []driver.Value{tbl.Name, "BASE TABLE"}
 				row++
 			}
-			source := inmemmap.NewStaticDataSource("tables", 0, vals, []string{"Tables", "Table_type"})
+			source := membtree.NewStaticDataSource("tables", 0, vals, []string{"Tables", "Table_type"})
 			m.Projection = expr.NewProjection()
 			m.Projection.AddColumnShort("Tables", value.StringType)
 			m.Projection.AddColumnShort("Table_type", value.StringType)

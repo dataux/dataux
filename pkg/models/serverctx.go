@@ -10,14 +10,14 @@ import (
 
 type ServerCtx struct {
 	Config  *Config
-	schemas map[string]*Schema
-	RtConf  *datasource.RuntimeConfig
+	schemas map[string]*datasource.Schema
+	RtConf  *datasource.RuntimeSchema
 }
 
 func NewServerCtx(conf *Config) *ServerCtx {
 	svr := ServerCtx{}
 	svr.Config = conf
-	svr.RtConf = datasource.NewRuntimeConfig()
+	svr.RtConf = datasource.NewRuntimeSchema()
 	if conf.SupressRecover {
 		svr.RtConf.DisableRecover = true
 	}
@@ -32,10 +32,10 @@ func (m *ServerCtx) Init() error {
 	return nil
 }
 
-func (m *ServerCtx) Table(schema, tableName string) (*Table, error) {
+func (m *ServerCtx) Table(schema, tableName string) (*datasource.Table, error) {
 	s := m.schemas[schema]
 	if s != nil {
-		return s.Tables[tableName], nil
+		return s.TableMap[tableName], nil
 	}
 
 	return nil, fmt.Errorf("Table not found %v", tableName)
@@ -43,7 +43,7 @@ func (m *ServerCtx) Table(schema, tableName string) (*Table, error) {
 
 func (m *ServerCtx) loadConfig() error {
 
-	m.schemas = make(map[string]*Schema)
+	m.schemas = make(map[string]*datasource.Schema)
 
 	for _, schemaConf := range m.Config.Schemas {
 
@@ -52,19 +52,14 @@ func (m *ServerCtx) loadConfig() error {
 			panic(fmt.Sprintf("duplicate schema '%s'", schemaConf.Name))
 		}
 
-		schema := &Schema{
-			Name:          schemaConf.Name,
-			Tables:        make(map[string]*Table),
-			SourceSchemas: make(map[string]*SourceSchema),
-			TableNames:    make([]string, 0),
-			Conf:          schemaConf,
-		}
-
+		schema := datasource.NewSchema(schemaConf.Name)
 		m.schemas[schemaConf.Name] = schema
 
 		// find the Source config for eached named db/source
 		for _, sourceName := range schemaConf.Sources {
-			var sourceConf *SourceConfig
+
+			var sourceConf *datasource.SourceConfig
+			// we must find a source conf by name
 			for _, sc := range m.Config.Sources {
 				//u.Debugf("sc: %s %#v", sourceName, sc)
 				if sc.Name == sourceName {
@@ -79,21 +74,16 @@ func (m *ServerCtx) loadConfig() error {
 			sourceConf.Init()
 
 			//u.Infof("found sourceConf: %#v", sourceConf)
-			sourceSchema := &SourceSchema{
-				Db:         sourceConf.Name,
-				Tables:     make(map[string]*Table),
-				TableNames: make([]string, 0),
-				Conf:       sourceConf,
-				Schema:     schema,
-				Nodes:      make([]*NodeConfig, 0),
-			}
+			sourceSchema := datasource.NewSourceSchema(sourceName, sourceConf.SourceType)
+			sourceSchema.Conf = sourceConf
+			sourceSchema.Schema = schema
 
 			for _, nc := range m.Config.Nodes {
 				//u.Debugf("node: %#v", nc)
-				if nc.SourceType == sourceConf.SourceType {
+				if nc.Source == sourceConf.Name {
 					//u.Infof("Found SourceType Match: %#v", nc)
 					sourceSchema.Nodes = append(sourceSchema.Nodes, nc)
-					sourceSchema.address = nc.Address
+					//sourceSchema.address = nc.Address
 				}
 			}
 
@@ -106,12 +96,12 @@ func (m *ServerCtx) loadConfig() error {
 			}
 			ds := sourceFunc(sourceSchema, m.Config)
 			sourceSchema.DS = ds
-			sourceSchema.DataSource = datasource.NewFeaturedSource(ds)
+			sourceSchema.DSFeatures = datasource.NewFeaturedSource(ds)
 
 			// TODO:   Periodically refresh this as es schema is dynamic
 			for _, tableName := range ds.Tables() {
 				tableName = strings.ToLower(tableName)
-				if _, exists := schema.Tables[tableName]; exists {
+				if _, exists := schema.TableMap[tableName]; exists {
 					return fmt.Errorf("Schemas may not contain more than one table of same name: %v", tableName)
 				}
 				m.loadSourceSchema(tableName, schema, sourceSchema)
@@ -124,14 +114,20 @@ func (m *ServerCtx) loadConfig() error {
 	return nil
 }
 
-func (m *ServerCtx) loadSourceSchema(tableName string, schema *Schema, source *SourceSchema) {
+func (m *ServerCtx) loadSourceSchema(tableName string, schema *datasource.Schema, source *datasource.SourceSchema) {
 	tableLoad := true
-	if len(source.Conf.tablesLoadMap) > 0 {
-		_, tableLoad = source.Conf.tablesLoadMap[tableName]
+	if len(source.Conf.TablesToLoad) > 0 {
+		tableLoad = false
+		for _, tbl := range source.Conf.TablesToLoad {
+			if tbl == tableName {
+				tableLoad = true
+				break
+			}
+		}
 	}
 	if tableLoad {
 		//u.Debugf("loading table %s", tableName)
-		tbl, err := source.DS.Table(tableName)
+		tbl, err := schema.Table(tableName)
 		if err != nil {
 			u.Errorf("Could not find table? %v", err)
 		} else if tbl == nil {
@@ -139,8 +135,8 @@ func (m *ServerCtx) loadSourceSchema(tableName string, schema *Schema, source *S
 		} else {
 			tbl.Schema = schema
 			tbl.SourceSchema = source
-			source.Tables[tableName] = tbl
-			schema.Tables[tableName] = tbl
+			source.TableMap[tableName] = tbl
+			schema.TableMap[tableName] = tbl
 			schema.TableNames = append(schema.TableNames, tableName)
 			source.TableNames = append(source.TableNames, tableName)
 		}
@@ -150,7 +146,7 @@ func (m *ServerCtx) loadSourceSchema(tableName string, schema *Schema, source *S
 	}
 }
 
-func (m *ServerCtx) Schema(db string) *Schema {
+func (m *ServerCtx) Schema(db string) *datasource.Schema {
 	s := m.schemas[db]
 	return s
 }

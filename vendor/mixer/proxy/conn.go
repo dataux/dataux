@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 
 	u "github.com/araddon/gou"
+
+	"github.com/araddon/qlbridge/datasource"
 	"github.com/dataux/dataux/pkg/models"
 	"github.com/dataux/dataux/vendor/mixer/client"
 	"github.com/dataux/dataux/vendor/mixer/hack"
@@ -46,7 +48,7 @@ type Conn struct {
 	user         string
 	db           string
 	salt         []byte
-	schema       *models.Schema
+	schema       *datasource.Schema
 	txConns      map[*Node]*client.SqlConn
 	closed       bool
 	lastInsertId int64

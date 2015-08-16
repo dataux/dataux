@@ -6,7 +6,7 @@ import (
 	"time"
 
 	u "github.com/araddon/gou"
-	"github.com/dataux/dataux/pkg/models"
+	"github.com/araddon/qlbridge/datasource"
 	"github.com/dataux/dataux/vendor/mixer/client"
 )
 
@@ -21,7 +21,7 @@ const (
 type Node struct {
 	sync.Mutex
 
-	cfg *models.SourceConfig
+	conf *datasource.SourceConfig
 
 	// client.DB's are connection managers
 	// each client.DB represents a server/address/database combo
@@ -56,7 +56,7 @@ func (n *Node) run() {
 }
 
 func (n *Node) String() string {
-	return n.cfg.Name
+	return n.conf.Name
 }
 
 func (n *Node) getMasterConn() (*client.SqlConn, error) {
@@ -74,8 +74,9 @@ func (n *Node) getMasterConn() (*client.SqlConn, error) {
 func (n *Node) getSelectConn() (*client.SqlConn, error) {
 	var db *client.DB
 
+	rwSplit := n.conf.Settings.Bool("rwsplit")
 	n.Lock()
-	if n.cfg.RWSplit && n.slave != nil {
+	if rwSplit && n.slave != nil {
 		db = n.slave
 	} else {
 		db = n.db
@@ -134,12 +135,14 @@ func (n *Node) checkSlave() {
 }
 
 func (n *Node) openDB(addr string) (*client.DB, error) {
-	db, err := client.Open(addr, n.cfg.User, n.cfg.Password, "")
+	user := n.conf.Settings.String("user")
+	password := n.conf.Settings.String("password")
+	db, err := client.Open(addr, user, password, "")
 	if err != nil {
 		return nil, err
 	}
-
-	db.SetMaxIdleConnNum(n.cfg.IdleConns)
+	idelConns := n.conf.Settings.Int("idleconns")
+	db.SetMaxIdleConnNum(idelConns)
 	return db, nil
 }
 

@@ -1,10 +1,10 @@
 package models
 
 import (
-	"fmt"
 	"io/ioutil"
 
 	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/datasource"
 	"github.com/lytics/confl"
 )
 
@@ -40,72 +40,13 @@ func LoadConfig(conf string) (*Config, error) {
 //   3) Virtual Schemas
 //   4) list of server/nodes for Sources
 type Config struct {
-	SupressRecover bool              `json:"supress_recover"` // do we recover?
-	LogLevel       string            `json:"log_level"`       // [debug,info,error,]
-	Frontends      []*ListenerConfig `json:"frontends"`       // tcp listener configs
-	Sources        []*SourceConfig   `json:"sources"`         // backend servers/sources (es, mysql etc)
-	Schemas        []*SchemaConfig   `json:"schemas"`         // Schemas, each backend has 1 schema
-	Nodes          []*NodeConfig     `json:"nodes"`           // list of nodes that host sources
-}
-
-// A Schema is a Virtual Schema, and may have multiple backend's
-type SchemaConfig struct {
-	Name        string      `json:"name"`    // Virtual Schema Name, must be unique
-	Sources     []string    `json:"sources"` // List of sources , the names of the "Db" in source
-	RulesConifg RulesConfig `json:"rules"`   // (optional) Routing rules
-	Nodes       []string    `json:"-"`       // List of backend Servers
-}
-
-func (m *SchemaConfig) String() string {
-	return fmt.Sprintf(`<schemaconf Name="%s" sources=[%v] />`, m.Name, m.Sources)
-}
-
-// Sources are storage/database/servers/csvfiles
-//  - this represents a single source Type
-//  - may have more than one node
-//  - belongs to a Schema ( or schemas)
-type SourceConfig struct {
-	Name          string   `json:"name"`           // Name of this Source, ie a database schema
-	SourceType    string   `json:"type"`           // [mysql,elasticsearch,file]
-	TablesToLoad  []string `json:"tables_to_load"` // if non empty, only load these tables
-	tablesLoadMap map[string]struct{}
-
-	//Auth map[string]string
-
-	// Do we deprecate this?
-	DownAfterNoAlive int    `json:"down_after_noalive"`
-	IdleConns        int    `json:"idle_conns"`
-	RWSplit          bool   `json:"rw_split"`
-	User             string `json:"user"`
-	Password         string `json:"password"`
-	Master           string `json:"master"`
-	Slave            string `json:"slave"`
-}
-
-func (m *SourceConfig) Init() {
-	if len(m.TablesToLoad) > 0 && len(m.tablesLoadMap) == 0 {
-		tm := make(map[string]struct{})
-		for _, tbl := range m.TablesToLoad {
-			tm[tbl] = struct{}{}
-		}
-		m.tablesLoadMap = tm
-	}
-}
-
-func (m *SourceConfig) String() string {
-	return fmt.Sprintf(`<sourceconf name="%s" type="%s" />`, m.Name, m.SourceType)
-}
-
-// A Node Is a physical server/instance of a service of type SourceType
-//  and supporting one or more virtual schemas
-type NodeConfig struct {
-	Name       string `json:"name"`    // Node Name
-	Address    string `json:"address"` // connection/ip info
-	SourceType string `json:"type"`    // [mysql,elasticsearch,file]
-}
-
-func (m *NodeConfig) String() string {
-	return fmt.Sprintf(`<nodeconfig name="%s" address="%s" type="%s" />`, m.Name, m.Address, m.SourceType)
+	SupressRecover bool                       `json:"supress_recover"` // do we recover?
+	LogLevel       string                     `json:"log_level"`       // [debug,info,error,]
+	Frontends      []*ListenerConfig          `json:"frontends"`       // tcp listener configs
+	Sources        []*datasource.SourceConfig `json:"sources"`         // backend servers/sources (es, mysql etc)
+	Schemas        []*datasource.SchemaConfig `json:"schemas"`         // Schemas, each backend has 1 schema
+	Nodes          []*datasource.NodeConfig   `json:"nodes"`           // list of nodes that host sources
+	Rules          *RulesConfig
 }
 
 // Frontend Listener to listen for inbound traffic on
@@ -118,6 +59,7 @@ type ListenerConfig struct {
 }
 
 type RulesConfig struct {
+	Schema    string        `json:"default"`
 	Default   string        `json:"default"`
 	ShardRule []ShardConfig `json:"shard"`
 }

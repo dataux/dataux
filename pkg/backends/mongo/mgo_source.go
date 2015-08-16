@@ -3,7 +3,6 @@ package mongo
 import (
 	"database/sql/driver"
 	"fmt"
-	"github.com/araddon/qlbridge/expr"
 	"sort"
 	"strings"
 	"sync"
@@ -14,6 +13,7 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/models"
 )
@@ -41,17 +41,17 @@ type MongoDataSource struct {
 	db        string
 	databases []string
 	conf      *models.Config
-	schema    *models.SourceSchema
+	schema    *datasource.SourceSchema
 	mu        sync.Mutex
 	sess      *mgo.Session
 	closed    bool
 }
 
-func NewMongoDataSource(schema *models.SourceSchema, conf *models.Config) models.DataSource {
+func NewMongoDataSource(schema *datasource.SourceSchema, conf *models.Config) models.DataSource {
 	m := MongoDataSource{}
 	m.schema = schema
 	m.conf = conf
-	m.db = strings.ToLower(schema.Db)
+	m.db = strings.ToLower(schema.Name)
 	// Register our datasource.Datasources in registry
 	m.Init()
 	datasource.Register("mongo", &m)
@@ -71,7 +71,7 @@ func (m *MongoDataSource) Init() error {
 	}
 
 	if m.schema != nil {
-		u.Debugf("Post Init() mongo schema P=%p tblct=%d", m.schema, len(m.schema.Tables))
+		u.Debugf("Post Init() mongo schema P=%p tblct=%d", m.schema, len(m.schema.TableNames))
 	}
 
 	return m.loadSchema()
@@ -105,8 +105,21 @@ func (m *MongoDataSource) Close() error {
 	return nil
 }
 
+func chooseBackend(source string, schema *datasource.SourceSchema) string {
+	for _, node := range schema.Nodes {
+		if node.Source == source {
+			u.Debugf("found node: %+v", node)
+			// TODO:  implement real balancer
+			return node.Address
+		}
+	}
+	return ""
+}
+
 func (m *MongoDataSource) connect() error {
-	host := m.schema.ChooseBackend()
+
+	host := chooseBackend(m.db, m.schema)
+
 	u.Infof("connecting MongoDataSource: host='%s'  conf=%#v", host, m.schema.Conf)
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -136,9 +149,9 @@ func (m *MongoDataSource) connect() error {
 	u.Infof("old session %p -> new session %p", m.sess, sess)
 	m.sess = sess
 
-	db := sess.DB(m.schema.Db)
+	db := sess.DB(m.schema.Name)
 	if db == nil {
-		return fmt.Errorf("Database %v not found", m.schema.Db)
+		return fmt.Errorf("Database %v not found", m.schema.Name)
 	}
 
 	return nil
@@ -153,10 +166,10 @@ func (m *MongoDataSource) Tables() []string {
 
 func (m *MongoDataSource) Open(collectionName string) (datasource.SourceConn, error) {
 	//u.Debugf("Open(%v)", collectionName)
-	tbl := m.schema.Tables[collectionName]
+	tbl := m.schema.TableMap[collectionName]
 	if tbl == nil {
-		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Db, collectionName)
-		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, collectionName)
+		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, collectionName)
+		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, collectionName)
 	}
 
 	es := NewSqlToMgo(tbl, m.sess)
@@ -179,8 +192,8 @@ func (m *MongoDataSource) Accept(plan expr.SubVisitor) (datasource.Scanner, erro
 
 	// 	tbl, _ := m.schema.Table(tblName)
 	// 	if tbl == nil {
-	// 		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Db, tblName)
-	// 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, tblName)
+	// 		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, tblName)
+	// 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, tblName)
 	// 	}
 
 	// 	es := NewSqlToMgo(tbl)
@@ -201,10 +214,10 @@ func (m *MongoDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, e
 	u.Debugf("get sourceTask for %v", stmt)
 	tblName := strings.ToLower(stmt.From[0].Name)
 
-	tbl := m.schema.Tables[tblName]
+	tbl := m.schema.TableMap[tblName]
 	if tbl == nil {
-		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Db, tblName)
-		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, tblName)
+		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, tblName)
+		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, tblName)
 	}
 
 	sqlToMgo := NewSqlToMgo(tbl, m.sess)
@@ -218,7 +231,7 @@ func (m *MongoDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, e
 	return resp, nil
 }
 
-func (m *MongoDataSource) Table(table string) (*models.Table, error) {
+func (m *MongoDataSource) Table(table string) (*datasource.Table, error) {
 	//u.Debugf("get table for %s", table)
 	return m.loadTableSchema(table)
 }
@@ -234,13 +247,13 @@ func (m *MongoDataSource) loadDatabases() error {
 	u.Debugf("found database names: %v", m.databases)
 	found := false
 	for _, db := range dbs {
-		if strings.ToLower(db) == strings.ToLower(m.schema.Db) {
+		if strings.ToLower(db) == strings.ToLower(m.schema.Name) {
 			found = true
 		}
 	}
 	if !found {
-		u.Warnf("could not find database: %v", m.schema.Db)
-		return fmt.Errorf("Could not find that database: %v", m.schema.Db)
+		u.Warnf("could not find database: %v", m.schema.Name)
+		return fmt.Errorf("Could not find that database: %v", m.schema.Name)
 	}
 
 	return nil
@@ -261,13 +274,13 @@ func (m *MongoDataSource) loadTableNames() error {
 	return nil
 }
 
-func (m *MongoDataSource) loadTableSchema(table string) (*models.Table, error) {
+func (m *MongoDataSource) loadTableSchema(table string) (*datasource.Table, error) {
 
 	if m.schema == nil {
 		return nil, fmt.Errorf("no schema in use")
 	}
 	// check cache first
-	if tbl, ok := m.schema.Tables[table]; ok && tbl.Current() {
+	if tbl, ok := m.schema.TableMap[table]; ok && tbl.Current() {
 		return tbl, nil
 	}
 
@@ -280,7 +293,7 @@ func (m *MongoDataSource) loadTableSchema(table string) (*models.Table, error) {
 				- use new structure for Observations
 			- shared pkg for data-inspection, data builder
 	*/
-	tbl := models.NewTable(table, m.schema)
+	tbl := datasource.NewTable(table, m.schema)
 	coll := m.sess.DB(m.db).C(table)
 
 	var sampleRows []map[string]interface{}
@@ -300,48 +313,48 @@ func (m *MongoDataSource) loadTableSchema(table string) (*models.Table, error) {
 			switch val := iVal.(type) {
 			case bson.ObjectId:
 				//u.Debugf("found bson.ObjectId: %v='%v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.StringType, 24, "bson.ObjectID AUTOGEN"))
+				tbl.AddField(datasource.NewField(colName, value.StringType, 24, "bson.ObjectID AUTOGEN"))
 				tbl.AddValues([]driver.Value{colName, "string", "NO", "PRI", "AUTOGEN", ""})
 			case bson.M:
 				//u.Debugf("found bson.M: %v='%v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.MapValueType, 24, "bson.M"))
+				tbl.AddField(datasource.NewField(colName, value.MapValueType, 24, "bson.M"))
 				tbl.AddValues([]driver.Value{colName, "object", "NO", "", "", "Nested Map Type"})
 			case map[string]interface{}:
 				//u.Debugf("found map[string]interface{}: %v='%v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.MapValueType, 24, "map[string]interface{}"))
+				tbl.AddField(datasource.NewField(colName, value.MapValueType, 24, "map[string]interface{}"))
 				tbl.AddValues([]driver.Value{colName, "object", "NO", "", "", "Nested Map Type"})
 			case int:
 				//u.Debugf("found int: %v='%v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.IntType, 32, "int"))
+				tbl.AddField(datasource.NewField(colName, value.IntType, 32, "int"))
 				tbl.AddValues([]driver.Value{colName, "int", "NO", "", "", "int"})
 			case int64:
 				//u.Debugf("found int64: %v='%v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.IntType, 32, "long"))
+				tbl.AddField(datasource.NewField(colName, value.IntType, 32, "long"))
 				tbl.AddValues([]driver.Value{colName, "long", "NO", "", "", "long"})
 			case float64:
 				//u.Debugf("found float64: %v='%v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.NumberType, 32, "float64"))
+				tbl.AddField(datasource.NewField(colName, value.NumberType, 32, "float64"))
 				tbl.AddValues([]driver.Value{colName, "float64", "NO", "", "", "float64"})
 			case string:
 				//u.Debugf("found string: %v='%v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.StringType, 32, "string"))
+				tbl.AddField(datasource.NewField(colName, value.StringType, 32, "string"))
 				tbl.AddValues([]driver.Value{colName, "string", "NO", "", "", "string"})
 			case bool:
 				//u.Debugf("found string: %v='%v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.BoolType, 1, "bool"))
+				tbl.AddField(datasource.NewField(colName, value.BoolType, 1, "bool"))
 				tbl.AddValues([]driver.Value{colName, "bool", "NO", "", "", "bool"})
 			case time.Time:
 				//u.Debugf("found time.Time: %v='%v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.TimeType, 32, "datetime"))
+				tbl.AddField(datasource.NewField(colName, value.TimeType, 32, "datetime"))
 				tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
 			case *time.Time:
 				//u.Debugf("found time.Time: %v='%v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.TimeType, 32, "datetime"))
+				tbl.AddField(datasource.NewField(colName, value.TimeType, 32, "datetime"))
 				tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
 			case []uint8:
 				// This is most likely binary data, json.RawMessage, or []bytes
 				//u.Debugf("found []uint8: %v='%v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.ByteSliceType, 24, "[]byte"))
+				tbl.AddField(datasource.NewField(colName, value.ByteSliceType, 24, "[]byte"))
 				tbl.AddValues([]driver.Value{colName, "binary", "NO", "", "", "Binary data:  []byte"})
 			case []string:
 				u.Warnf("NOT IMPLEMENTED:  found []string %v='%v'", colName, val)
@@ -355,11 +368,11 @@ func (m *MongoDataSource) loadTableSchema(table string) (*models.Table, error) {
 				}
 				switch typ {
 				case value.StringType:
-					tbl.AddField(models.NewField(colName, value.StringsType, 24, "[]string"))
+					tbl.AddField(datasource.NewField(colName, value.StringsType, 24, "[]string"))
 					tbl.AddValues([]driver.Value{colName, "[]string", "NO", "", "", "[]string"})
 				default:
 					u.Infof("SEMI IMPLEMENTED:   found []interface{}: %v='%v'  %T %v", colName, val, val, typ.String())
-					tbl.AddField(models.NewField(colName, value.SliceValueType, 24, "[]value"))
+					tbl.AddField(datasource.NewField(colName, value.SliceValueType, 24, "[]value"))
 					tbl.AddValues([]driver.Value{colName, "[]value", "NO", "", "", "[]value"})
 				}
 
@@ -374,7 +387,7 @@ func (m *MongoDataSource) loadTableSchema(table string) (*models.Table, error) {
 	}
 
 	// buildMongoFields(s, tbl, jh, "", 0)
-	m.schema.Tables[table] = tbl
+	m.schema.AddTable(tbl)
 
 	return tbl, nil
 }

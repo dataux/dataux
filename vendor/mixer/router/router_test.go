@@ -7,39 +7,53 @@ import (
 
 func TestParseRule(t *testing.T) {
 	var s = `
-schemas : [
+
+frontends [
   {
-    db : mixer
+    name : test1
     backends : ["node1", "node2", "node3"]
     backend_type : mysql
-    # list of rules
-    rules : {
-      default : node1
-      # shards
-      shard : [
-        {
-          table : mixer_test_shard_hash
-          key : id
-          backends: [ "node2", "node3"]
-          type : hash
-        },
-        {   
-          table: mixer_test_shard_range
-          key: id
-          type: range
-          backends: [ node2, node3 ]
-          range: "-10000-"
-        }
-      ]
-    }
+  }
+]
+
+schemas : [
+  {
+    name : test1
+    backends : ["node1", "node2", "node3"]
+    backend_type : mysql
+  }
+]
+
+# list of routing rules
+rules [
+  {
+    schema  : test1
+    default : node1
+    # shards
+    shard : [
+      {
+        table : mixer_test_shard_hash
+        key : id
+        backends: [ "node2", "node3"]
+        type : hash
+      },
+      {   
+        table: mixer_test_shard_range
+        key: id
+        type: range
+        backends: [ node2, node3 ]
+        range: "-10000-"
+      }
+    ]
   }
 ]
 `
-	cfg, err := models.LoadConfig(s)
+	conf, err := models.LoadConfig(s)
 	if err != nil {
 		t.Fatalf("Should load config: %v", err)
 	}
-	rt, err := NewRouter(cfg.Schemas[0])
+	ctx := models.NewServerCtx(conf)
+	rt, err := NewRouter(conf, ctx.Schema("test1"))
 	if err != nil {
 		t.Fatal(err)
 	}

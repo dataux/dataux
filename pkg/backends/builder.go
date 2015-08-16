@@ -5,7 +5,9 @@ import (
 	"strings"
 
 	u "github.com/araddon/gou"
-	"github.com/araddon/qlbridge/datasource/inmemmap"
+
+	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/datasource/membtree"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
@@ -79,7 +81,7 @@ func BuildSqlJob(svr *models.ServerCtx, schemaDb, sqlText string) (*Builder, err
 // This is a Sql Plan Builder that chooses backends
 //   and routes/manages Requests
 type Builder struct {
-	schema     *models.Schema
+	schema     *datasource.Schema
 	svr        *models.ServerCtx
 	Projection *expr.Projection
 	Job        *exec.SqlJob
@@ -117,7 +119,7 @@ func (m *Builder) VisitSysVariable(stmt *expr.SqlSelect) (interface{}, error) {
 //
 func (m *Builder) sysVarTasks(name string, val interface{}) (interface{}, error) {
 	tasks := make(exec.Tasks, 0)
-	static := inmemmap.NewStaticDataValue(val, name)
+	static := membtree.NewStaticDataValue(val, name)
 	sourceTask := exec.NewSource(nil, static)
 	tasks.Add(sourceTask)
 	switch val.(type) {

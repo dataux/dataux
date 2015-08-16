@@ -15,7 +15,6 @@ import (
 	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/value"
 	"github.com/araddon/qlbridge/vm"
-	"github.com/dataux/dataux/pkg/models"
 )
 
 var (
@@ -32,9 +31,9 @@ var (
 type SqlToMgo struct {
 	*exec.TaskBase
 	resp           *ResultReader
-	tbl            *models.Table
+	tbl            *datasource.Table
 	sel            *expr.SqlSelect
-	schema         *models.SourceSchema
+	schema         *datasource.SourceSchema
 	sess           *mgo.Session
 	filter         bson.M
 	aggs           bson.M
@@ -45,7 +44,7 @@ type SqlToMgo struct {
 	hasSingleValue bool // single value agg
 }
 
-func NewSqlToMgo(table *models.Table, sess *mgo.Session) *SqlToMgo {
+func NewSqlToMgo(table *datasource.Table, sess *mgo.Session) *SqlToMgo {
 	return &SqlToMgo{
 		tbl:      table,
 		schema:   table.SourceSchema,
@@ -56,7 +55,7 @@ func NewSqlToMgo(table *models.Table, sess *mgo.Session) *SqlToMgo {
 
 func (m *SqlToMgo) Host() string {
 	//u.Warnf("TODO:  replace hardcoded es host")
-	return m.schema.ChooseBackend()
+	return chooseBackend(m.schema.Name, m.schema)
 }
 
 func (m *SqlToMgo) Query(req *expr.SqlSelect) (*ResultReader, error) {
@@ -122,8 +121,8 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect) (*ResultReader, error) {
 
 	filterBy, _ := json.Marshal(m.filter)
 	u.Infof("filter: %#v", m.filter)
-	u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v", m.schema.Db, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
-	query := m.sess.DB(m.schema.Db).C(m.tbl.Name).Find(m.filter).Limit(limit)
+	u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
+	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter).Limit(limit)
 
 	resultReader := NewResultReader(m, query)
 	m.resp = resultReader

@@ -13,9 +13,11 @@ import (
 	"sync/atomic"
 
 	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/expr/builtins"
 	"github.com/araddon/qlbridge/value"
+
 	"github.com/dataux/dataux/pkg/models"
 	"github.com/dataux/dataux/vendor/mixer/client"
 	"github.com/dataux/dataux/vendor/mixer/mysql"
@@ -40,7 +42,7 @@ var _ = value.ErrValue
 // Schema is the schema for a named database, shared
 // across multiple nodes
 type SchemaSharded struct {
-	*models.SourceSchema
+	*datasource.SourceSchema
 	mysqlnodes map[string]*Node
 	rule       *router.Router
 }
@@ -98,7 +100,7 @@ func (m *HandlerSharded) Handle(writer models.ResultWriter, req *models.Request)
 	return m.chooseCommand(writer, req)
 }
 
-func (m *HandlerSharded) SchemaUse(db string) *models.Schema {
+func (m *HandlerSharded) SchemaUse(db string) *datasource.Schema {
 	schema, ok := m.schemas[db]
 	if ok {
 		m.schema = schema
@@ -345,7 +347,7 @@ func (m *HandlerSharded) handleSimpleSelect(sql string, stmt *sqlparser.SimpleSe
 		r, err = BuildSimpleSelectResult(m.conn.connectionId, f.Name, expr.As)
 	case "database":
 		if m.schema != nil {
-			r, err = BuildSimpleSelectResult(m.schema.Db, f.Name, expr.As)
+			r, err = BuildSimpleSelectResult(m.schema.Name, f.Name, expr.As)
 		} else {
 			r, err = BuildSimpleSelectResult("NULL", f.Name, expr.As)
 		}
@@ -381,7 +383,7 @@ func (m *HandlerSharded) handleFieldList(data []byte) error {
 	}
 	defer co.Close()
 
-	if err = co.UseDB(m.schema.Db); err != nil {
+	if err = co.UseDB(m.schema.Name); err != nil {
 		return err
 	}
 
@@ -441,7 +443,7 @@ func (m *HandlerSharded) handleShowTables(sql string, stmt *sqlparser.Show) (*my
 			return nil, err
 		}
 
-		if err := co.UseDB(s.Db); err != nil {
+		if err := co.UseDB(s.Name); err != nil {
 			co.Close()
 			return nil, err
 		}
@@ -467,7 +469,7 @@ func (m *HandlerSharded) handleShowTables(sql string, stmt *sqlparser.Show) (*my
 		values[i] = tables[i]
 	}
 
-	return BuildSimpleShowResultset(values, fmt.Sprintf("Tables_in_%s", s.Db))
+	return BuildSimpleShowResultset(values, fmt.Sprintf("Tables_in_%s", s.Name))
 }
 
 func (m *HandlerSharded) handleDescribe(sql string, req *expr.SqlDescribe) error {
@@ -482,7 +484,7 @@ func (m *HandlerSharded) handleDescribe(sql string, req *expr.SqlDescribe) error
 			return err
 		}
 
-		if err := co.UseDB(s.Db); err != nil {
+		if err := co.UseDB(s.Name); err != nil {
 			co.Close()
 			return err
 		}
@@ -578,7 +580,7 @@ func (m *HandlerSharded) handleStmtPrepare(sql string) error {
 	} else {
 		defer co.Close()
 
-		if err = co.UseDB(m.schema.Db); err != nil {
+		if err = co.UseDB(m.schema.Name); err != nil {
 			return fmt.Errorf("parepre error %s", err)
 		}
 
@@ -925,7 +927,7 @@ func (m *HandlerSharded) getConn(n *Node, isSelect bool) (co *client.SqlConn, er
 	}
 
 	//todo, set conn charset, etm...
-	if err = co.UseDB(m.schema.Db); err != nil {
+	if err = co.UseDB(m.schema.Name); err != nil {
 		return
 	}
 

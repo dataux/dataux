@@ -19,7 +19,7 @@ var (
 // A backend data source provider that also provides schema
 type DataSource interface {
 	datasource.DataSource
-	Table(table string) (*Table, error)
+	Table(table string) (*datasource.Table, error)
 
 	// Get a Task for given expression
 	SourceTask(stmt *expr.SqlSelect) (SourceTask, error)
@@ -30,7 +30,7 @@ type SourceTask interface {
 	datasource.Scanner
 }
 
-type DataSourceCreator func(*SourceSchema, *Config) DataSource
+type DataSourceCreator func(*datasource.SourceSchema, *Config) DataSource
 
 func DataSourceRegister(sourceType string, fn DataSourceCreator) {
 	sourceMu.Lock()
