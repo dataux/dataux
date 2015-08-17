@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
-	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/cloud"
 	"google.golang.org/cloud/datastore"
@@ -30,7 +29,8 @@ import (
 )
 
 var (
-	ctx context.Context
+	ctx    context.Context
+	client *datastore.Client
 
 	DbConn = "root@tcp(127.0.0.1:13307)/datauxtest"
 
@@ -61,7 +61,7 @@ func init() {
 		u.Errorf("Could not open Google Auth Token JWT file %v", err)
 		os.Exit(1)
 	}
-	ctx = loadAuth(jsonKey)
+	ctx, client = loadAuth(jsonKey)
 }
 
 const (
@@ -170,7 +170,7 @@ func (m *User) Save() ([]datastore.Property, error) {
 func loadTestData(t *testing.T) {
 	loadTestDataOnce.Do(func() {
 		for _, article := range tu.Articles {
-			key, err := datastore.Put(ctx, articleKey(article.Title), &Article{article})
+			key, err := client.Put(ctx, articleKey(article.Title), &Article{article})
 			//u.Infof("key: %v", key)
 			assert.Tf(t, key != nil, "%v", key)
 			assert.Tf(t, err == nil, "must put %v", err)
@@ -183,14 +183,14 @@ func loadTestData(t *testing.T) {
 			}{"tag", i}
 			body := json.RawMessage([]byte(fmt.Sprintf(`{"name":"more %v"}`, i)))
 			a := &tu.Article{fmt.Sprintf("article_%v", i), "auto", 22, 75, false, []string{"news", "sports"}, n, &n, 55.5, ev, &body}
-			key, err := datastore.Put(ctx, articleKey(a.Title), &Article{a})
+			key, err := client.Put(ctx, articleKey(a.Title), &Article{a})
 			//u.Infof("key: %v", key)
 			assert.Tf(t, key != nil, "%v", key)
 			assert.Tf(t, err == nil, "must put %v", err)
 			//u.Warnf("made article: %v", a.Title)
 		}
 		for _, user := range tu.Users {
-			key, err := datastore.Put(ctx, userKey(user.Id), &User{user})
+			key, err := client.Put(ctx, userKey(user.Id), &User{user})
 			//u.Infof("key: %v", key)
 			assert.Tf(t, err == nil, "must put %v", err)
 			assert.Tf(t, key != nil, "%v", key)
@@ -198,7 +198,7 @@ func loadTestData(t *testing.T) {
 	})
 }
 
-func loadAuth(jsonKey []byte) context.Context {
+func loadAuth(jsonKey []byte) (context.Context, *datastore.Client) {
 	// Initialize an authorized context with Google Developers Console
 	// JSON key. Read the google package examples to learn more about
 	// different authorization flows you can use.
@@ -211,9 +211,13 @@ func loadAuth(jsonKey []byte) context.Context {
 	if err != nil {
 		log.Fatal(err)
 	}
-	ctx := cloud.NewContext(*gds.GoogleProject, conf.Client(oauth2.NoContext))
-	// Use the context (see other examples)
-	return ctx
+	//ctx := cloud.NewContext(*gds.GoogleProject, conf.Client(oauth2.NoContext))
+	ctx := context.Background()
+	client, err := datastore.NewClient(ctx, *gds.GoogleProject, cloud.WithTokenSource(conf.TokenSource(ctx)))
+	if err != nil {
+		panic(err.Error())
+	}
+	return ctx, client
 }
 
 // We are testing that we can register this Google Datasource

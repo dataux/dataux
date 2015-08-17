@@ -60,7 +60,7 @@ func NewMongoDataSource(schema *datasource.SourceSchema, conf *models.Config) mo
 
 func (m *MongoDataSource) Init() error {
 
-	u.Infof("Init:  %#v", m.schema.Conf)
+	//u.Infof("Init:  %#v", m.schema.Conf)
 	if m.schema.Conf == nil {
 		return fmt.Errorf("Schema conf not found")
 	}
@@ -71,7 +71,7 @@ func (m *MongoDataSource) Init() error {
 	}
 
 	if m.schema != nil {
-		u.Debugf("Post Init() mongo schema P=%p tblct=%d", m.schema, len(m.schema.TableNames))
+		//u.Debugf("Post Init() mongo schema P=%p tblct=%d", m.schema, len(m.schema.Tables()))
 	}
 
 	return m.loadSchema()
@@ -107,6 +107,7 @@ func (m *MongoDataSource) Close() error {
 
 func chooseBackend(source string, schema *datasource.SourceSchema) string {
 	for _, node := range schema.Nodes {
+		u.Infof("check node:%q =? %+v", source, node)
 		if node.Source == source {
 			u.Debugf("found node: %+v", node)
 			// TODO:  implement real balancer
@@ -124,8 +125,6 @@ func (m *MongoDataSource) connect() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// TODO
-	//host := s.ChooseBackend()
 	sess, err := mgo.Dial(host)
 	if err != nil {
 		u.Errorf("Could not connect to mongo: %v", err)
@@ -161,12 +160,15 @@ func (m *MongoDataSource) DataSource() datasource.DataSource {
 	return m
 }
 func (m *MongoDataSource) Tables() []string {
-	return m.schema.TableNames
+	return m.schema.Tables()
 }
 
 func (m *MongoDataSource) Open(collectionName string) (datasource.SourceConn, error) {
 	//u.Debugf("Open(%v)", collectionName)
-	tbl := m.schema.TableMap[collectionName]
+	tbl, err := m.schema.Table(collectionName)
+	if err != nil {
+		return nil, err
+	}
 	if tbl == nil {
 		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, collectionName)
 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, collectionName)
@@ -214,7 +216,10 @@ func (m *MongoDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, e
 	u.Debugf("get sourceTask for %v", stmt)
 	tblName := strings.ToLower(stmt.From[0].Name)
 
-	tbl := m.schema.TableMap[tblName]
+	tbl, err := m.schema.Table(tblName)
+	if err != nil {
+		return nil, err
+	}
 	if tbl == nil {
 		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, tblName)
 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, tblName)
@@ -252,7 +257,7 @@ func (m *MongoDataSource) loadDatabases() error {
 		}
 	}
 	if !found {
-		u.Warnf("could not find database: %v", m.schema.Name)
+		u.Warnf("could not find database: %q", m.schema.Name)
 		return fmt.Errorf("Could not find that database: %v", m.schema.Name)
 	}
 
@@ -263,14 +268,14 @@ func (m *MongoDataSource) loadDatabases() error {
 func (m *MongoDataSource) loadTableNames() error {
 
 	db := m.sess.DB(m.db)
-
 	tables, err := db.CollectionNames()
 	if err != nil {
 		return err
 	}
-	sort.Strings(tables)
-	m.schema.TableNames = tables
-	u.Debugf("found tables: %v", m.schema.TableNames)
+	for _, tableName := range tables {
+		m.schema.AddTableName(tableName)
+	}
+	u.Debugf("found tables: %v", tables)
 	return nil
 }
 
@@ -279,11 +284,6 @@ func (m *MongoDataSource) loadTableSchema(table string) (*datasource.Table, erro
 	if m.schema == nil {
 		return nil, fmt.Errorf("no schema in use")
 	}
-	// check cache first
-	if tbl, ok := m.schema.TableMap[table]; ok && tbl.Current() {
-		return tbl, nil
-	}
-
 	/*
 		TODO:
 			- Need to read the indexes, and include that info

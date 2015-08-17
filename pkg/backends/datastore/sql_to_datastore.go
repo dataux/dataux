@@ -12,9 +12,7 @@ import (
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
-	//"github.com/araddon/qlbridge/value"
 	"github.com/araddon/qlbridge/vm"
-	"github.com/dataux/dataux/pkg/models"
 )
 
 var (
@@ -31,27 +29,30 @@ var (
 type SqlToDatstore struct {
 	*exec.TaskBase
 	resp           *ResultReader
-	tbl            *models.Table
+	tbl            *datasource.Table
 	sel            *expr.SqlSelect
-	schema         *models.SourceSchema
+	schema         *datasource.SourceSchema
 	dsCtx          context.Context
+	dsClient       *datastore.Client
 	query          *datastore.Query
 	hasMultiValue  bool // Multi-Value vs Single-Value aggs
 	hasSingleValue bool // single value agg
 }
 
-func NewSqlToDatstore(table *models.Table, ctx context.Context) *SqlToDatstore {
+func NewSqlToDatstore(table *datasource.Table, cl *datastore.Client, ctx context.Context) *SqlToDatstore {
 	return &SqlToDatstore{
 		tbl:      table,
 		schema:   table.SourceSchema,
 		dsCtx:    ctx,
+		dsClient: cl,
 		TaskBase: exec.NewTaskBase("SqlToDatstore"),
 	}
 }
 
 func (m *SqlToDatstore) Host() string {
 	//u.Warnf("TODO:  replace hardcoded es host")
-	return m.schema.ChooseBackend()
+	//return m.schema.ChooseBackend()
+	return ""
 }
 
 func (m *SqlToDatstore) Query(req *expr.SqlSelect) (*ResultReader, error) {

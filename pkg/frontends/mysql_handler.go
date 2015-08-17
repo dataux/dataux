@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
 	"github.com/kr/pretty"
@@ -34,8 +35,8 @@ var (
 type MySqlHandlerShared struct {
 	svr    *models.ServerCtx
 	conf   *models.Config
-	nodes  map[string]*models.SourceConfig // List of servers
-	schema *models.Schema
+	nodes  map[string]*datasource.SourceConfig // List of servers
+	schema *datasource.Schema
 }
 
 // Handle request splitting, a single connection session
@@ -76,7 +77,7 @@ func (m *MySqlHandler) Handle(writer models.ResultWriter, req *models.Request) e
 	return m.chooseCommand(writer, req)
 }
 
-func (m *MySqlHandler) SchemaUse(db string) *models.Schema {
+func (m *MySqlHandler) SchemaUse(db string) *datasource.Schema {
 	schema := m.svr.Schema(db)
 	if schema != nil {
 		m.schema = schema

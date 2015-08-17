@@ -12,8 +12,9 @@ import (
 	"time"
 
 	"golang.org/x/net/context"
-	"golang.org/x/oauth2"
+	//"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"golang.org/x/oauth2/jwt"
 	"google.golang.org/cloud"
 	"google.golang.org/cloud/datastore"
 
@@ -30,7 +31,7 @@ const (
 
 var (
 	GoogleJwt     *string = flag.String("googlejwt", os.Getenv("GOOGLEJWT"), "Path to google JWT oauth token file")
-	GoogleProject *string = flag.String("googleproject", os.Getenv("GOOGLEPROJECT"), "Google Datastore Project Name")
+	GoogleProject *string = flag.String("googleproject", os.Getenv("GOOGLEPROJECT"), "Google Datastore Project Id")
 
 	ErrNoSchema = fmt.Errorf("No schema or configuration exists")
 
@@ -51,21 +52,26 @@ func init() {
 // Google Datastore Data Source, is a singleton, non-threadsafe connection
 //  to a backend mongo server
 type GoogleDSDataSource struct {
-	db        string
-	namespace string
-	databases []string
-	dsCtx     context.Context
-	conf      *models.Config
-	schema    *models.SourceSchema
-	mu        sync.Mutex
-	closed    bool
+	db             string
+	namespace      string
+	databases      []string
+	cloudProjectId string
+	authConfig     *jwt.Config
+	dsCtx          context.Context
+	dsClient       *datastore.Client
+	conf           *models.Config
+	schema         *datasource.SourceSchema
+	mu             sync.Mutex
+	closed         bool
 }
 
-func NewGoogleDataStoreDataSource(schema *models.SourceSchema, conf *models.Config) models.DataSource {
+func NewGoogleDataStoreDataSource(schema *datasource.SourceSchema, conf *models.Config) models.DataSource {
 	m := GoogleDSDataSource{}
 	m.schema = schema
 	m.conf = conf
-	m.db = strings.ToLower(schema.Db)
+	m.cloudProjectId = *GoogleProject
+
+	m.db = strings.ToLower(schema.Name)
 	// Register our datasource.Datasources in registry
 	m.Init()
 	u.Infof("datasource.Register: %v", DataSourceLabel)
@@ -133,7 +139,16 @@ func (m *GoogleDSDataSource) connect() error {
 		u.Errorf("could not use google datastore JWT token: %v", err)
 		return err
 	}
-	m.dsCtx = cloud.NewContext(*GoogleProject, conf.Client(oauth2.NoContext))
+	m.authConfig = conf
+
+	ctx := context.Background()
+	client, err := datastore.NewClient(ctx, m.cloudProjectId, cloud.WithTokenSource(conf.TokenSource(ctx)))
+	if err != nil {
+		return err
+	}
+	m.dsClient = client
+	m.dsCtx = ctx
+	//m.dsCtx = cloud.NewContext(*GoogleProject, conf.Client(oauth2.NoContext))
 
 	return nil
 }
@@ -142,7 +157,7 @@ func (m *GoogleDSDataSource) DataSource() datasource.DataSource {
 	return m
 }
 func (m *GoogleDSDataSource) Tables() []string {
-	return m.schema.TableNames
+	return m.schema.Tables()
 }
 
 func (m *GoogleDSDataSource) Open(tableName string) (datasource.SourceConn, error) {
@@ -152,10 +167,13 @@ func (m *GoogleDSDataSource) Open(tableName string) (datasource.SourceConn, erro
 		return nil, nil
 	}
 	tableName = strings.ToLower(tableName)
-	tbl := m.schema.Tables[tableName]
+	tbl, err := m.schema.Table(tableName)
+	if err != nil {
+		return nil, err
+	}
 	if tbl == nil {
-		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Db, tableName)
-		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, tableName)
+		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, tableName)
+		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, tableName)
 	}
 
 	//es := NewSqlToMgo(tbl, m.sess)
@@ -166,7 +184,7 @@ func (m *GoogleDSDataSource) Open(tableName string) (datasource.SourceConn, erro
 	// 	return nil, err
 	// }
 	//return es, nil
-	sqlDs := NewSqlToDatstore(tbl, m.dsCtx)
+	sqlDs := NewSqlToDatstore(tbl, m.dsClient, m.dsCtx)
 	return sqlDs, nil
 
 	return nil, nil
@@ -177,13 +195,16 @@ func (m *GoogleDSDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask
 	u.Debugf("get sourceTask for %v", stmt)
 	tblName := strings.ToLower(stmt.From[0].Name)
 
-	tbl := m.schema.Tables[tblName]
+	tbl, err := m.schema.Table(tblName)
+	if err != nil {
+		return nil, err
+	}
 	if tbl == nil {
-		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Db, tblName)
-		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Db, tblName)
+		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, tblName)
+		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, tblName)
 	}
 
-	sqlDs := NewSqlToDatstore(tbl, m.dsCtx)
+	sqlDs := NewSqlToDatstore(tbl, m.dsClient, m.dsCtx)
 	//u.Debugf("SqlToDatstore: %#v", sqlDs)
 	resp, err := sqlDs.Query(stmt)
 	if err != nil {
@@ -194,7 +215,7 @@ func (m *GoogleDSDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask
 	return resp, nil
 }
 
-func (m *GoogleDSDataSource) Table(table string) (*models.Table, error) {
+func (m *GoogleDSDataSource) Table(table string) (*datasource.Table, error) {
 	//u.Debugf("get table for %s", table)
 	return m.loadTableSchema(table)
 }
@@ -267,13 +288,13 @@ func (m *GoogleDSDataSource) loadDatabases() error {
 	u.Debugf("found database names: %v", m.databases)
 	found := false
 	for _, db := range dbs {
-		if strings.ToLower(db) == strings.ToLower(m.schema.Db) {
+		if strings.ToLower(db) == strings.ToLower(m.schema.Name) {
 			found = true
 		}
 	}
 	if !found {
-		u.Warnf("could not find database: %v", m.schema.Db)
-		return fmt.Errorf("Could not find that database: %v", m.schema.Db)
+		u.Warnf("could not find database: %v", m.schema.Name)
+		return fmt.Errorf("Could not find that database: %v", m.schema.Name)
 	}
 
 	return nil
@@ -283,18 +304,15 @@ func (m *GoogleDSDataSource) loadDatabases() error {
 func (m *GoogleDSDataSource) loadTableNames() error {
 
 	tables := make([]string, 0)
-	rows := pageQuery(datastore.NewQuery("__kind__").Run(m.dsCtx))
+	rows := pageQuery(m.dsClient.Run(m.dsCtx, datastore.NewQuery("__kind__")))
 	for _, row := range rows {
 		if !strings.HasPrefix(row.key.Name(), "__") {
-			//u.Warnf("%#v", row.key)
+			u.Warnf("%#v", row.key)
 			tables = append(tables, row.key.Name())
 			m.loadTableSchema(row.key.Name())
 		}
 
 	}
-	sort.Strings(tables)
-	m.schema.TableNames = tables
-	//u.Debugf("found tables: %v", m.schema.TableNames)
 	return nil
 }
 
@@ -303,7 +321,7 @@ func titleCase(table string) string {
 	return strings.ToUpper(table[0:1]) + table[1:]
 }
 
-func (m *GoogleDSDataSource) loadTableSchema(table string) (*models.Table, error) {
+func (m *GoogleDSDataSource) loadTableSchema(table string) (*datasource.Table, error) {
 
 	//u.LogTracef(u.WARN, "hello %q", table)
 	if m.schema == nil {
@@ -311,9 +329,6 @@ func (m *GoogleDSDataSource) loadTableSchema(table string) (*models.Table, error
 	}
 	// check cache first
 	tableLower := strings.ToLower(table)
-	if tbl, ok := m.schema.Tables[tableLower]; ok && tbl.Current() {
-		return tbl, nil
-	}
 
 	/*
 		- Datastore keeps list of all indexed properties available
@@ -321,11 +336,11 @@ func (m *GoogleDSDataSource) loadTableSchema(table string) (*models.Table, error
 		TODO:
 			- Need to recurse through enough records to get good idea of types
 	*/
-	tbl := models.NewTable(table, m.schema)
+	tbl := datasource.NewTable(tableLower, m.schema)
 
 	// We are going to scan this table, introspecting a few rows
 	// to see what types they might be
-	props := pageQuery(datastore.NewQuery(table).Limit(20).Run(m.dsCtx))
+	props := pageQuery(m.dsClient.Run(m.dsCtx, datastore.NewQuery(table).Limit(20)))
 	for _, row := range props {
 
 		for _, p := range row.props {
@@ -339,38 +354,38 @@ func (m *GoogleDSDataSource) loadTableSchema(table string) (*models.Table, error
 			switch val := p.Value.(type) {
 			case *datastore.Key:
 				//u.Debugf("found datastore.Key: %v='%#v'", colName, val)
-				tbl.AddField(models.NewField(p.Name, value.StringType, 24, "Key"))
+				tbl.AddField(datasource.NewField(p.Name, value.StringType, 24, "Key"))
 				tbl.AddValues([]driver.Value{p.Name, "string", "NO", "PRI", "Key", ""})
 			case string:
 				//u.Debugf("found property.Value string: %v='%#v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.StringType, 32, "string"))
+				tbl.AddField(datasource.NewField(colName, value.StringType, 32, "string"))
 				tbl.AddValues([]driver.Value{colName, "string", "NO", "", "", "string"})
 			case int:
 				//u.Debugf("found int: %v='%v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.IntType, 32, "int"))
+				tbl.AddField(datasource.NewField(colName, value.IntType, 32, "int"))
 				tbl.AddValues([]driver.Value{colName, "int", "NO", "", "", "int"})
 			case int64:
 				//u.Debugf("found int64: %v='%v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.IntType, 32, "long"))
+				tbl.AddField(datasource.NewField(colName, value.IntType, 32, "long"))
 				tbl.AddValues([]driver.Value{colName, "long", "NO", "", "", "long"})
 			case float64:
 				//u.Debugf("found float64: %v='%v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.NumberType, 32, "float64"))
+				tbl.AddField(datasource.NewField(colName, value.NumberType, 32, "float64"))
 				tbl.AddValues([]driver.Value{colName, "float64", "NO", "", "", "float64"})
 			case bool:
 				//u.Debugf("found string: %v='%v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.BoolType, 1, "bool"))
+				tbl.AddField(datasource.NewField(colName, value.BoolType, 1, "bool"))
 				tbl.AddValues([]driver.Value{colName, "bool", "NO", "", "", "bool"})
 			case time.Time:
 				//u.Debugf("found time.Time: %v='%v'", colName, val)
-				tbl.AddField(models.NewField(colName, value.TimeType, 32, "datetime"))
+				tbl.AddField(datasource.NewField(colName, value.TimeType, 32, "datetime"))
 				tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
 			// case *time.Time: // datastore doesn't allow pointers
 			// 	//u.Debugf("found time.Time: %v='%v'", colName, val)
-			// 	tbl.AddField(models.NewField(colName, value.TimeType, 32, "datetime"))
+			// 	tbl.AddField(datasource.NewField(colName, value.TimeType, 32, "datetime"))
 			// 	tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
 			case []uint8:
-				tbl.AddField(models.NewField(colName, value.ByteSliceType, 256, "[]byte"))
+				tbl.AddField(datasource.NewField(colName, value.ByteSliceType, 256, "[]byte"))
 				tbl.AddValues([]driver.Value{colName, "binary", "NO", "", "", "[]byte"})
 			default:
 				u.Warnf("%T  %#v", val, p)
@@ -378,8 +393,8 @@ func (m *GoogleDSDataSource) loadTableSchema(table string) (*models.Table, error
 		}
 	}
 	if len(tbl.FieldMap) > 0 {
-		//u.Infof("caching schem:%p   %q", m.schema, tableLower)
-		m.schema.Tables[tableLower] = tbl
+		u.Infof("caching schema:%p   %q", m.schema, tableLower)
+		m.schema.AddTable(tbl)
 		return tbl, nil
 	}
 

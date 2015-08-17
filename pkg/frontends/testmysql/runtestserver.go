@@ -78,22 +78,22 @@ sources : [
 nodes : [
   {
     name    : estest1
-    type    : elasticsearch
+    source  : es_test
     address : "http://localhost:9200"
   },
   {
     name    : mgotest1
-    type    : mongo
+    source  : mgo_datauxtest
     address : "localhost"
   },
   {
     name    : csvlocal1
-    type    : csv
+    source  : csvlocal
     address : "$GOPATH/src/github.com/dataux/dataux/data"
   },
   {
     name    : googleds1
-    type    : google-datastore
+    source  : google_ds_test
     address : "$GOOGLEJWT"
   }
 ]

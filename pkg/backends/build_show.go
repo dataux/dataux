@@ -10,6 +10,8 @@ import (
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
+
+	"github.com/dataux/dataux/pkg/models"
 )
 
 var (
@@ -44,7 +46,7 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 		return tasks, nil
 	case strings.HasPrefix(raw, "show session"):
 		//SHOW SESSION VARIABLES LIKE 'lower_case_table_names';
-		source, proj := m.schema.ShowVariables("lower_case_table_names", 0)
+		source, proj := models.ShowVariables(m.schema, "lower_case_table_names", 0)
 		m.Projection = proj
 		tasks := make(exec.Tasks, 0)
 		sourceTask := exec.NewSource(nil, source)
@@ -53,10 +55,12 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 		return tasks, nil
 	case strings.ToLower(stmt.Identity) == "tables" || strings.ToLower(stmt.Identity) == m.schema.Name:
 		if stmt.Full {
-			vals := make([][]driver.Value, len(m.schema.TableNames))
+			u.Debugf("show tables: %+v", m.schema)
+			tables := m.schema.Tables()
+			vals := make([][]driver.Value, len(tables))
 			row := 0
-			for _, tbl := range m.schema.Tables {
-				vals[row] = []driver.Value{tbl.Name, "BASE TABLE"}
+			for _, tbl := range tables {
+				vals[row] = []driver.Value{tbl, "BASE TABLE"}
 				row++
 			}
 			source := membtree.NewStaticDataSource("tables", 0, vals, []string{"Tables", "Table_type"})
@@ -70,11 +74,12 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 			return tasks, nil
 		}
 		// SHOW TABLES;
-		source, proj := m.schema.ShowTables()
+		//u.Debugf("show tables: %+v", m.schema)
+		source, proj := models.ShowTables(m.schema)
 		m.Projection = proj
 		tasks := make(exec.Tasks, 0)
 		sourceTask := exec.NewSource(nil, source)
-		u.Infof("source:  %#v", source)
+		//u.Infof("source:  %#v", source)
 		tasks.Add(sourceTask)
 		return tasks, nil
 	case strings.ToLower(stmt.Identity) == "procedure":
@@ -103,7 +108,7 @@ func (m *Builder) VisitDescribe(stmt *expr.SqlDescribe) (interface{}, error) {
 		u.Errorf("could not get table: %v", err)
 		return nil, err
 	}
-	source, proj := tbl.DescribeTable()
+	source, proj := models.DescribeTable(tbl)
 	m.Projection = proj
 
 	tasks := make(exec.Tasks, 0)

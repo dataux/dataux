@@ -20,7 +20,7 @@ var (
 
 type MySqlResultWriter struct {
 	writer       models.ResultWriter
-	schema       *models.Schema
+	schema       *datasource.Schema
 	Rs           *mysql.Resultset
 	projection   *expr.Projection
 	wroteHeaders bool
@@ -29,12 +29,12 @@ type MySqlResultWriter struct {
 
 type MySqlExecResultWriter struct {
 	writer models.ResultWriter
-	schema *models.Schema
+	schema *datasource.Schema
 	Rs     *mysql.Result
 	*exec.TaskBase
 }
 
-func NewMySqlResultWriter(writer models.ResultWriter, proj *expr.Projection, schema *models.Schema) *MySqlResultWriter {
+func NewMySqlResultWriter(writer models.ResultWriter, proj *expr.Projection, schema *datasource.Schema) *MySqlResultWriter {
 
 	m := &MySqlResultWriter{writer: writer, projection: proj, schema: schema}
 	m.TaskBase = exec.NewTaskBase("MySqlResultWriter")
@@ -72,16 +72,7 @@ func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 		switch mt := msg.Body().(type) {
 		case *datasource.SqlDriverMessageMap:
-			vals := make([]driver.Value, len(m.projection.Columns))
-			for _, col := range m.projection.Columns {
-				if val, ok := mt.Vals[col.As]; !ok {
-					u.Warnf("could not find result val: %v name=%s", col.As, col.Name)
-				} else {
-					//u.Debugf("found col: %#v    val=%#v", col, val)
-					vals[col.ColPos] = val
-				}
-			}
-			m.Rs.AddRowValues(vals)
+			m.Rs.AddRowValues(mt.Values())
 			return true
 		case map[string]driver.Value:
 			vals := make([]driver.Value, len(m.projection.Columns))
@@ -206,7 +197,7 @@ func NewEmptyResultset(proj *expr.Projection) *mysql.Resultset {
 	return r
 }
 
-func NewMySqlExecResultWriter(writer models.ResultWriter, schema *models.Schema) *MySqlExecResultWriter {
+func NewMySqlExecResultWriter(writer models.ResultWriter, schema *datasource.Schema) *MySqlExecResultWriter {
 
 	m := &MySqlExecResultWriter{writer: writer, schema: schema}
 	m.TaskBase = exec.NewTaskBase("MySqlExecResultWriter")

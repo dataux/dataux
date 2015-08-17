@@ -107,7 +107,7 @@ func (m *ResultReader) Open(connInfo string) (datasource.SourceConn, error) {
 	return m, nil
 }
 
-func (m *ResultReader) Schema() *models.Schema {
+func (m *ResultReader) Schema() *datasource.Schema {
 	return m.Req.tbl.Schema
 }
 
@@ -141,7 +141,8 @@ func (m *ResultReader) Finalize() error {
 	if sql.CountStar() {
 		// Count *
 		vals := make([]driver.Value, 1)
-		ct, err := q.Count(m.Req.dsCtx)
+		ct, err := m.Req.dsClient.Count(m.Req.dsCtx, q)
+		//ct, err := q.Count(m.Req.dsCtx)
 		if err != nil {
 			u.Errorf("could not get count: %v", err)
 			return err
@@ -180,9 +181,11 @@ func (m *ResultReader) Finalize() error {
 		q = q.Limit(m.Req.sel.Limit)
 	}
 	n := time.Now()
-	//u.Infof("query: %p", q)
+	u.Infof("query: %v", q)
 	//q.DebugInfo()
-	iter := q.Run(m.Req.dsCtx)
+	//iter := q.Run(m.Req.dsCtx)
+	u.Infof("has:  client? %v  ctx? %v", m.Req.dsClient, m.Req.dsCtx)
+	iter := m.Req.dsClient.Run(m.Req.dsCtx, q)
 	for {
 		row := Row{}
 		key, err := iter.Next(&row)

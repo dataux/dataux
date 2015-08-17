@@ -11,6 +11,7 @@ import (
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
+	"github.com/dataux/dataux/pkg/models"
 )
 
 func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
@@ -34,13 +35,19 @@ func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
 			return nil, err
 		}
 
-		source, err := tbl.SourceSchema.DS.SourceTask(stmt)
+		source, ok := tbl.SourceSchema.DS.(models.DataSource)
+		if !ok {
+			u.Warnf("could not create source planner for: %T", tbl.SourceSchema.DS)
+			return nil, fmt.Errorf("Does not implmement SourceTask %T", tbl.SourceSchema.DS)
+		}
+
+		sourceTask, err := source.SourceTask(stmt)
 		if err != nil {
 			u.Errorf("could not create source task: %v", err)
 			return nil, err
 		}
 		// Some data sources provide their own projections
-		if projector, ok := source.(datasource.Projection); ok {
+		if projector, ok := sourceTask.(datasource.Projection); ok {
 			m.Projection, err = projector.Projection()
 			if err != nil {
 				u.Errorf("could not build projection %v", err)
@@ -50,7 +57,7 @@ func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
 			//panic("must implement projection")
 			u.Warnf("could not create projection for: %T", source)
 		}
-		if scanner, ok := source.(datasource.Scanner); !ok {
+		if scanner, ok := sourceTask.(datasource.Scanner); !ok {
 			u.Warnf("could not create scanner? %#v", source)
 			return nil, fmt.Errorf("Must Implement Scanner")
 		} else {
@@ -91,10 +98,10 @@ func (m *Builder) createProjection(stmt *expr.SqlSelect) *expr.Projection {
 		u.Debugf("allready has projection? %#v", m.Projection)
 		return m.Projection
 	}
-	u.Debugf("createProjection %s", stmt.String())
+	//u.Debugf("createProjection %s", stmt.String())
 	p := expr.NewProjection()
 	for _, from := range stmt.From {
-		u.Infof("info: %#v", from)
+		//u.Infof("info: %#v", from)
 		tbl, err := m.schema.Table(strings.ToLower(from.Name))
 		if err != nil {
 			u.Errorf("could not get table: %v", err)
@@ -102,7 +109,7 @@ func (m *Builder) createProjection(stmt *expr.SqlSelect) *expr.Projection {
 		} else if tbl == nil {
 			u.Errorf("no table? %v", from.Name)
 		} else {
-			u.Infof("getting cols? %v", len(from.Columns))
+			//u.Infof("getting cols? %v", len(from.Columns))
 			if len(from.Columns) == 0 && len(stmt.From) == 1 {
 				from.Columns = stmt.Columns
 			}

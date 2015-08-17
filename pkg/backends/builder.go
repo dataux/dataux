@@ -119,7 +119,7 @@ func (m *Builder) VisitSysVariable(stmt *expr.SqlSelect) (interface{}, error) {
 //
 func (m *Builder) sysVarTasks(name string, val interface{}) (interface{}, error) {
 	tasks := make(exec.Tasks, 0)
-	static := membtree.NewStaticDataValue(val, name)
+	static := membtree.NewStaticDataValue(name, val)
 	sourceTask := exec.NewSource(nil, static)
 	tasks.Add(sourceTask)
 	switch val.(type) {

@@ -124,7 +124,7 @@ func (m *ResultReader) Open(connInfo string) (datasource.SourceConn, error) {
 	return m, nil
 }
 
-func (m *ResultReader) Schema() *models.Schema {
+func (m *ResultReader) Schema() *datasource.Schema {
 	return m.Req.tbl.Schema
 }
 

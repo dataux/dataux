@@ -16,14 +16,28 @@ var (
 	_ = u.EMPTY
 )
 
+func DescribeTable(tbl *datasource.Table) (*membtree.StaticDataSource, *expr.Projection) {
+	if len(tbl.Fields) == 0 {
+		u.Warnf("NO Fields!!!!! for %s p=%p", tbl.Name, tbl)
+	}
+	proj := expr.NewProjection()
+	for _, f := range datasource.DescribeHeaders {
+		proj.AddColumnShort(string(f.Name), f.Type)
+		//u.Debugf("found field:  vals=%#v", f)
+	}
+	tableVals := membtree.NewStaticDataSource("describetable", 0, tbl.DescribeValues, datasource.DescribeCols)
+	return tableVals, proj
+}
+
 func ShowTables(s *datasource.Schema) (*membtree.StaticDataSource, *expr.Projection) {
 
-	vals := make([][]driver.Value, len(s.TableNames))
+	tables := s.Tables()
+	vals := make([][]driver.Value, len(tables))
 	idx := 0
-	if len(s.TableNames) == 0 {
-		u.Warnf("NO TABLES!!!!! for %s p=%p", s)
+	if len(tables) == 0 {
+		u.Warnf("NO TABLES!!!!! for %+v", s)
 	}
-	for _, tbl := range s.TableNames {
+	for _, tbl := range tables {
 		vals[idx] = []driver.Value{tbl}
 		//u.Infof("found table: %v   vals=%v", tbl, vals[idx])
 		idx++
