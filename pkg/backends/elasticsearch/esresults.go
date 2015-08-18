@@ -178,7 +178,7 @@ func (m *ResultReader) Finalize() error {
 			for i, col := range sql.Columns {
 				fldName := col.Key()
 				if col.Expr != nil {
-					u.Debugf("col: %v", col.Expr.StringAST())
+					u.Debugf("col: %v", col.Expr.String())
 				}
 
 				if col.CountStar() {

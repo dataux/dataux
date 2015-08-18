@@ -71,7 +71,7 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect) (*ResultReader, error) {
 		m.filter = bson.M{}
 		_, err = m.WalkNode(req.Where.Expr, &m.filter)
 		if err != nil {
-			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.StringAST(), err)
+			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.String(), err)
 			return nil, err
 		}
 	}
@@ -173,7 +173,7 @@ func (m *SqlToMgo) WalkSelectList() error {
 					return err
 				}
 				//u.Debugf("esm: %v:%v", col.As, esm)
-				//u.Debugf(curNode.StringAST())
+				//u.Debugf(curNode.String())
 			// case *expr.MultiArgNode:
 			// 	return m.walkMulti(curNode)
 			// case *expr.IdentityNode:
@@ -198,7 +198,7 @@ func (m *SqlToMgo) WalkGroupBy() error {
 
 	for i, col := range m.sel.GroupBy {
 		if col.Expr != nil {
-			u.Infof("Walk group by %s  %T", col.Expr.StringAST(), col.Expr)
+			u.Infof("Walk group by %s  %T", col.Expr.String(), col.Expr)
 			switch col.Expr.(type) {
 			case *expr.IdentityNode, *expr.FuncNode:
 				esm := bson.M{}
@@ -270,7 +270,7 @@ func (m *SqlToMgo) WalkNode(cur expr.Node, q *bson.M) (value.Value, error) {
 		nodeVal, ok := vm.Eval(nil, cur)
 		if !ok {
 			u.Warnf("not ok %v", cur)
-			return nil, fmt.Errorf("could not evaluate: %v", cur.StringAST())
+			return nil, fmt.Errorf("could not evaluate: %v", cur.String())
 		}
 		u.Infof("nodeval? %v", nodeVal)
 		return nodeVal, nil
@@ -282,11 +282,11 @@ func (m *SqlToMgo) WalkNode(cur expr.Node, q *bson.M) (value.Value, error) {
 	case *expr.UnaryNode:
 		//return m.walkUnary(curNode)
 		u.Warnf("not implemented: %#v", curNode)
-		return nil, fmt.Errorf("Not implemented urnary function: %v", curNode.StringAST())
+		return nil, fmt.Errorf("Not implemented urnary function: %v", curNode.String())
 	case *expr.FuncNode:
 		return m.walkFilterFunc(curNode, q)
 	case *expr.IdentityNode:
-		u.Warnf("wat????   %v", curNode.StringAST())
+		u.Warnf("wat????   %v", curNode.String())
 		*q = bson.M{"terms": bson.M{"field": curNode.String()}}
 		return value.NewStringValue(curNode.String()), nil
 	case *expr.MultiArgNode:
@@ -310,7 +310,7 @@ func (m *SqlToMgo) walkFilterTri(node *expr.TriNode, q *bson.M) (value.Value, er
 	arg3val, cok := vm.Eval(nil, node.Args[2])
 	//u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
 	if !aok || !bok || !cok {
-		return nil, fmt.Errorf("Could not evaluate args: %v", node.StringAST())
+		return nil, fmt.Errorf("Could not evaluate args: %v", node.String())
 	}
 	//u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
 	switch node.Operator.T {
@@ -334,7 +334,7 @@ func (m *SqlToMgo) walkMultiFilter(node *expr.MultiArgNode, q *bson.M) (value.Va
 
 	// First argument must be field name in this context
 	fldName := node.Args[0].String()
-	//u.Debugf("walkMulti: %v", node.StringAST())
+	//u.Debugf("walkMulti: %v", node.String())
 	switch node.Operator.T {
 	case lex.TokenIN:
 		//q = bson.M{"range": bson.M{arg1val.ToString(): bson.M{"gte": arg2val.ToString(), "lte": arg3val.ToString()}}}
@@ -351,8 +351,8 @@ func (m *SqlToMgo) walkMultiFilter(node *expr.MultiArgNode, q *bson.M) (value.Va
 			}
 		}
 	default:
-		u.Warnf("not implemented %v", node.StringAST())
-		return nil, fmt.Errorf("Not implemented: %v", node.StringAST())
+		u.Warnf("not implemented %v", node.String())
+		return nil, fmt.Errorf("Not implemented: %v", node.String())
 	}
 	if q != nil {
 		u.Debug(string(u.JsonHelper(*q).PrettyJson()))
@@ -375,7 +375,7 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 	rhval, rhok := vm.Eval(nil, node.Args[1])
 	if !lhok || !rhok {
 		u.Warnf("not ok: %v  l:%v  r:%v", node, lhval, rhval)
-		return nil, fmt.Errorf("could not evaluate: %v", node.StringAST())
+		return nil, fmt.Errorf("could not evaluate: %v", node.String())
 	}
 	u.Debugf("walkBinary: %v  l:%v  r:%v  %T  %T", node, lhval, rhval, lhval, rhval)
 	switch node.Operator.T {
@@ -386,7 +386,7 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 		_, err2 := m.WalkNode(node.Args[1], &rhq)
 		if err != nil || err2 != nil {
 			u.Errorf("could not get children nodes? %v %v %v", err, err2, node)
-			return nil, fmt.Errorf("could not evaluate: %v", node.StringAST())
+			return nil, fmt.Errorf("could not evaluate: %v", node.String())
 		}
 		*q = bson.M{"$and": []bson.M{lhq, rhq}}
 	case lex.TokenLogicOr:
@@ -396,7 +396,7 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 		_, err2 := m.WalkNode(node.Args[1], &rhq)
 		if err != nil || err2 != nil {
 			u.Errorf("could not get children nodes? %v %v %v", err, err2, node)
-			return nil, fmt.Errorf("could not evaluate: %v", node.StringAST())
+			return nil, fmt.Errorf("could not evaluate: %v", node.String())
 		}
 		*q = bson.M{"$or": []bson.M{lhq, rhq}}
 	case lex.TokenEqual, lex.TokenEqualEqual:
@@ -407,7 +407,7 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 			return nil, nil
 		}
 		if lhval != nil || rhval != nil {
-			u.Infof("has stuff?  %v", node.StringAST())
+			u.Infof("has stuff?  %v", node.String())
 		}
 	case lex.TokenNE:
 		// db.inventory.find( { qty: { $ne: 20 } } )
@@ -452,7 +452,7 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 	if q != nil {
 		return nil, nil
 	}
-	return nil, fmt.Errorf("not implemented %v", node.StringAST())
+	return nil, fmt.Errorf("not implemented %v", node.String())
 }
 
 // Take an expression func, ensure we don't do runtime-checking (as the function)
@@ -479,7 +479,7 @@ func (m *SqlToMgo) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, 
 		default:
 			val, ok := eval(node.Args[0])
 			if !ok {
-				u.Errorf("Must be valid: %v", node.StringAST())
+				u.Errorf("Must be valid: %v", node.String())
 			} else {
 				fieldName = val.ToString()
 			}
@@ -495,13 +495,13 @@ func (m *SqlToMgo) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, 
 
 		fieldVal, ok := eval(node.Args[0])
 		if !ok {
-			u.Errorf("Must be valid: %v", node.StringAST())
+			u.Errorf("Must be valid: %v", node.String())
 			return value.ErrValue, fmt.Errorf(`Invalid func regex:  regex(fieldname,"/regvalue/i")`)
 		}
 
 		regexval, ok := eval(node.Args[0])
 		if !ok {
-			u.Errorf("Must be valid: %v", node.StringAST())
+			u.Errorf("Must be valid: %v", node.String())
 			return value.ErrValue, fmt.Errorf(`Invalid func regex:  regex(fieldname,"/regvalue/i")`)
 		}
 		*q = bson.M{fieldVal.ToString(): bson.M{"$regex": regexval.ToString()}}
@@ -512,7 +512,7 @@ func (m *SqlToMgo) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, 
 	if q != nil {
 		return nil, nil
 	}
-	return nil, fmt.Errorf("not implemented %v", node.StringAST())
+	return nil, fmt.Errorf("not implemented %v", node.String())
 }
 
 // Take an expression func, ensure we don't do runtime-checking (as the function)
@@ -535,7 +535,7 @@ func (m *SqlToMgo) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {
 		}
 		val, ok := eval(node.Args[0])
 		if !ok {
-			u.Errorf("Must be valid: %v", node.StringAST())
+			u.Errorf("Must be valid: %v", node.String())
 		}
 		// "min_price" : { "min" : { "field" : "price" } }
 		q = bson.M{funcName: bson.M{"field": val.ToString()}}
@@ -548,12 +548,12 @@ func (m *SqlToMgo) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {
 		}
 		val, ok := eval(node.Args[0])
 		if !ok {
-			u.Errorf("Must be valid: %v", node.StringAST())
+			u.Errorf("Must be valid: %v", node.String())
 		}
 		if len(node.Args) >= 2 {
 			size, ok := vm.Eval(nil, node.Args[1])
 			if !ok {
-				u.Errorf("Must be valid size: %v", node.Args[1].StringAST())
+				u.Errorf("Must be valid size: %v", node.Args[1].String())
 			}
 			// "products" : { "terms" : {"field" : "product", "size" : 5 }}
 			q = bson.M{funcName: bson.M{"field": val.ToString(), "size": size.Value()}}
@@ -567,8 +567,8 @@ func (m *SqlToMgo) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {
 		u.Debugf("how do we want to use count(*)?  hit.hits?   or exists()?")
 		val, ok := eval(node.Args[0])
 		if !ok {
-			u.Errorf("Must be valid: %v", node.StringAST())
-			return nil, fmt.Errorf("Invalid argument: %v", node.StringAST())
+			u.Errorf("Must be valid: %v", node.String())
+			return nil, fmt.Errorf("Invalid argument: %v", node.String())
 		}
 		if val.ToString() == "*" {
 			return nil, nil
