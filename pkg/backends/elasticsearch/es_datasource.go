@@ -142,10 +142,22 @@ func (m *ElasticsearchDataSource) loadTableNames() error {
 			tables = append(tables, alias)
 		}
 	}
-
-	for _, table := range tables {
-		m.schema.AddTableName(table)
+	if len(m.schema.Conf.TablesToLoad) > 0 {
+		tableMap := make(map[string]struct{}, len(m.schema.Conf.TablesToLoad))
+		for _, tableToLoad := range m.schema.Conf.TablesToLoad {
+			tableMap[tableToLoad] = struct{}{}
+		}
+		for _, table := range tables {
+			if _, ok := tableMap[table]; ok {
+				m.schema.AddTableName(table)
+			}
+		}
+	} else {
+		for _, table := range tables {
+			m.schema.AddTableName(table)
+		}
 	}
+
 	u.Debugf("found tables: %v", m.schema.Tables())
 
 	return nil

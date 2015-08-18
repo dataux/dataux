@@ -300,7 +300,7 @@ func (m *ResultReader) Finalize() error {
 							u.Warnf("no vals?  %#v", docVals)
 						}
 					case value.ByteSliceType:
-						//u.Debugf("blob?  %v", key)
+						u.Debugf("blob?  %v", key)
 						if docVal := doc.Get(col.Name); docVal != nil {
 							by, _ := json.Marshal(docVal)
 							vals[fldI] = string(by)

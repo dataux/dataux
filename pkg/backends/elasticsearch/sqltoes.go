@@ -143,7 +143,9 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 		for field, _ := range m.projections {
 			fields = append(fields, field)
 		}
-		qs.Set("fields", strings.Join(fields, ","))
+		// TODO: need to filter out non-leaf fields from above using
+		//       schema, as es doesn't support filtering on non-leaf nodes
+		//qs.Set("fields", strings.Join(fields, ","))
 	}
 	query := fmt.Sprintf("%s/%s/_search?%s", m.Host(), m.tbl.Name, qs.Encode())
 
