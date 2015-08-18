@@ -248,10 +248,10 @@ func (m *ResultReader) Finalize() error {
 	//         "_source":map[string]interface {}{"repository.name":[]interface {}{"fluentd-ui"}, "actor":[]interface {}{"uu59"}}}
 	keyPath := "_source."
 	useFields := false
-	if len(m.Req.projections) > 0 {
-		keyPath = "fields."
-		useFields = true
-	}
+	// if len(m.Req.projections) > 0 {
+	// 	keyPath = "fields."
+	// 	useFields = true
+	// }
 
 	cols := m.proj.Columns
 	if len(cols) == 0 {
@@ -259,8 +259,8 @@ func (m *ResultReader) Finalize() error {
 	}
 	for _, doc := range m.Docs {
 		if len(doc) > 0 {
-			//by, _ := json.MarshalIndent(doc, " ", " ")
-			//u.Debugf("doc: %v", string(by))
+			// by, _ := json.MarshalIndent(doc, " ", " ")
+			// u.Debugf("doc: %v", string(by))
 			if useFields {
 				doc = doc.Helper("fields")
 				if len(doc) < 1 {
@@ -275,8 +275,8 @@ func (m *ResultReader) Finalize() error {
 				key := keyPath + col.Name
 				if _, ok := metaFields[col.Name]; ok {
 					key = col.Name
-					u.Debugf("looking for? %v in %#v", key, doc)
 				}
+				//u.Debugf("looking for? %v in %#v", key, doc)
 
 				if useFields {
 					//u.Debugf("use fields: '%s' type=%v Strings()='%v'  doc=%#v", col.Name, col.Type.String(), doc.Strings(key), doc)
@@ -309,9 +309,24 @@ func (m *ResultReader) Finalize() error {
 						u.Warnf("unrecognized type: %v  %T", col.Name, col.Type)
 					}
 				} else {
+
 					switch col.Type {
 					case value.StringType:
-						vals[fldI] = doc.String(key)
+
+						strVal := doc.String(key)
+						if strVal != "" {
+							vals[fldI] = strVal
+						} else {
+							jhVal := doc.Helper(key)
+							if len(jhVal) > 0 {
+								//u.Debugf("looking for? key:%v type:%s   val:%s", key, col.Type.String(), jhVal)
+								jsonBytes, err := json.Marshal(jhVal)
+								if err == nil {
+									vals[fldI] = string(jsonBytes)
+								}
+							}
+						}
+
 					case value.TimeType:
 						vals[fldI] = doc.String(key)
 					case value.IntType:
