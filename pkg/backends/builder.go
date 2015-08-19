@@ -109,6 +109,9 @@ func (m *Builder) VisitSysVariable(stmt *expr.SqlSelect) (interface{}, error) {
 		return m.sysVarTasks(sysVar, "user")
 	case "connection_id()":
 		return m.sysVarTasks(sysVar, 1)
+	case "timediff(curtime(), utc_time())":
+		return m.sysVarTasks("timediff", "00:00:00.000000")
+		//
 	default:
 		u.Errorf("unknown var: %v", sysVar)
 		return nil, fmt.Errorf("Unrecognized System Variable: %v", sysVar)

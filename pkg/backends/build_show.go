@@ -32,6 +32,20 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 
 	raw := strings.ToLower(stmt.Raw)
 	switch {
+	case strings.ToLower(stmt.Identity) == "variables":
+		// SHOW variables;
+		vals := make([][]driver.Value, 2)
+		vals[0] = []driver.Value{"auto_increment_increment", "1"}
+		vals[1] = []driver.Value{"collation", "utf8"}
+		source := membtree.NewStaticDataSource("variables", 0, vals, []string{"Variable_name", "Value"})
+		m.Projection = expr.NewProjection()
+		m.Projection.AddColumnShort("Variable_name", value.StringType)
+		m.Projection.AddColumnShort("Value", value.StringType)
+		tasks := make(exec.Tasks, 0)
+		sourceTask := exec.NewSource(nil, source)
+		u.Infof("source:  %#v", source)
+		tasks.Add(sourceTask)
+		return tasks, nil
 	case strings.ToLower(stmt.Identity) == "databases":
 		// SHOW databases;
 		vals := make([][]driver.Value, 1)
@@ -39,6 +53,18 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 		source := membtree.NewStaticDataSource("databases", 0, vals, []string{"Database"})
 		m.Projection = expr.NewProjection()
 		m.Projection.AddColumnShort("Database", value.StringType)
+		tasks := make(exec.Tasks, 0)
+		sourceTask := exec.NewSource(nil, source)
+		u.Infof("source:  %#v", source)
+		tasks.Add(sourceTask)
+		return tasks, nil
+	case strings.ToLower(stmt.Identity) == "collation":
+		// SHOW collation;
+		vals := make([][]driver.Value, 1)
+		vals[0] = []driver.Value{"utf8"}
+		source := membtree.NewStaticDataSource("collation", 0, vals, []string{"collation"})
+		m.Projection = expr.NewProjection()
+		m.Projection.AddColumnShort("collation", value.StringType)
 		tasks := make(exec.Tasks, 0)
 		sourceTask := exec.NewSource(nil, source)
 		u.Infof("source:  %#v", source)
