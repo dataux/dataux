@@ -61,10 +61,17 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 	case strings.ToLower(stmt.Identity) == "collation":
 		// SHOW collation;
 		vals := make([][]driver.Value, 1)
-		vals[0] = []driver.Value{"utf8"}
-		source := membtree.NewStaticDataSource("collation", 0, vals, []string{"collation"})
+		// utf8_general_ci          | utf8     |  33 | Yes     | Yes      |       1 |
+		vals[0] = []driver.Value{"utf8_general_ci", "utf8", 33, "Yes", "Yes", 1}
+		cols := []string{"Collation", "Charset", "Id", "Default", "Compiled", "Sortlen"}
+		source := membtree.NewStaticDataSource("collation", 0, vals, cols)
 		m.Projection = expr.NewProjection()
-		m.Projection.AddColumnShort("collation", value.StringType)
+		m.Projection.AddColumnShort("Collation", value.StringType)
+		m.Projection.AddColumnShort("Charset", value.StringType)
+		m.Projection.AddColumnShort("Id", value.IntType)
+		m.Projection.AddColumnShort("Default", value.StringType)
+		m.Projection.AddColumnShort("Compiled", value.StringType)
+		m.Projection.AddColumnShort("Sortlen", value.IntType)
 		tasks := make(exec.Tasks, 0)
 		sourceTask := exec.NewSource(nil, source)
 		u.Infof("source:  %#v", source)
