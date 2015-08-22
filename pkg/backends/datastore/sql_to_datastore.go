@@ -58,7 +58,7 @@ func (m *SqlToDatstore) Host() string {
 func (m *SqlToDatstore) Query(req *expr.SqlSelect) (*ResultReader, error) {
 
 	m.query = datastore.NewQuery(m.tbl.NameOriginal)
-	u.Debugf("%s   query:%p", m.tbl.Name, m.query)
+	u.Debugf("%s   query:%p", m.tbl.NameOriginal, m.query)
 	var err error
 	m.sel = req
 	limit := req.Limit
@@ -123,126 +123,6 @@ func (m *SqlToDatstore) Accept(visitor expr.SubVisitor) (datasource.Scanner, err
 	return nil, expr.ErrNotImplemented
 }
 
-/*
-// Aggregations from the <select_list>
-//
-//    SELECT <select_list> FROM ... WHERE
-//
-func (m *SqlToDatstore) WalkSelectList() error {
-
-	m.aggs = bson.M{}
-	for i := len(m.sel.Columns) - 1; i >= 0; i-- {
-		col := m.sel.Columns[i]
-		//u.Debugf("i=%d of %d  %v %#v ", i, len(m.sel.Columns), col.Key(), col)
-		if col.Expr != nil {
-			switch curNode := col.Expr.(type) {
-			// case *expr.NumberNode:
-			// 	return nil, value.NewNumberValue(curNode.Float64), nil
-			// case *expr.BinaryNode:
-			// 	return m.walkBinary(curNode)
-			// case *expr.TriNode: // Between
-			// 	return m.walkTri(curNode)
-			// case *expr.UnaryNode:
-			// 	//return m.walkUnary(curNode)
-			// 	u.Warnf("not implemented: %#v", curNode)
-			case *expr.FuncNode:
-				// All Func Nodes are Aggregates
-				esm, err := m.WalkAggs(curNode)
-				if err == nil && len(esm) > 0 {
-					m.aggs[col.As] = esm
-				} else if err != nil {
-					u.Error(err)
-					return err
-				}
-				//u.Debugf("esm: %v:%v", col.As, esm)
-				//u.Debugf(curNode.String())
-			// case *expr.MultiArgNode:
-			// 	return m.walkMulti(curNode)
-			// case *expr.IdentityNode:
-			// 	return nil, value.NewStringValue(curNode.Text), nil
-			// case *expr.StringNode:
-			// 	return nil, value.NewStringValue(curNode.Text), nil
-			default:
-				//u.Debugf("likely a projection, not agg T:%T  %v", curNode, curNode)
-				//panic("Unrecognized node type")
-			}
-		}
-
-	}
-	return nil
-}
-
-
-// Aggregations from the <select_list>
-//
-//    WHERE .. GROUP BY x,y,z
-//
-func (m *SqlToDatstore) WalkGroupBy() error {
-
-	for i, col := range m.sel.GroupBy {
-		if col.Expr != nil {
-			u.Infof("Walk group by %s  %T", col.Expr.String(), col.Expr)
-			switch col.Expr.(type) {
-			case *expr.IdentityNode, *expr.FuncNode:
-				esm := bson.M{}
-				_, err := m.WalkNode(col.Expr, &esm)
-				fld := strings.Replace(expr.FindIdentityField(col.Expr), ".", "", -1)
-				u.Infof("gb: %s  %s", fld, u.JsonHelper(esm).PrettyJson())
-				if err == nil {
-					if len(m.innergb) > 0 {
-						esm["aggs"] = bson.M{fmt.Sprintf("group_by_%d", i): m.innergb}
-						// esm["aggs"] = bson.M{"group_by_" + fld: m.innergb}
-					} else {
-						esm = esm
-					}
-					m.innergb = esm
-					u.Infof("esm: %v", esm)
-				} else {
-					u.Error(err)
-					return err
-				}
-
-			}
-		}
-	}
-
-	m.groupby = bson.M{"aggs": bson.M{"group_by": m.innergb}}
-	return nil
-}
-
-// WalkAggs() aggregate expressions when used ast part of <select_list>
-//  - For Aggregates (functions) it builds aggs
-//  - For Projectsion (non-functions) it does nothing, that will be done later during projection
-func (m *SqlToDatstore) WalkAggs(cur expr.Node) (q bson.M, _ error) {
-	switch curNode := cur.(type) {
-	// case *expr.NumberNode:
-	// 	return nil, value.NewNumberValue(curNode.Float64), nil
-	// case *expr.BinaryNode:
-	// 	return m.walkBinary(curNode)
-	// case *expr.TriNode: // Between
-	// 	return m.walkTri(curNode)
-	// case *expr.UnaryNode:
-	// 	//return m.walkUnary(curNode)
-	// 	u.Warnf("not implemented: %#v", curNode)
-	case *expr.FuncNode:
-		return m.walkAggFunc(curNode)
-	// case *expr.MultiArgNode:
-	// 	return m.walkMulti(curNode)
-	// case *expr.IdentityNode:
-	// 	return nil, value.NewStringValue(curNode.Text), nil
-	// case *expr.StringNode:
-	// 	return nil, value.NewStringValue(curNode.Text), nil
-	default:
-		u.Debugf("likely a projection, not agg T:%T  %v", cur, cur)
-		//panic("Unrecognized node type")
-	}
-	// if cur.Negate {
-	// 	q = bson.M{"not": q}
-	// }
-	return q, nil
-}
-
-*/
 // WalkWhereNode() an expression, and its AND logic to create an appropriately
 //  request for google datastore queries
 //
@@ -543,5 +423,125 @@ func eval(cur expr.Node) (value.Value, bool) {
 	return value.NilValueVal, false
 }
 
+
+*/
+/*
+// Aggregations from the <select_list>
+//
+//    SELECT <select_list> FROM ... WHERE
+//
+func (m *SqlToDatstore) WalkSelectList() error {
+
+	m.aggs = bson.M{}
+	for i := len(m.sel.Columns) - 1; i >= 0; i-- {
+		col := m.sel.Columns[i]
+		//u.Debugf("i=%d of %d  %v %#v ", i, len(m.sel.Columns), col.Key(), col)
+		if col.Expr != nil {
+			switch curNode := col.Expr.(type) {
+			// case *expr.NumberNode:
+			// 	return nil, value.NewNumberValue(curNode.Float64), nil
+			// case *expr.BinaryNode:
+			// 	return m.walkBinary(curNode)
+			// case *expr.TriNode: // Between
+			// 	return m.walkTri(curNode)
+			// case *expr.UnaryNode:
+			// 	//return m.walkUnary(curNode)
+			// 	u.Warnf("not implemented: %#v", curNode)
+			case *expr.FuncNode:
+				// All Func Nodes are Aggregates
+				esm, err := m.WalkAggs(curNode)
+				if err == nil && len(esm) > 0 {
+					m.aggs[col.As] = esm
+				} else if err != nil {
+					u.Error(err)
+					return err
+				}
+				//u.Debugf("esm: %v:%v", col.As, esm)
+				//u.Debugf(curNode.String())
+			// case *expr.MultiArgNode:
+			// 	return m.walkMulti(curNode)
+			// case *expr.IdentityNode:
+			// 	return nil, value.NewStringValue(curNode.Text), nil
+			// case *expr.StringNode:
+			// 	return nil, value.NewStringValue(curNode.Text), nil
+			default:
+				//u.Debugf("likely a projection, not agg T:%T  %v", curNode, curNode)
+				//panic("Unrecognized node type")
+			}
+		}
+
+	}
+	return nil
+}
+
+
+// Aggregations from the <select_list>
+//
+//    WHERE .. GROUP BY x,y,z
+//
+func (m *SqlToDatstore) WalkGroupBy() error {
+
+	for i, col := range m.sel.GroupBy {
+		if col.Expr != nil {
+			u.Infof("Walk group by %s  %T", col.Expr.String(), col.Expr)
+			switch col.Expr.(type) {
+			case *expr.IdentityNode, *expr.FuncNode:
+				esm := bson.M{}
+				_, err := m.WalkNode(col.Expr, &esm)
+				fld := strings.Replace(expr.FindIdentityField(col.Expr), ".", "", -1)
+				u.Infof("gb: %s  %s", fld, u.JsonHelper(esm).PrettyJson())
+				if err == nil {
+					if len(m.innergb) > 0 {
+						esm["aggs"] = bson.M{fmt.Sprintf("group_by_%d", i): m.innergb}
+						// esm["aggs"] = bson.M{"group_by_" + fld: m.innergb}
+					} else {
+						esm = esm
+					}
+					m.innergb = esm
+					u.Infof("esm: %v", esm)
+				} else {
+					u.Error(err)
+					return err
+				}
+
+			}
+		}
+	}
+
+	m.groupby = bson.M{"aggs": bson.M{"group_by": m.innergb}}
+	return nil
+}
+
+// WalkAggs() aggregate expressions when used ast part of <select_list>
+//  - For Aggregates (functions) it builds aggs
+//  - For Projectsion (non-functions) it does nothing, that will be done later during projection
+func (m *SqlToDatstore) WalkAggs(cur expr.Node) (q bson.M, _ error) {
+	switch curNode := cur.(type) {
+	// case *expr.NumberNode:
+	// 	return nil, value.NewNumberValue(curNode.Float64), nil
+	// case *expr.BinaryNode:
+	// 	return m.walkBinary(curNode)
+	// case *expr.TriNode: // Between
+	// 	return m.walkTri(curNode)
+	// case *expr.UnaryNode:
+	// 	//return m.walkUnary(curNode)
+	// 	u.Warnf("not implemented: %#v", curNode)
+	case *expr.FuncNode:
+		return m.walkAggFunc(curNode)
+	// case *expr.MultiArgNode:
+	// 	return m.walkMulti(curNode)
+	// case *expr.IdentityNode:
+	// 	return nil, value.NewStringValue(curNode.Text), nil
+	// case *expr.StringNode:
+	// 	return nil, value.NewStringValue(curNode.Text), nil
+	default:
+		u.Debugf("likely a projection, not agg T:%T  %v", cur, cur)
+		//panic("Unrecognized node type")
+	}
+	// if cur.Negate {
+	// 	q = bson.M{"not": q}
+	// }
+	return q, nil
+}
 
 */

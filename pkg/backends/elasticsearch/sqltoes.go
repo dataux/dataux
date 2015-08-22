@@ -447,7 +447,7 @@ func (m *SqlToEs) walkFilterBinary(node *expr.BinaryNode, q *esMap) (value.Value
 		u.Warnf("not ok: %v  l:%v  r:%v", node, lhval, rhval)
 		return nil, fmt.Errorf("could not evaluate: %v", node.String())
 	}
-	u.Debugf("walkBinary: %v  l:%v  r:%v  %T  %T", node, lhval, rhval, lhval, rhval)
+	u.Debugf("walkBinary: op:%q  node:%v  l:%v  r:%v  %T  %T", node.Operator.V, node, lhval, rhval, lhval, rhval)
 	switch node.Operator.T {
 	case lex.TokenLogicAnd:
 		// this doesn't yet implement x AND y AND z
@@ -462,6 +462,7 @@ func (m *SqlToEs) walkFilterBinary(node *expr.BinaryNode, q *esMap) (value.Value
 	case lex.TokenEqual, lex.TokenEqualEqual:
 		//q = esMap{"terms": esMap{lhs: rhs}}
 		if lhval != nil && rhval != nil {
+			u.Debugf("ToString: %q", lhval.ToString())
 			*q = esMap{"term": esMap{lhval.ToString(): rhval.ToString()}}
 			return nil, nil
 		}

@@ -123,7 +123,7 @@ func (c *Conn) Run() {
 			return
 		}
 
-		u.Debugf("Run() -> handler.Handle(): %v", string(data))
+		//u.Debugf("Run() -> handler.Handle(): %v", string(data))
 		if err := c.handler.Handle(c, &models.Request{Raw: data}); err != nil {
 			u.Warnf("Handler() error %v", err)
 			if err != mysql.ErrBadConn {

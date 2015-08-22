@@ -111,7 +111,7 @@ func (c *Conn) WriteResult(r models.Result) error {
 	case *mysql.Resultset:
 		return c.WriteHandlerResult(c.Status, resVal)
 	case *mysql.Result:
-		return c.WriteHandlerResult(resVal.Status, resVal.Resultset)
+		return c.WriteOK(resVal)
 	}
 	u.Errorf("unknown result type?:  T:%T   v:%v", r, r)
 	return fmt.Errorf("Unknown result type: %T", r)

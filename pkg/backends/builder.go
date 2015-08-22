@@ -100,7 +100,7 @@ func NewBuilder(svr *models.ServerCtx, db string) *Builder {
 }
 
 func (m *Builder) VisitSysVariable(stmt *expr.SqlSelect) (interface{}, error) {
-	u.Debugf("VisitSysVariable %+v", stmt)
+	//u.Debugf("VisitSysVariable %+v", stmt)
 
 	switch sysVar := strings.ToLower(stmt.SysVariable()); sysVar {
 	case "@@max_allowed_packet":

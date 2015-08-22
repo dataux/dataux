@@ -36,9 +36,9 @@ var (
 	ErrNoSchema = fmt.Errorf("No schema or configuration exists")
 
 	// Ensure our Google DataStore implements datasource.DataSource interface
-	_ datasource.DataSource = (*GoogleDSDataSource)(nil)
-	_ datasource.Upsert     = (*GoogleDSDataSource)(nil)
-	_ datasource.Deletion   = (*GoogleDSDataSource)(nil)
+	_ datasource.DataSource     = (*GoogleDSDataSource)(nil)
+	_ datasource.SourceMutation = (*GoogleDSDataSource)(nil)
+	//_ datasource.Deletion       = (*GoogleDSDataSource)(nil)
 	//_ datasource.Scanner    = (*ResultReader)(nil)
 	// source
 	_ models.DataSource = (*GoogleDSDataSource)(nil)
@@ -144,6 +144,7 @@ func (m *GoogleDSDataSource) connect() error {
 	ctx := context.Background()
 	client, err := datastore.NewClient(ctx, m.cloudProjectId, cloud.WithTokenSource(conf.TokenSource(ctx)))
 	if err != nil {
+		u.Errorf("could not create client: %v", err)
 		return err
 	}
 	m.dsClient = client
@@ -192,7 +193,7 @@ func (m *GoogleDSDataSource) Open(tableName string) (datasource.SourceConn, erro
 
 func (m *GoogleDSDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, error) {
 
-	u.Debugf("get sourceTask for %v", stmt)
+	//u.Debugf("get sourceTask for %v", stmt)
 	tblName := strings.ToLower(stmt.From[0].Name)
 
 	tbl, err := m.schema.Table(tblName)
@@ -220,63 +221,74 @@ func (m *GoogleDSDataSource) Table(table string) (*datasource.Table, error) {
 	return m.loadTableSchema(table)
 }
 
-// interface for Upsert.Put()
-func (m *GoogleDSDataSource) Put(ctx context.Context, key datasource.Key, row interface{}) (datasource.Key, error) {
-	// TODO:
-	if key == nil {
-		return nil, fmt.Errorf("Must have key for inserts in DataStore")
-	}
-	return nil, nil
-}
-func (m *GoogleDSDataSource) PutMulti(ctx context.Context, keys []datasource.Key, src interface{}) ([]datasource.Key, error) {
-	return nil, fmt.Errorf("not implemented")
+type DatastoreMutator struct {
+	tbl *datasource.Table
+	sql expr.SqlStatement
+	ds  *GoogleDSDataSource
 }
 
-// Interface for Deletion
-func (m *GoogleDSDataSource) Delete(key driver.Value) (int, error) {
+// interface for SourceMutation
+func (m *GoogleDSDataSource) Create(tbl *datasource.Table, sql expr.SqlStatement) (datasource.Mutator, error) {
+	return &DatastoreMutator{
+		tbl: tbl,
+		sql: sql,
+		ds:  m,
+	}, nil
+}
+
+// interface for Upsert.Put()
+func (m *DatastoreMutator) Put(ctx context.Context, key datasource.Key, val interface{}) (datasource.Key, error) {
+
+	// if key == nil {
+	// 	u.Debugf("put: %T", ctx)
+	// 	u.Warnf("must have key?  %v", val)
+	// 	return nil, fmt.Errorf("Must have key for inserts in DataStore")
+	// }
+	if m.ds.schema == nil {
+		u.Warnf("must have schema")
+	}
+
+	row, ok := val.([]driver.Value)
+	if !ok {
+		return nil, fmt.Errorf("Was not []driver.Value?  %T", val)
+	}
+
+	props := make([]datastore.Property, 0)
+	cols := m.tbl.Columns()
+	switch sqlReq := m.sql.(type) {
+	case *expr.SqlInsert:
+		cols = sqlReq.ColumnNames()
+	}
+	//u.Infof("row len=%v   fieldlen=%v col len=%v", len(row), len(m.tbl.Fields), len(cols))
+	for _, f := range m.tbl.Fields {
+		for i, colName := range cols {
+			if f.Name == colName {
+				//u.Debugf("got field: i=%d col=%s row[i]=%v", i, colName, row[i])
+				props = append(props, datastore.Property{Name: f.Name, Value: row[i]})
+				break
+			}
+		}
+	}
+	dskey := datastore.NewKey(m.ds.dsCtx, m.tbl.NameOriginal, fmt.Sprintf("%v", row[0]), 0, nil)
+	//u.Infof("dskey:  %s   table=%s", dskey, m.tbl.NameOriginal)
+	//u.Infof("props:  %v", props)
+	pl := datastore.PropertyList(props)
+	dskey, err := m.ds.dsClient.Put(m.ds.dsCtx, dskey, &pl)
+	if err != nil {
+		u.Errorf("could not save? %v", err)
+		return nil, err
+	}
+	newKey := datasource.NewKeyCol("id", dskey.String())
+	return newKey, nil
+}
+
+func (m *DatastoreMutator) PutMulti(ctx context.Context, keys []datasource.Key, src interface{}) ([]datasource.Key, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+func (m *DatastoreMutator) Delete(key driver.Value) (int, error) {
 	return 0, fmt.Errorf("not implemented")
 }
-func (m *GoogleDSDataSource) DeleteExpression(where expr.Node) (int, error) {
-	/*
-		evaluator := vm.Evaluator(where)
-		deletedKeys := make([]driver.Value, 0)
-		for idx, row := range m.data {
-			msgCtx := datasource.NewSqlDriverMessageMapVals(uint64(idx), row, m.cols)
-			whereValue, ok := evaluator(msgCtx)
-			if !ok {
-				u.Debugf("could not evaluate where: %v   %v", idx, msgCtx.Values())
-				//return deletedCt, fmt.Errorf("Could not evaluate where clause")
-				continue
-			}
-			switch whereVal := whereValue.(type) {
-			case value.BoolValue:
-				if whereVal.Val() == false {
-					//this means do NOT delete
-				} else {
-					// Delete!
-					indexVal := row[m.indexCol]
-					deletedKeys = append(deletedKeys, indexVal)
-				}
-			case nil:
-				// ??
-			default:
-				if whereVal.Nil() {
-					// Doesn't match, so don't delete
-				} else {
-					u.Warnf("unknown type? %T", whereVal)
-				}
-			}
-		}
-		for _, deleteKey := range deletedKeys {
-			//u.Debugf("calling delete: %v", deleteKey)
-			if ct, err := m.Delete(deleteKey); err != nil {
-				u.Errorf("Could not delete key: %v", deleteKey)
-			} else if ct != 1 {
-				u.Errorf("delete should have removed 1 key %v", deleteKey)
-			}
-		}
-		return len(deletedKeys), nil
-	*/
+func (m *DatastoreMutator) DeleteExpression(where expr.Node) (int, error) {
 	return 0, fmt.Errorf("not implemented")
 }
 
@@ -307,7 +319,7 @@ func (m *GoogleDSDataSource) loadTableNames() error {
 	rows := pageQuery(m.dsClient.Run(m.dsCtx, datastore.NewQuery("__kind__")))
 	for _, row := range rows {
 		if !strings.HasPrefix(row.key.Name(), "__") {
-			u.Warnf("%#v", row.key)
+			//u.Warnf("found table %s  %#v", row.key.Name(), row.key)
 			tables = append(tables, row.key.Name())
 			m.loadTableSchema(row.key.Name())
 		}
@@ -327,8 +339,6 @@ func (m *GoogleDSDataSource) loadTableSchema(table string) (*datasource.Table, e
 	if m.schema == nil {
 		return nil, fmt.Errorf("no schema in use")
 	}
-	// check cache first
-	tableLower := strings.ToLower(table)
 
 	/*
 		- Datastore keeps list of all indexed properties available
@@ -336,7 +346,7 @@ func (m *GoogleDSDataSource) loadTableSchema(table string) (*datasource.Table, e
 		TODO:
 			- Need to recurse through enough records to get good idea of types
 	*/
-	tbl := datasource.NewTable(tableLower, m.schema)
+	tbl := datasource.NewTable(table, m.schema)
 
 	// We are going to scan this table, introspecting a few rows
 	// to see what types they might be
@@ -393,7 +403,7 @@ func (m *GoogleDSDataSource) loadTableSchema(table string) (*datasource.Table, e
 		}
 	}
 	if len(tbl.FieldMap) > 0 {
-		u.Infof("caching schema:%p   %q", m.schema, tableLower)
+		//u.Infof("caching schema:%p   %q", m.schema, table)
 		m.schema.AddTable(tbl)
 		return tbl, nil
 	}
@@ -468,3 +478,71 @@ func (m *schemaType) Load(props []datastore.Property) error {
 func (m *schemaType) Save() ([]datastore.Property, error) {
 	return nil, nil
 }
+
+/*
+func (m *GoogleDSDataSource) Put(ctx context.Context, key datasource.Key, row interface{}) (datasource.Key, error) {
+	// TODO:
+	if key == nil {
+		u.Debugf("put: %T", ctx)
+		u.Warnf("must have key?  %v", row)
+		return nil, fmt.Errorf("Must have key for inserts in DataStore")
+	}
+	if m.schema == nil {
+		u.Warnf("must have schema")
+		return nil, fmt.Errorf("Must have schema for inserts in DataStore")
+	}
+	//key := datastore.NewKey(ctx, ArticleKind, title, 0, nil)
+	//a := &tu.Article{fmt.Sprintf("article_%v", i), "auto", 22, 75, false, []string{"news", "sports"}, n, &n, 55.5, ev, &body}
+	//key, err := client.Put(ctx, articleKey(a.Title), &Article{a})
+	m.dsClient.Put(m.dsCtx, key, row)
+	return nil, nil
+}
+func (m *GoogleDSDataSource) PutMulti(ctx context.Context, keys []datasource.Key, src interface{}) ([]datasource.Key, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+// Interface for Deletion
+func (m *GoogleDSDataSource) Delete(key driver.Value) (int, error) {
+	return 0, fmt.Errorf("not implemented")
+}
+func (m *GoogleDSDataSource) DeleteExpression(where expr.Node) (int, error) {
+	// evaluator := vm.Evaluator(where)
+	// deletedKeys := make([]driver.Value, 0)
+	// for idx, row := range m.data {
+	// 	msgCtx := datasource.NewSqlDriverMessageMapVals(uint64(idx), row, m.cols)
+	// 	whereValue, ok := evaluator(msgCtx)
+	// 	if !ok {
+	// 		u.Debugf("could not evaluate where: %v   %v", idx, msgCtx.Values())
+	// 		//return deletedCt, fmt.Errorf("Could not evaluate where clause")
+	// 		continue
+	// 	}
+	// 	switch whereVal := whereValue.(type) {
+	// 	case value.BoolValue:
+	// 		if whereVal.Val() == false {
+	// 			//this means do NOT delete
+	// 		} else {
+	// 			// Delete!
+	// 			indexVal := row[m.indexCol]
+	// 			deletedKeys = append(deletedKeys, indexVal)
+	// 		}
+	// 	case nil:
+	// 		// ??
+	// 	default:
+	// 		if whereVal.Nil() {
+	// 			// Doesn't match, so don't delete
+	// 		} else {
+	// 			u.Warnf("unknown type? %T", whereVal)
+	// 		}
+	// 	}
+	// }
+	// for _, deleteKey := range deletedKeys {
+	// 	//u.Debugf("calling delete: %v", deleteKey)
+	// 	if ct, err := m.Delete(deleteKey); err != nil {
+	// 		u.Errorf("Could not delete key: %v", deleteKey)
+	// 	} else if ct != 1 {
+	// 		u.Errorf("delete should have removed 1 key %v", deleteKey)
+	// 	}
+	// }
+	// return len(deletedKeys), nil
+	return 0, fmt.Errorf("not implemented")
+}
+*/

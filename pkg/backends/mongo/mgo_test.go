@@ -255,6 +255,8 @@ func TestSelectLimit(t *testing.T) {
 }
 
 func TestSelectAggs(t *testing.T) {
+
+	// TODO:  Not implemented
 	t.Fail()
 	return
 	data := struct {
@@ -492,7 +494,7 @@ func TestSelectWhereBetween(t *testing.T) {
 	})
 
 	// Now try that again but without todate
-	// TODO - need to convert to date by virtue of schema knowing it is date?
+	// TODO - need to convert string -> date by virtue of schema knowing it is a date?
 	// validateQuerySpec(t, QuerySpec{
 	// 	Sql:         `select title, count, author from article where created BETWEEN "2011-08-01" AND "2013-08-03";`,
 	// 	ExpectRowCt: 2,
@@ -509,30 +511,6 @@ func TestSelectWhereBetween(t *testing.T) {
 	// 	},
 	// 	RowData: &data,
 	// })
-
-	datact := struct {
-		Actor string
-		Name  string `db:"repository.name"`
-		Stars int
-	}{}
-
-	t.Fatal()
-	// simple test of mixed aliasing, non-aliasing on field names
-	validateQuerySpec(t, QuerySpec{
-		Sql: `
-			SELECT 
-				actor, repository.name, repository.stargazers_count AS stars
-			FROM github_push 
-			WHERE 
-				repository.stargazers_count BETWEEN 1000 AND 1100;
-		`,
-		ExpectRowCt: 20,
-		ValidateRowData: func() {
-			//u.Debugf("%#v", datact)
-			//assert.Tf(t, datact.Stars >= 1000 && datact.Stars < 1101, "%v", datact)
-		},
-		RowData: &datact,
-	})
 }
 
 func TestSelectOrderBy(t *testing.T) {

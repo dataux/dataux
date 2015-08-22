@@ -185,7 +185,7 @@ func (m *ResultReader) Finalize() error {
 					u.Debugf("found count star")
 					vals[i] = m.Total
 				} else {
-					u.Debugf("looking for col: %v %v %v", fldName, m.Aggs.Get(fldName+"/value"))
+					u.Debugf("looking for col: %v=%v", fldName, m.Aggs.Get(fldName+"/value"))
 					vals[i] = m.Aggs.Get(fldName + "/value")
 				}
 

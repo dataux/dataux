@@ -441,14 +441,3 @@ func TestInsertSimple(t *testing.T) {
 		ExpectRowCt:     1,
 	})
 }
-
-/*
-type User struct {
-	Id      string     `datastore:"id"`
-	Name    string     `datastore:"name"`
-	Deleted bool       `datastore:"deleted,noindex"`
-	Roles   []string   `datastore:"roles,noindex"`
-	Created time.Time  `datastore:"created"`
-	Updated *time.Time `datastore:"created"`
-}
-*/

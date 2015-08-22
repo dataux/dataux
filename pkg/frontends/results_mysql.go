@@ -201,18 +201,26 @@ func NewMySqlExecResultWriter(writer models.ResultWriter, schema *datasource.Sch
 
 	m := &MySqlExecResultWriter{writer: writer, schema: schema}
 	m.TaskBase = exec.NewTaskBase("MySqlExecResultWriter")
-	m.Rs = new(mysql.Result)
-	//m.Handler = resultWrite(m)
+	m.Rs = mysql.NewResult()
+	m.Handler = nilWriter(m)
 	return m
 }
 func (m *MySqlExecResultWriter) Close() error {
-	if m.Rs == nil {
-		// error?
-
+	if m.writer == nil {
+		u.Warnf("wat?  nil writer? ")
 	}
+	//u.Debugf("rs?%#v  writer?%#v", m.Rs, m.writer)
+	// TODO: we need to send a message to get this count
+	m.Rs.AffectedRows = 1
 	m.writer.WriteResult(m.Rs)
 	return nil
 }
 func (m *MySqlExecResultWriter) Finalize() error {
 	return nil
+}
+func nilWriter(m *MySqlExecResultWriter) exec.MessageHandler {
+	return func(_ *exec.Context, msg datasource.Message) bool {
+		u.Debugf("in nilWriter:  %#v", msg)
+		return false
+	}
 }
