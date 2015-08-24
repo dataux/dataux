@@ -149,6 +149,8 @@ type User struct {
 func (m *User) Load(props []datastore.Property) error {
 	for _, p := range props {
 		switch p.Name {
+		case "id":
+			m.Id = p.Value.(string)
 		default:
 			u.Warnf("unmapped: %v  %T", p.Name, p.Value)
 		}
@@ -157,13 +159,14 @@ func (m *User) Load(props []datastore.Property) error {
 }
 func (m *User) Save() ([]datastore.Property, error) {
 	props := make([]datastore.Property, 6)
-	props[0] = datastore.Property{Name: "id", Value: m.Id}
-	props[1] = datastore.Property{Name: "name", Value: m.Id}
-	props[2] = datastore.Property{Name: "deleted", Value: m.Deleted}
-	roles, _ := json.Marshal(m.Roles)
-	props[3] = datastore.Property{Name: "roles", Value: roles, NoIndex: true}
-	props[4] = datastore.Property{Name: "created", Value: m.Created}
-	props[5] = datastore.Property{Name: "updated", Value: *m.Updated}
+	roles, _ := m.Roles.Value()
+	u.Infof("roles: %T", roles)
+	props[0] = datastore.Property{Name: "id", Value: m.Id}                    // Indexed
+	props[1] = datastore.Property{Name: "name", Value: m.Id}                  // Indexed
+	props[2] = datastore.Property{Name: "deleted", Value: m.Deleted}          // Indexed
+	props[3] = datastore.Property{Name: "roles", Value: roles, NoIndex: true} // Not Indexed
+	props[4] = datastore.Property{Name: "created", Value: m.Created}          // Indexed
+	props[5] = datastore.Property{Name: "updated", Value: *m.Updated}         // Indexed
 	return props, nil
 }
 
@@ -439,5 +442,71 @@ func TestInsertSimple(t *testing.T) {
 		Exec:            `INSERT INTO DataUxTestUser (id, name, deleted, created, updated) VALUES ("user814", "test_name",false, now(), now());`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
+	})
+}
+
+func TestDeleteSimple(t *testing.T) {
+	validateQuerySpec(t, tu.QuerySpec{
+		Exec:            `INSERT INTO DataUxTestUser (id, name, deleted, created, updated) VALUES ("user814", "test_name",false, now(), now());`,
+		ValidateRowData: func() {},
+		ExpectRowCt:     1,
+	})
+	validateQuerySpec(t, tu.QuerySpec{
+		Exec:            `DELETE FROM DataUxTestUser WHERE id = "user814"`,
+		ValidateRowData: func() {},
+		ExpectRowCt:     1,
+	})
+	validateQuerySpec(t, tu.QuerySpec{
+		Exec:            `SELECT * FROM DataUxTestUser WHERE id = "user814"`,
+		ValidateRowData: func() {},
+		ExpectRowCt:     0,
+	})
+}
+
+func TestUpdateSimple(t *testing.T) {
+	data := struct {
+		Id      string
+		Name    string
+		Deleted bool
+		Roles   datasource.StringArray
+		Created time.Time
+		Updated time.Time
+	}{}
+	validateQuerySpec(t, tu.QuerySpec{
+		Exec: `INSERT INTO DataUxTestUser 
+							(id, name, deleted, created, updated, roles) 
+						VALUES 
+							("user815", "test_name", false, todate("2014/07/04"), now(), ["admin","sysadmin"]);`,
+		ValidateRowData: func() {},
+		ExpectRowCt:     1,
+	})
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         `select id, name, deleted, roles, created, updated from DataUxTestUser WHERE id = "user815"`,
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			//u.Infof("%v", data)
+			assert.Tf(t, data.Id == "user815", "%v", data)
+			assert.Tf(t, data.Name == "test_name", "%v", data)
+			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
+		},
+		RowData: &data,
+	})
+
+	//return
+	validateQuerySpec(t, tu.QuerySpec{
+		Exec:            `UPDATE DataUxTestUser SET name = "was_updated", deleted = true, created, WHERE id = "user815"`,
+		ValidateRowData: func() {},
+		ExpectRowCt:     1,
+	})
+	validateQuerySpec(t, tu.QuerySpec{
+		Exec:        `SELECT id, name, deleted, roles, created, updated FROM DataUxTestUser WHERE id = "user815"`,
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			//u.Infof("%v", data)
+			assert.Tf(t, data.Id == "user815", "%v", data)
+			assert.Tf(t, data.Name == "was_updated", "%v", data)
+			assert.Tf(t, data.Deleted == true, "Not deleted? %v", data)
+		},
+		RowData: &data,
 	})
 }

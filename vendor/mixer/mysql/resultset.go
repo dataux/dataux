@@ -71,6 +71,7 @@ func ValuesToRowData(values []driver.Value, fields []*Field) (RowData, error) {
 		// 	//if isUnsigned {
 		// 	buf.Write(PutLengthEncodedInt(values[i].(int64)))
 		// }
+		//u.Debugf("i:%d T:%T\t", i, values[i])
 		switch v := values[i].(type) {
 		case int:
 			leby := PutLengthEncodedString([]byte(strconv.FormatInt(int64(v), 10)))
@@ -97,6 +98,7 @@ func ValuesToRowData(values []driver.Value, fields []*Field) (RowData, error) {
 			leby := PutLengthEncodedString([]byte(v))
 			buf.Write(leby)
 		case []byte:
+			//u.Debugf("write string: %v", string(v))
 			buf.Write(PutLengthEncodedString(v))
 		case time.Time:
 			//  "YYYY-MM-DD HH:MM:SS.MMMMMM"

@@ -2,6 +2,7 @@ package datastore
 
 import (
 	"database/sql/driver"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -11,14 +12,14 @@ import (
 	"sync"
 	"time"
 
+	u "github.com/araddon/gou"
+
 	"golang.org/x/net/context"
-	//"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2/jwt"
 	"google.golang.org/cloud"
 	"google.golang.org/cloud/datastore"
 
-	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
@@ -263,8 +264,23 @@ func (m *DatastoreMutator) Put(ctx context.Context, key datasource.Key, val inte
 	for _, f := range m.tbl.Fields {
 		for i, colName := range cols {
 			if f.Name == colName {
-				//u.Debugf("got field: i=%d col=%s row[i]=%v", i, colName, row[i])
-				props = append(props, datastore.Property{Name: f.Name, Value: row[i]})
+
+				switch val := row[i].(type) {
+				case string, []byte, int, int64, bool, time.Time:
+					//u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, row[i], row[i])
+					props = append(props, datastore.Property{Name: f.Name, Value: val})
+				case []value.Value:
+					by, err := json.Marshal(val)
+					if err != nil {
+						u.Errorf("Error converting field %v  err=%v", val, err)
+					}
+					//u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, string(by), by)
+					props = append(props, datastore.Property{Name: f.Name, Value: by})
+				default:
+					u.Warnf("unsupported conversion: %T  %v", val, val)
+					props = append(props, datastore.Property{Name: f.Name, Value: val})
+				}
+
 				break
 			}
 		}
@@ -285,11 +301,23 @@ func (m *DatastoreMutator) Put(ctx context.Context, key datasource.Key, val inte
 func (m *DatastoreMutator) PutMulti(ctx context.Context, keys []datasource.Key, src interface{}) ([]datasource.Key, error) {
 	return nil, fmt.Errorf("not implemented")
 }
+
 func (m *DatastoreMutator) Delete(key driver.Value) (int, error) {
-	return 0, fmt.Errorf("not implemented")
+	dskey := datastore.NewKey(m.ds.dsCtx, m.tbl.NameOriginal, fmt.Sprintf("%v", key), 0, nil)
+	//u.Infof("dskey:  %s   table=%s", dskey, m.tbl.NameOriginal)
+	err := m.ds.dsClient.Delete(m.ds.dsCtx, dskey)
+	if err != nil {
+		u.Errorf("could not delete? %v", err)
+		return 0, err
+	}
+	return 1, nil
 }
 func (m *DatastoreMutator) DeleteExpression(where expr.Node) (int, error) {
-	return 0, fmt.Errorf("not implemented")
+	delKey := datasource.KeyFromWhere(where)
+	if delKey != nil {
+		return m.Delete(delKey.Key())
+	}
+	return 0, fmt.Errorf("Could not delete with that where expression: %s", where)
 }
 
 func (m *GoogleDSDataSource) loadDatabases() error {

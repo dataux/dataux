@@ -5,8 +5,6 @@ import (
 	"io"
 	"time"
 
-	//"golang.org/x/net/context"
-	//"google.golang.org/cloud"
 	"google.golang.org/cloud/datastore"
 
 	u "github.com/araddon/gou"
@@ -120,8 +118,9 @@ func (m *ResultReader) CreateIterator(filter expr.Node) datasource.Iterator {
 	return &ResultReaderNext{m}
 }
 
-// Finalize maps the Mongo Documents/results into
+// Finalize maps the Google Datastore properties into
 //    [][]interface{}   which is compabitble with sql/driver values
+// as well as making a projection, ie column selection
 //
 func (m *ResultReader) Finalize() error {
 
@@ -139,7 +138,7 @@ func (m *ResultReader) Finalize() error {
 	m.Vals = make([][]driver.Value, 0)
 
 	if sql.CountStar() {
-		// Count *
+		// Count(*)
 		vals := make([]driver.Value, 1)
 		ct, err := m.Req.dsClient.Count(m.Req.dsCtx, q)
 		//ct, err := q.Count(m.Req.dsCtx)
@@ -180,11 +179,18 @@ func (m *ResultReader) Finalize() error {
 		//u.Infof("setting limit: %v", m.Req.sel.Limit)
 		q = q.Limit(m.Req.sel.Limit)
 	}
-	n := time.Now()
-	u.Infof("query: %v", q)
+	queryStart := time.Now()
+	// u.Debugf("posMap: %#v", posMap)
+	// for fieldIndex, fld := range m.Req.tbl.Fields {
+	// 	u.Debugf("field name: %v orig:%v  ", fld.Name, fieldIndex)
+	// }
+	// for i, col := range cols {
+	// 	u.Debugf("col? %v:%v", i, col)
+	// }
+	//u.Infof("datastore query: %v", q)
 	//q.DebugInfo()
 	//iter := q.Run(m.Req.dsCtx)
-	u.Infof("has:  client? %v  ctx? %v", m.Req.dsClient, m.Req.dsCtx)
+	//u.Infof("has:  client? %v  ctx? %v", m.Req.dsClient, m.Req.dsCtx)
 	iter := m.Req.dsClient.Run(m.Req.dsCtx, q)
 	for {
 		row := Row{}
@@ -193,24 +199,21 @@ func (m *ResultReader) Finalize() error {
 			if err == datastore.Done {
 				break
 			}
-			u.Errorf("error: %v", err)
-			break
+			u.Errorf("uknown datastore error: %v", err)
+			return err
 		}
+
 		row.key = key
 		if needsProjection {
 			vals := make([]driver.Value, len(cols))
-			for i, idx := range posMap {
-				vals[i] = row.Vals[idx]
-				//u.Debugf("posMap  %v", posMap[i])
-				// switch vt := vals[i].(type) {
-				// case []uint8:
-				// 	u.Infof("json? %d  %s  val: col:%d  %T  %s", i, col.As, col.Col.Index, vals[i], string(vt))
-				// case string:
-				// 	u.Infof("STR %d  %s  val: col:%d  %T  %v", i, col.As, col.Col.Index, vals[i], vals[i])
-				// default:
-				// 	u.Infof("??? %d  %s  val: col:%d  %T  %v", i, col.As, col.Col.Index, vals[i], vals[i])
-				// }
-
+			for _, prop := range row.props {
+				for i, col := range cols {
+					if col.Name == prop.Name {
+						vals[i] = prop.Value
+						//u.Debugf("%-10s %T\t%v", col.Name, prop.Value, prop.Value)
+						break
+					}
+				}
 			}
 			//u.Debugf("%v", vals)
 			m.Vals = append(m.Vals, vals)
@@ -220,7 +223,7 @@ func (m *ResultReader) Finalize() error {
 
 		//u.Debugf("vals:  %v", row.Vals)
 	}
-	u.Infof("finished query, took: %v for %v rows", time.Now().Sub(n), len(m.Vals))
+	u.Infof("finished query, took: %v for %v rows", time.Now().Sub(queryStart), len(m.Vals))
 	return nil
 }
 

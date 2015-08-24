@@ -3,6 +3,7 @@ package datastore
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"golang.org/x/net/context"
 	"google.golang.org/cloud/datastore"
@@ -58,7 +59,7 @@ func (m *SqlToDatstore) Host() string {
 func (m *SqlToDatstore) Query(req *expr.SqlSelect) (*ResultReader, error) {
 
 	m.query = datastore.NewQuery(m.tbl.NameOriginal)
-	u.Debugf("%s   query:%p", m.tbl.NameOriginal, m.query)
+	//u.Debugf("%s   query:%p", m.tbl.NameOriginal, m.query)
 	var err error
 	m.sel = req
 	limit := req.Limit
@@ -131,7 +132,7 @@ func (m *SqlToDatstore) Accept(visitor expr.SubVisitor) (datasource.Scanner, err
 //  - no OR filters
 //  -
 func (m *SqlToDatstore) WalkWhereNode(cur expr.Node) error {
-	u.Debugf("WalkWhereNode: %s", cur)
+	//u.Debugf("WalkWhereNode: %s", cur)
 	switch curNode := cur.(type) {
 	case *expr.NumberNode, *expr.StringNode:
 		nodeVal, ok := vm.Eval(nil, cur)
@@ -210,8 +211,12 @@ func (m *SqlToDatstore) walkFilterBinary(node *expr.BinaryNode) error {
 	case lex.TokenLike:
 		// Ancestors support some type of prefix query?
 		// this only works on String columns?
-		m.query = m.query.Filter(fmt.Sprintf("%q >=", lhval.ToString()), rhval.Value())
-		//return fmt.Errorf("Like not implemented %v", node.String())
+		lhs := lhval.ToString()
+		if strings.HasPrefix(lhs, "%") {
+			// Need to polyFill?  Or Error
+			return fmt.Errorf("Google Datastore does not support % prefix", lhs)
+		}
+		m.query = m.query.Filter(fmt.Sprintf("%q >=", lhs), rhval.Value())
 	default:
 		u.Warnf("not implemented: %v", node.Operator)
 		return fmt.Errorf("not implemented %v", node.String())

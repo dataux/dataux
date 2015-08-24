@@ -9,6 +9,7 @@ import (
 
 	"github.com/araddon/dateparse"
 	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/datasource"
 	"github.com/bmizerany/assert"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
@@ -68,7 +69,7 @@ type Article struct {
 	Count    int
 	Count64  int64
 	Deleted  bool
-	Category []string
+	Category datasource.StringArray
 	Created  time.Time
 	Updated  *time.Time
 	F        float64
@@ -80,12 +81,12 @@ type Article struct {
 }
 
 type User struct {
-	Id      string     `datastore:"id"`
-	Name    string     `datastore:"name"`
-	Deleted bool       `datastore:"deleted,noindex"`
-	Roles   []string   `datastore:"roles,noindex"`
-	Created time.Time  `datastore:"created"`
-	Updated *time.Time `datastore:"created"`
+	Id      string
+	Name    string
+	Deleted bool
+	Roles   datasource.StringArray
+	Created time.Time
+	Updated *time.Time
 }
 
 type QuerySpec struct {
@@ -111,7 +112,7 @@ func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
 	testmysql.RunTestServer(t)
 
 	// This is a connection to RunTestServer, which starts on port 13307
-	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
+	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/datauxtest?parseTime=true")
 	assert.Tf(t, err == nil, "%v", err)
 	defer dbx.Close()
 	//u.Debugf("%v", testSpec.Sql)
@@ -149,7 +150,7 @@ func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
 			if testSpec.RowData != nil {
 				err = rows.StructScan(testSpec.RowData)
 				//u.Infof("rowVals: %#v", testSpec.RowData)
-				assert.Tf(t, err == nil, "%v", err)
+				assert.Tf(t, err == nil, "data:%+v   err=%v", testSpec.RowData, err)
 				rowCt++
 				if testSpec.ValidateRowData != nil {
 					testSpec.ValidateRowData()
