@@ -492,17 +492,17 @@ func TestUpdateSimple(t *testing.T) {
 		RowData: &data,
 	})
 
-	//return
 	validateQuerySpec(t, tu.QuerySpec{
-		Exec:            `UPDATE DataUxTestUser SET name = "was_updated", deleted = true, created, WHERE id = "user815"`,
+		Exec:            `UPDATE DataUxTestUser SET name = "was_updated", [deleted] = true WHERE id = "user815"`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
 	})
+
 	validateQuerySpec(t, tu.QuerySpec{
-		Exec:        `SELECT id, name, deleted, roles, created, updated FROM DataUxTestUser WHERE id = "user815"`,
+		Sql:         `SELECT id, name, deleted, roles, created, updated FROM DataUxTestUser WHERE id = "user815"`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			//u.Infof("%v", data)
+			u.Infof("%v", data)
 			assert.Tf(t, data.Id == "user815", "%v", data)
 			assert.Tf(t, data.Name == "was_updated", "%v", data)
 			assert.Tf(t, data.Deleted == true, "Not deleted? %v", data)

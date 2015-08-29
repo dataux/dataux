@@ -79,9 +79,10 @@ func (m *Builder) VisitUpdate(stmt *expr.SqlUpdate) (interface{}, error) {
 		source := tbl.SourceSchema.DS.(datasource.Upsert)
 		task := exec.NewUpdateUpsert(stmt, source)
 		u.Debugf("adding update source %#v", source)
-		u.Infof("addinng update: %#v", task)
+		u.Infof("adding update: %#v", task)
 		tasks.Add(task)
 	} else {
+		u.Warnf("no implementation for source Update %T", tbl.SourceSchema.DS)
 		return nil, fmt.Errorf("%T Must Implement Upsert or SourceMutation", tbl.SourceSchema.DS)
 	}
 

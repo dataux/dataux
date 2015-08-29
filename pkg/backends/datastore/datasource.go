@@ -193,6 +193,10 @@ func (m *GoogleDSDataSource) Open(tableName string) (datasource.SourceConn, erro
 }
 
 func (m *GoogleDSDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, error) {
+	return m.GetBySelect(stmt)
+}
+
+func (m *GoogleDSDataSource) GetBySelect(stmt *expr.SqlSelect) (*ResultReader, error) {
 
 	//u.Debugf("get sourceTask for %v", stmt)
 	tblName := strings.ToLower(stmt.From[0].Name)
@@ -240,54 +244,109 @@ func (m *GoogleDSDataSource) Create(tbl *datasource.Table, sql expr.SqlStatement
 // interface for Upsert.Put()
 func (m *DatastoreMutator) Put(ctx context.Context, key datasource.Key, val interface{}) (datasource.Key, error) {
 
-	// if key == nil {
-	// 	u.Debugf("put: %T", ctx)
-	// 	u.Warnf("must have key?  %v", val)
-	// 	return nil, fmt.Errorf("Must have key for inserts in DataStore")
-	// }
+	if key == nil {
+		u.Debugf("didn't have key?  %v", val)
+		//return nil, fmt.Errorf("Must have key for updates in DataStore")
+	}
+
 	if m.ds.schema == nil {
 		u.Warnf("must have schema")
+		return nil, fmt.Errorf("Must have schema for updates in DataStore")
 	}
 
-	row, ok := val.([]driver.Value)
-	if !ok {
-		return nil, fmt.Errorf("Was not []driver.Value?  %T", val)
-	}
-
+	var dskey *datastore.Key
 	props := make([]datastore.Property, 0)
+	var row, curRow []driver.Value
 	cols := m.tbl.Columns()
+
+	if key != nil {
+		dskey = datastore.NewKey(m.ds.dsCtx, m.tbl.NameOriginal, fmt.Sprintf("%v", key.Key()), 0, nil)
+	}
+
 	switch sqlReq := m.sql.(type) {
 	case *expr.SqlInsert:
 		cols = sqlReq.ColumnNames()
-	}
-	//u.Infof("row len=%v   fieldlen=%v col len=%v", len(row), len(m.tbl.Fields), len(cols))
-	for _, f := range m.tbl.Fields {
-		for i, colName := range cols {
-			if f.Name == colName {
+	case *expr.SqlUpdate:
+		// need to fetch first?
+		sel := sqlReq.SqlSelect()
+		u.Debugf("new Select:  %s", sel)
+		res, err := m.ds.GetBySelect(sel)
+		if err != nil {
+			u.Errorf("wat?  %v", err)
+			return nil, err
+		}
 
-				switch val := row[i].(type) {
-				case string, []byte, int, int64, bool, time.Time:
-					//u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, row[i], row[i])
-					props = append(props, datastore.Property{Name: f.Name, Value: val})
-				case []value.Value:
-					by, err := json.Marshal(val)
-					if err != nil {
-						u.Errorf("Error converting field %v  err=%v", val, err)
-					}
-					//u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, string(by), by)
-					props = append(props, datastore.Property{Name: f.Name, Value: by})
-				default:
-					u.Warnf("unsupported conversion: %T  %v", val, val)
-					props = append(props, datastore.Property{Name: f.Name, Value: val})
-				}
-
-				break
-			}
+		if len(res.Vals) == 1 {
+			curRow = res.Vals[0]
+		} else {
+			u.Warnf("should only have one to update in Put(): %v", len(res.Vals))
 		}
 	}
-	dskey := datastore.NewKey(m.ds.dsCtx, m.tbl.NameOriginal, fmt.Sprintf("%v", row[0]), 0, nil)
-	//u.Infof("dskey:  %s   table=%s", dskey, m.tbl.NameOriginal)
-	//u.Infof("props:  %v", props)
+
+	switch valT := val.(type) {
+	case []driver.Value:
+		row = valT
+		//u.Infof("row len=%v   fieldlen=%v col len=%v", len(row), len(m.tbl.Fields), len(cols))
+		for _, f := range m.tbl.Fields {
+			for i, colName := range cols {
+				if f.Name == colName {
+
+					switch val := row[i].(type) {
+					case string, []byte, int, int64, bool, time.Time:
+						//u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, row[i], row[i])
+						props = append(props, datastore.Property{Name: f.Name, Value: val})
+					case []value.Value:
+						by, err := json.Marshal(val)
+						if err != nil {
+							u.Errorf("Error converting field %v  err=%v", val, err)
+						}
+						//u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, string(by), by)
+						props = append(props, datastore.Property{Name: f.Name, Value: by})
+					default:
+						u.Warnf("unsupported conversion: %T  %v", val, val)
+						props = append(props, datastore.Property{Name: f.Name, Value: val})
+					}
+
+					break
+				}
+			}
+		}
+		// Create the key by position?  HACK
+		dskey = datastore.NewKey(m.ds.dsCtx, m.tbl.NameOriginal, fmt.Sprintf("%v", row[0]), 0, nil)
+
+	case map[string]driver.Value:
+		for i, f := range m.tbl.Fields {
+			for colName, driverVal := range valT {
+				if f.Name == colName {
+					switch val := driverVal.(type) {
+					case string, []byte, int, int64, bool, time.Time:
+						u.Debugf("PUT field: i=%d col=%s val=%v  T:%T", i, colName, driverVal, driverVal)
+						curRow[i] = val
+					case []value.Value:
+						by, err := json.Marshal(val)
+						if err != nil {
+							u.Errorf("Error converting field %v  err=%v", val, err)
+						}
+						curRow[i] = by
+					default:
+						u.Warnf("unsupported conversion: %T  %v", val, val)
+
+					}
+					break
+				}
+			}
+			props = append(props, datastore.Property{Name: f.Name, Value: curRow[i]})
+		}
+
+	default:
+		u.Warnf("unsupported type: %T  %#v", val, val)
+		return nil, fmt.Errorf("Was not []driver.Value?  %T", val)
+	}
+
+	//u.Debugf("has key? sourcekey: %v  dskey:%#v", key, dskey)
+	//u.Debugf("dskey:  %s   table=%s", dskey, m.tbl.NameOriginal)
+	//u.Debugf("props:  %v", props)
+
 	pl := datastore.PropertyList(props)
 	dskey, err := m.ds.dsClient.Put(m.ds.dsCtx, dskey, &pl)
 	if err != nil {

@@ -132,7 +132,7 @@ func (m *ResultReader) Finalize() error {
 	}()
 
 	sql := m.Req.sel
-	//u.Infof("query: %p", m.Req.query)
+	u.Infof("query: %#v", m.Req.query)
 	q := m.Req.query
 
 	m.Vals = make([][]driver.Value, 0)

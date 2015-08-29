@@ -124,7 +124,7 @@ func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
 		if testSpec.ExpectRowCt > -1 {
 			affected, err := result.RowsAffected()
 			assert.Tf(t, err == nil, "%v", err)
-			assert.Tf(t, affected == int64(testSpec.ExpectRowCt), "expected %v affected but got %v", testSpec.ExpectRowCt, affected)
+			assert.Tf(t, affected == int64(testSpec.ExpectRowCt), "expected %v affected but got %v for %s", testSpec.ExpectRowCt, affected, testSpec.Exec)
 		}
 
 	case len(testSpec.Sql) > 0:

@@ -109,7 +109,6 @@ func (m *SqlToDatstore) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	m.resp = resultReader
 	resultReader.Finalize()
 	return resultReader, nil
-	return nil, nil
 }
 
 func (m *SqlToDatstore) Accept(visitor expr.SubVisitor) (datasource.Scanner, error) {
@@ -157,6 +156,7 @@ func (m *SqlToDatstore) WalkWhereNode(cur expr.Node) error {
 	case *expr.MultiArgNode:
 		return fmt.Errorf("Not implemented multi arg: %v", curNode.String())
 	default:
+		u.Warnf("eh?  %T %#v", cur, cur)
 		return fmt.Errorf("Not implemented node: %v", curNode.String())
 	}
 	return nil
