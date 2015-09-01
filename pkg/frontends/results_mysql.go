@@ -135,7 +135,8 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 		case value.ByteSliceType:
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_BLOB))
 		default:
-			u.Warnf("Field type not known: type=%v  %#v", col.Type.String(), col)
+			u.Warnf("Field type not known explicitly mapped type=%v  %#v", col.Type.String(), col)
+			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_BLOB))
 		}
 		//u.Debugf("added field: %v", col.Name)
 	}
