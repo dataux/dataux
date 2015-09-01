@@ -2,6 +2,7 @@ package mongo
 
 import (
 	"database/sql/driver"
+	"encoding/json"
 	"io"
 	"time"
 
@@ -172,6 +173,14 @@ func (m *ResultReader) Finalize() error {
 				switch vt := val.(type) {
 				case bson.ObjectId:
 					vals[i] = vt.Hex()
+				case bson.M, bson.D:
+					by, err := json.Marshal(vt)
+					if err != nil {
+						u.Warnf("could not convert bson -> json: %v  for %#v", err, vt)
+						vals[i] = make([]byte, 0)
+					} else {
+						vals[i] = by
+					}
 				default:
 					vals[i] = vt
 				}
