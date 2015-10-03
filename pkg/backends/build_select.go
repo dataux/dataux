@@ -14,7 +14,7 @@ import (
 	"github.com/dataux/dataux/pkg/models"
 )
 
-func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
+func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (expr.Task, error) {
 
 	if sysVar := stmt.SysVariable(); len(sysVar) > 0 {
 		return m.VisitSysVariable(stmt)
@@ -72,24 +72,24 @@ func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (interface{}, error) {
 			return nil, fmt.Errorf("3 or more Table/Join not currently implemented")
 		}
 
-		stmt.From[0].Rewrite(true, stmt)
-		stmt.From[1].Rewrite(false, stmt)
+		stmt.From[0].Rewrite(stmt)
+		stmt.From[1].Rewrite(stmt)
 		// This is a HACK, need a better way obviously of redoing limit on re-written queries
 		// preferably a Streaming solution using Sequence tasks
 		stmt.From[0].Source.Limit = 100000000
 		stmt.From[1].Source.Limit = 100000000
 
-		in, err := exec.NewSourceJoin(m, stmt.From[0], stmt.From[1], m.svr.RtConf)
-		if err != nil {
-			return nil, err
-		}
-		tasks.Add(in)
+		// in, err := exec.NewSourceJoin(m, stmt.From[0], stmt.From[1], m.svr.RtConf)
+		// if err != nil {
+		// 	return nil, err
+		// }
+		// tasks.Add(in)
 	}
 
 	// Add a Projection
 	m.Projection = m.createProjection(stmt)
 
-	return tasks, nil
+	return exec.NewSequential("select", tasks), nil
 }
 
 func (m *Builder) createProjection(stmt *expr.SqlSelect) *expr.Projection {
@@ -110,10 +110,12 @@ func (m *Builder) createProjection(stmt *expr.SqlSelect) *expr.Projection {
 			u.Errorf("no table? %v", from.Name)
 		} else {
 			//u.Infof("getting cols? %v", len(from.Columns))
-			if len(from.Columns) == 0 && len(stmt.From) == 1 {
-				from.Columns = stmt.Columns
+			cols := from.UnAliasedColumns()
+			if len(cols) == 0 && len(stmt.From) == 1 {
+				//from.Columns = stmt.Columns
+				u.Warnf("no cols?")
 			}
-			for _, col := range from.Columns {
+			for _, col := range cols {
 				if schemaCol, ok := tbl.FieldMap[col.SourceField]; ok {
 					u.Infof("adding projection col: %v %v", col.As, schemaCol.Type.String())
 					p.AddColumnShort(col.As, schemaCol.Type)
@@ -126,7 +128,7 @@ func (m *Builder) createProjection(stmt *expr.SqlSelect) *expr.Projection {
 	return p
 }
 
-func (m *Builder) VisitSelectDatabase(stmt *expr.SqlSelect) (interface{}, error) {
+func (m *Builder) VisitSelectDatabase(stmt *expr.SqlSelect) (expr.Task, error) {
 	u.Debugf("VisitSelectDatabase %+v", stmt)
 
 	tasks := make(exec.Tasks, 0)
@@ -138,16 +140,16 @@ func (m *Builder) VisitSelectDatabase(stmt *expr.SqlSelect) (interface{}, error)
 	sourceTask := exec.NewSource(nil, static)
 	tasks.Add(sourceTask)
 	m.Projection = StaticProjection("database", value.StringType)
-	return tasks, nil
+	return exec.NewSequential("database", tasks), nil
 }
 
-func (m *Builder) VisitSubselect(stmt *expr.SqlSource) (interface{}, error) {
+func (m *Builder) VisitSubSelect(stmt *expr.SqlSource) (expr.Task, error) {
 	u.Debugf("VisitSubselect %+v", stmt)
 	u.LogTracef(u.WARN, "who?")
 	return nil, expr.ErrNotImplemented
 }
 
-func (m *Builder) VisitJoin(stmt *expr.SqlSource) (interface{}, error) {
+func (m *Builder) VisitJoin(stmt *expr.SqlSource) (expr.Task, error) {
 	u.Debugf("VisitJoin %+v", stmt)
 	return nil, expr.ErrNotImplemented
 }

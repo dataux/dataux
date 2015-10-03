@@ -56,7 +56,7 @@ func (m *MySqlResultWriter) Close() error {
 
 func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 
-	return func(_ *exec.Context, msg datasource.Message) bool {
+	return func(_ *expr.Context, msg datasource.Message) bool {
 
 		//u.Debugf("in resultWrite:  %#v", msg)
 		if !m.wroteHeaders {
@@ -221,7 +221,7 @@ func (m *MySqlExecResultWriter) Finalize() error {
 	return nil
 }
 func nilWriter(m *MySqlExecResultWriter) exec.MessageHandler {
-	return func(_ *exec.Context, msg datasource.Message) bool {
+	return func(_ *expr.Context, msg datasource.Message) bool {
 		u.Debugf("in nilWriter:  %#v", msg)
 		return false
 	}

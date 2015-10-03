@@ -19,7 +19,7 @@ var (
 	DefaultLimit = 20
 
 	// planner
-	_ datasource.SourcePlanner = (*SqlToEs)(nil)
+	_ expr.SubVisitor = (*SqlToEs)(nil)
 )
 
 type esMap map[string]interface{}
@@ -61,6 +61,10 @@ func chooseBackend(schema *datasource.SourceSchema) string {
 		return node.Address
 	}
 	return ""
+}
+
+func (m *SqlToEs) VisitSubSelect(from *expr.SqlSource) (expr.Task, error) {
+	return m.Query(from.Source)
 }
 
 func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
@@ -189,18 +193,6 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	resp.Finalize()
 
 	return resp, nil
-}
-
-func (m *SqlToEs) Accept(visitor expr.SubVisitor) (datasource.Scanner, error) {
-	u.Debugf("Accept(): %T  %#v", visitor, visitor)
-	// TODO:   this is really bad, this should not be a type switch
-	//         something pretty wrong upstream, that the Plan doesn't do the walk visitor
-	switch plan := visitor.(type) {
-	case *exec.SourcePlan:
-		//u.Debugf("Accept():  %T  %#v", plan, plan)
-		return m.Query(plan.SqlSource.Source)
-	}
-	return nil, expr.ErrNotImplemented
 }
 
 // Aggregations from the <select_list>

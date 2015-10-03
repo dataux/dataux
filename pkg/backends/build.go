@@ -60,21 +60,20 @@ func BuildSqlJob(svr *models.ServerCtx, schemaDb, sqlText string) (*Builder, err
 
 	//u.Infof("BuildSqlJob: schema='%s'", schemaDb)
 	builder := NewBuilder(svr, schemaDb)
-	ex, err := stmt.Accept(builder)
-
+	task, err := stmt.Accept(builder)
 	if err != nil {
 		u.Warnf("Could not build %v", err)
 		return nil, err
 	}
-	if ex == nil {
+	if task == nil {
 		// If No Error, and no Exec Tasks, then we already wrote results
 		return nil, nil
 	}
-	tasks, ok := ex.(exec.Tasks)
+	tr, ok := task.(exec.TaskRunner)
 	if !ok {
-		return nil, fmt.Errorf("expected tasks but got: %T", ex)
+		return nil, fmt.Errorf("Could not convert %T to TaskRunner", task)
 	}
-	builder.Job = &exec.SqlJob{tasks, stmt, svr.RtConf}
+	builder.Job = &exec.SqlJob{tr, stmt, svr.RtConf}
 	return builder, nil
 }
 
@@ -99,7 +98,7 @@ func NewBuilder(svr *models.ServerCtx, db string) *Builder {
 	return &m
 }
 
-func (m *Builder) VisitSysVariable(stmt *expr.SqlSelect) (interface{}, error) {
+func (m *Builder) VisitSysVariable(stmt *expr.SqlSelect) (expr.Task, error) {
 	//u.Debugf("VisitSysVariable %+v", stmt)
 
 	switch sysVar := strings.ToLower(stmt.SysVariable()); sysVar {
@@ -120,7 +119,7 @@ func (m *Builder) VisitSysVariable(stmt *expr.SqlSelect) (interface{}, error) {
 
 // A very simple tasks/builder for system variables
 //
-func (m *Builder) sysVarTasks(name string, val interface{}) (interface{}, error) {
+func (m *Builder) sysVarTasks(name string, val interface{}) (expr.Task, error) {
 	tasks := make(exec.Tasks, 0)
 	static := membtree.NewStaticDataValue(name, val)
 	sourceTask := exec.NewSource(nil, static)
@@ -138,7 +137,7 @@ func (m *Builder) sysVarTasks(name string, val interface{}) (interface{}, error)
 		u.Errorf("unknown var: %v", val)
 		return nil, fmt.Errorf("Unrecognized Data Type: %v", val)
 	}
-	return tasks, nil
+	return exec.NewSequential("sys-var", tasks), nil
 }
 
 // A very simple projection of name=value, for single row/column
@@ -150,14 +149,13 @@ func StaticProjection(name string, vt value.ValueType) *expr.Projection {
 	return p
 }
 
-func (m *Builder) VisitPreparedStmt(stmt *expr.PreparedStatement) (interface{}, error) {
+func (m *Builder) VisitPreparedStmt(stmt *expr.PreparedStatement) (expr.Task, error) {
 	u.Debugf("VisitPreparedStmt %+v", stmt)
 	return nil, ErrNotImplemented
 }
 
-func (m *Builder) VisitCommand(stmt *expr.SqlCommand) (interface{}, error) {
+func (m *Builder) VisitCommand(stmt *expr.SqlCommand) (expr.Task, error) {
 	u.Debugf("SqlCommand %+v", stmt)
 	tasks := make(exec.Tasks, 0)
-	return tasks, nil
-	//return nil, ErrNotImplemented
+	return exec.NewSequential("sys-command", tasks), nil
 }

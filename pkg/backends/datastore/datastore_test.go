@@ -32,7 +32,7 @@ var (
 	ctx    context.Context
 	client *datastore.Client
 
-	DbConn = "root@tcp(127.0.0.1:13307)/datauxtest"
+	DbConn = "root@tcp(127.0.0.1:13307)/datauxtest?parseTime=true"
 
 	loadTestDataOnce sync.Once
 

@@ -60,6 +60,25 @@ func (m *ElasticsearchDataSource) Init() error {
 	return nil
 }
 
+func (m *ElasticsearchDataSource) Builder(stmt *expr.SqlSelect) (expr.SubVisitor, error) {
+
+	u.Debugf("get sourceTask for %v", stmt)
+	tblName := strings.ToLower(stmt.From[0].Name)
+
+	tbl, err := m.schema.Table(tblName)
+	if err != nil {
+		return nil, err
+	}
+	if tbl == nil {
+		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, tblName)
+		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, tblName)
+	}
+
+	es := NewSqlToEs(tbl)
+	u.Debugf("sqltoes: %#v", es)
+	return es, nil
+}
+
 func (m *ElasticsearchDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, error) {
 
 	u.Debugf("get sourceTask for %v", stmt)

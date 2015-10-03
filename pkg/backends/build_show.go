@@ -18,16 +18,17 @@ var (
 	_ = u.EMPTY
 )
 
-func (m *Builder) emptyTask(name string) (exec.Tasks, error) {
+func (m *Builder) emptyTask(name string) (exec.TaskRunner, error) {
 	source := membtree.NewStaticDataSource(name, 0, nil, []string{name})
 	m.Projection = expr.NewProjection()
 	m.Projection.AddColumnShort(name, value.StringType)
 	tasks := make(exec.Tasks, 0)
 	sourceTask := exec.NewSource(nil, source)
 	tasks.Add(sourceTask)
-	return tasks, nil
+	return exec.NewSequential(name, tasks), nil
 }
-func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
+
+func (m *Builder) VisitShow(stmt *expr.SqlShow) (expr.Task, error) {
 	u.Debugf("VisitShow %q  %s", stmt.Identity, stmt.Raw)
 
 	raw := strings.ToLower(stmt.Raw)
@@ -45,7 +46,7 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 		sourceTask := exec.NewSource(nil, source)
 		u.Infof("source:  %#v", source)
 		tasks.Add(sourceTask)
-		return tasks, nil
+		return exec.NewSequential("variables", tasks), nil
 	case strings.ToLower(stmt.Identity) == "databases":
 		// SHOW databases;
 		vals := make([][]driver.Value, 1)
@@ -57,7 +58,7 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 		sourceTask := exec.NewSource(nil, source)
 		u.Infof("source:  %#v", source)
 		tasks.Add(sourceTask)
-		return tasks, nil
+		return exec.NewSequential("databases", tasks), nil
 	case strings.ToLower(stmt.Identity) == "collation":
 		// SHOW collation;
 		vals := make([][]driver.Value, 1)
@@ -76,7 +77,7 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 		sourceTask := exec.NewSource(nil, source)
 		u.Infof("source:  %#v", source)
 		tasks.Add(sourceTask)
-		return tasks, nil
+		return exec.NewSequential("collation", tasks), nil
 	case strings.HasPrefix(raw, "show session"):
 		//SHOW SESSION VARIABLES LIKE 'lower_case_table_names';
 		source, proj := models.ShowVariables(m.schema, "lower_case_table_names", 0)
@@ -85,7 +86,7 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 		sourceTask := exec.NewSource(nil, source)
 		u.Infof("source:  %#v", source)
 		tasks.Add(sourceTask)
-		return tasks, nil
+		return exec.NewSequential("session", tasks), nil
 	case strings.ToLower(stmt.Identity) == "tables" || strings.ToLower(stmt.Identity) == m.schema.Name:
 		if stmt.Full {
 			u.Debugf("show tables: %+v", m.schema)
@@ -104,7 +105,7 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 			sourceTask := exec.NewSource(nil, source)
 			u.Infof("source:  %#v", source)
 			tasks.Add(sourceTask)
-			return tasks, nil
+			return exec.NewSequential("show-tables", tasks), nil
 		}
 		// SHOW TABLES;
 		//u.Debugf("show tables: %+v", m.schema)
@@ -114,7 +115,7 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 		sourceTask := exec.NewSource(nil, source)
 		//u.Infof("source:  %#v", source)
 		tasks.Add(sourceTask)
-		return tasks, nil
+		return exec.NewSequential("describe", tasks), nil
 	case strings.ToLower(stmt.Identity) == "procedure":
 		// SHOW PROCEDURE STATUS WHERE Db='mydb'
 		return m.emptyTask("Procedures")
@@ -130,7 +131,7 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (interface{}, error) {
 	return nil, fmt.Errorf("No handler found")
 }
 
-func (m *Builder) VisitDescribe(stmt *expr.SqlDescribe) (interface{}, error) {
+func (m *Builder) VisitDescribe(stmt *expr.SqlDescribe) (expr.Task, error) {
 	u.Debugf("VisitDescribe %+v", stmt)
 
 	if m.schema == nil {
@@ -149,5 +150,5 @@ func (m *Builder) VisitDescribe(stmt *expr.SqlDescribe) (interface{}, error) {
 	u.Infof("source:  %#v", source)
 	tasks.Add(sourceTask)
 
-	return tasks, nil
+	return exec.NewSequential("describe", tasks), nil
 }

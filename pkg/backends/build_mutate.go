@@ -15,7 +15,7 @@ var (
 	_ = u.EMPTY
 )
 
-func (m *Builder) VisitInsert(stmt *expr.SqlInsert) (interface{}, error) {
+func (m *Builder) VisitInsert(stmt *expr.SqlInsert) (expr.Task, error) {
 
 	u.Debugf("VisitInsert %s", stmt)
 	//u.Debugf("VisitInsert %T  %s\n%#v", stmt, stmt.String(), stmt)
@@ -49,10 +49,10 @@ func (m *Builder) VisitInsert(stmt *expr.SqlInsert) (interface{}, error) {
 		return nil, fmt.Errorf("%T Must Implement Upsert or SourceMutation", tbl.SourceSchema.DS)
 	}
 
-	return tasks, nil
+	return exec.NewSequential("insert", tasks), nil
 }
 
-func (m *Builder) VisitUpdate(stmt *expr.SqlUpdate) (interface{}, error) {
+func (m *Builder) VisitUpdate(stmt *expr.SqlUpdate) (expr.Task, error) {
 	u.Debugf("VisitUpdate %+v", stmt)
 	//u.Debugf("VisitUpdate %T  %s\n%#v", stmt, stmt.String(), stmt)
 	tasks := make(exec.Tasks, 0)
@@ -86,15 +86,15 @@ func (m *Builder) VisitUpdate(stmt *expr.SqlUpdate) (interface{}, error) {
 		return nil, fmt.Errorf("%T Must Implement Upsert or SourceMutation", tbl.SourceSchema.DS)
 	}
 
-	return tasks, nil
+	return exec.NewSequential("update", tasks), nil
 }
 
-func (m *Builder) VisitUpsert(stmt *expr.SqlUpsert) (interface{}, error) {
+func (m *Builder) VisitUpsert(stmt *expr.SqlUpsert) (expr.Task, error) {
 	u.Debugf("VisitUpsert %+v", stmt)
 	return nil, ErrNotImplemented
 }
 
-func (m *Builder) VisitDelete(stmt *expr.SqlDelete) (interface{}, error) {
+func (m *Builder) VisitDelete(stmt *expr.SqlDelete) (expr.Task, error) {
 	u.Debugf("VisitDelete %+v", stmt)
 	tasks := make(exec.Tasks, 0)
 	tbl, err := m.schema.Table(strings.ToLower(stmt.Table))
@@ -124,5 +124,5 @@ func (m *Builder) VisitDelete(stmt *expr.SqlDelete) (interface{}, error) {
 		return nil, fmt.Errorf("%T Must Implement Deletion or SourceMutation", tbl.SourceSchema.DS)
 	}
 
-	return tasks, nil
+	return exec.NewSequential("delete", tasks), nil
 }
