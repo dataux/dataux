@@ -22,7 +22,7 @@ func (m *Builder) VisitInsert(stmt *expr.SqlInsert) (expr.Task, error) {
 	tasks := make(exec.Tasks, 0)
 
 	tableName := strings.ToLower(stmt.Table)
-	tbl, err := m.schema.Table(tableName)
+	tbl, err := m.Schema.Table(tableName)
 	if err != nil {
 		u.Warnf("error finding table %v", err)
 		return nil, err
@@ -58,7 +58,7 @@ func (m *Builder) VisitUpdate(stmt *expr.SqlUpdate) (expr.Task, error) {
 	tasks := make(exec.Tasks, 0)
 
 	tableName := strings.ToLower(stmt.Table)
-	tbl, err := m.schema.Table(tableName)
+	tbl, err := m.Schema.Table(tableName)
 	if err != nil {
 		u.Warnf("error finding table %v", err)
 		return nil, err
@@ -97,7 +97,7 @@ func (m *Builder) VisitUpsert(stmt *expr.SqlUpsert) (expr.Task, error) {
 func (m *Builder) VisitDelete(stmt *expr.SqlDelete) (expr.Task, error) {
 	u.Debugf("VisitDelete %+v", stmt)
 	tasks := make(exec.Tasks, 0)
-	tbl, err := m.schema.Table(strings.ToLower(stmt.Table))
+	tbl, err := m.Schema.Table(strings.ToLower(stmt.Table))
 	if err != nil {
 		u.Warnf("error finding table %v", err)
 		return nil, err

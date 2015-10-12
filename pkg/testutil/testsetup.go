@@ -53,7 +53,7 @@ func Setup() {
 	setup.Do(func() {
 		flag.Parse()
 		if *veryVerbose {
-			u.SetupLogging(*logLevel)
+			u.SetupLoggingLong(*logLevel)
 			u.SetColorOutput()
 		} else {
 			u.SetupLogging("warn")

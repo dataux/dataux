@@ -205,6 +205,8 @@ func TestSimpleRowSelect(t *testing.T) {
 		},
 		RowData: &data,
 	})
+
+	return
 	validateQuerySpec(t, QuerySpec{
 		Sql:         "select title, count, deleted from article WHERE `author` = \"aaron\" AND count = 22 ",
 		ExpectRowCt: 1,

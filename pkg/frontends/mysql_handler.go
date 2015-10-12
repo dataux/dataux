@@ -93,7 +93,7 @@ func (m *MySqlHandler) chooseCommand(writer models.ResultWriter, req *models.Req
 	cmd := req.Raw[0]
 	req.Raw = req.Raw[1:]
 
-	//u.Debugf("chooseCommand: %v:%v", cmd, mysql.CommandString(cmd))
+	u.Debugf("chooseCommand: %v:%v", cmd, mysql.CommandString(cmd))
 	switch cmd {
 	case mysql.COM_QUERY, mysql.COM_STMT_PREPARE:
 		return m.handleQuery(writer, string(req.Raw))
@@ -147,7 +147,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 
 	// Ensure it parses, right now we can't handle multiple statement (ie with semi-colons separating)
 	// sql = strings.TrimRight(sql, ";")
-	builder, err := backends.BuildSqlJob(m.svr, m.schema.Name, sql)
+	job, err := backends.BuildSqlJob(m.svr, m.schema.Name, sql)
 	if err != nil {
 		u.Debugf("error? %v", err)
 		sql = strings.ToLower(sql)
@@ -163,20 +163,20 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		u.Debugf("error on parse sql statement: %v", err)
 		return err
 	}
-	if builder == nil {
+	if job == nil {
 		// we are done, already wrote results
 		return nil
 	}
 
-	switch stmt := builder.Job.Stmt.(type) {
+	switch stmt := job.Stmt.(type) {
 	case *expr.SqlSelect, *expr.SqlShow, *expr.SqlDescribe:
-		//u.Debugf("adding mysql result writer: %#v", builder.Projection)
-		resultWriter := NewMySqlResultWriter(writer, builder.Projection, m.schema)
-		builder.Job.RootTask.Add(resultWriter)
+		//u.Debugf("adding mysql result writer: %#v", job.Projection)
+		resultWriter := NewMySqlResultWriter(writer, job.Projection, m.schema)
+		job.RootTask.Add(resultWriter)
 	case *expr.SqlInsert, *expr.SqlUpsert, *expr.SqlUpdate, *expr.SqlDelete:
-		//u.Debugf("adding mysql result writer: %#v", builder.Projection)
+		//u.Debugf("adding mysql result writer: %#v", job.Projection)
 		resultWriter := NewMySqlExecResultWriter(writer, m.schema)
-		builder.Job.RootTask.Add(resultWriter)
+		job.RootTask.Add(resultWriter)
 	// case *sqlparser.Delete:
 	// 	return m.handleExec(stmt, sql, nil)
 	// case *sqlparser.Replace:
@@ -196,17 +196,17 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		return fmt.Errorf("statement type %T not supported", stmt)
 	}
 
-	builder.Job.Setup()
+	job.Setup()
 	//go func() {
 	//u.Debugf("Start Job.Run")
-	err = builder.Job.Run()
+	err = job.Run()
 	//u.Debugf("After job.Run()")
 	if err != nil {
 		u.Errorf("error on Query.Run(): %v", err)
 		//resultWriter.ErrChan() <- err
 		//job.Close()
 	}
-	builder.Job.Close()
+	job.Close()
 	//u.Debugf("exiting Background Query")
 	//}()
 	return nil

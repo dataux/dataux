@@ -1,19 +1,28 @@
 package backends
 
 import (
-	"fmt"
-	"strings"
+	//"fmt"
+	//"strings"
 
 	u "github.com/araddon/gou"
 
-	"github.com/araddon/qlbridge/datasource"
+	//"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/datasource/membtree"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
-	"github.com/dataux/dataux/pkg/models"
+
+	//"github.com/dataux/dataux/pkg/models"
 )
 
+func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (expr.Task, error) {
+	if stmt.SystemQry() {
+		return m.VisitSysVariable(stmt)
+	}
+	return m.JobBuilder.VisitSelect(stmt)
+}
+
+/*
 func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (expr.Task, error) {
 
 	if sysVar := stmt.SysVariable(); len(sysVar) > 0 {
@@ -22,7 +31,7 @@ func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (expr.Task, error) {
 		return m.VisitSelectDatabase(stmt)
 	}
 
-	u.Debugf("VisitSelect %+v", stmt)
+	u.Debugf("dataux.VisitSelect %+v", stmt)
 
 	tasks := make(exec.Tasks, 0)
 
@@ -102,7 +111,7 @@ func (m *Builder) createProjection(stmt *expr.SqlSelect) *expr.Projection {
 	p := expr.NewProjection()
 	for _, from := range stmt.From {
 		//u.Infof("info: %#v", from)
-		tbl, err := m.schema.Table(strings.ToLower(from.Name))
+		tbl, err := m.Schema.Table(strings.ToLower(from.Name))
 		if err != nil {
 			u.Errorf("could not get table: %v", err)
 			return nil
@@ -127,14 +136,14 @@ func (m *Builder) createProjection(stmt *expr.SqlSelect) *expr.Projection {
 	}
 	return p
 }
-
+*/
 func (m *Builder) VisitSelectDatabase(stmt *expr.SqlSelect) (expr.Task, error) {
 	u.Debugf("VisitSelectDatabase %+v", stmt)
 
 	tasks := make(exec.Tasks, 0)
 	val := "NULL"
-	if m.schema != nil {
-		val = m.schema.Name
+	if m.Schema != nil {
+		val = m.Schema.Name
 	}
 	static := membtree.NewStaticDataValue(val, "database")
 	sourceTask := exec.NewSource(nil, static)

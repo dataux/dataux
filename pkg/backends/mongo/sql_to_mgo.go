@@ -22,8 +22,8 @@ var (
 
 	_ = json.Marshal
 
-	// planner
-	_ datasource.SourcePlanner = (*SqlToMgo)(nil)
+	// ????
+	//_ datasource.SourcePlanner = (*SqlToMgo)(nil)
 )
 
 // Sql To Mongo Request
@@ -56,6 +56,9 @@ func NewSqlToMgo(table *datasource.Table, sess *mgo.Session) *SqlToMgo {
 func (m *SqlToMgo) Host() string {
 	//u.Warnf("TODO:  replace hardcoded es host")
 	return chooseBackend(m.schema.Name, m.schema)
+}
+func (m *SqlToMgo) Builder() (expr.SubVisitor, error) {
+	return m, nil
 }
 
 func (m *SqlToMgo) Query(req *expr.SqlSelect) (*ResultReader, error) {
@@ -130,15 +133,91 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	return resultReader, nil
 }
 
-func (m *SqlToMgo) Accept(visitor expr.SubVisitor) (datasource.Scanner, error) {
+func (m *SqlToMgo) VisitSubSelect(from *expr.SqlSource) (expr.Task, error) {
+
+	var err error
+
+	req := from.Source
+	u.Infof("mongo.VisitSubSelect %v", req.String())
+
+	m.sel = req
+	limit := req.Limit
+	if limit == 0 {
+		limit = DefaultLimit
+	}
+
+	if req.Where != nil {
+		m.filter = bson.M{}
+		_, err = m.WalkNode(req.Where.Expr, &m.filter)
+		if err != nil {
+			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.String(), err)
+			return nil, err
+		}
+	}
+
+	// Evaluate the Select columns
+	err = m.WalkSelectList()
+	if err != nil {
+		u.Warnf("Could Not evaluate Columns/Aggs %s %v", req.Columns.String(), err)
+		return nil, err
+	}
+
+	if len(req.GroupBy) > 0 {
+		err = m.WalkGroupBy()
+		if err != nil {
+			u.Warnf("Could Not evaluate GroupBys %s %v", req.GroupBy.String(), err)
+			return nil, err
+		}
+	}
+
+	//u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
+	if len(m.sel.OrderBy) > 0 {
+		m.sort = make([]bson.M, len(m.sel.OrderBy))
+		for i, col := range m.sel.OrderBy {
+			// We really need to look at any funcs?   walk this out
+			switch col.Order {
+			case "ASC":
+				m.sort[i] = bson.M{col.As: 1}
+			case "DESC":
+				m.sort[i] = bson.M{col.As: -1}
+			default:
+				// default sorder order = ?
+				m.sort[i] = bson.M{col.As: -1}
+			}
+		}
+		var sort interface{}
+		if len(m.sort) == 1 {
+			sort = m.sort[0]
+		} else {
+			sort = m.sort
+		}
+		if len(m.filter) > 0 {
+			m.filter = bson.M{"$query": m.filter, "$orderby": sort}
+		} else {
+			m.filter = bson.M{"$query": bson.M{}, "$orderby": sort}
+		}
+	}
+
+	filterBy, _ := json.Marshal(m.filter)
+	u.Infof("filter: %#v", m.filter)
+	u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
+	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter).Limit(limit)
+
+	resultReader := NewResultReader(m, query)
+	m.resp = resultReader
+	resultReader.Finalize()
+	return resultReader, nil
+}
+func (m *SqlToMgo) XXXAccept(visitor expr.SubVisitor) (datasource.Scanner, error) {
 	//u.Debugf("Accept(): %T  %#v", visitor, visitor)
 	// TODO:   this is really bad, this should not be a type switch
 	//         something pretty wrong upstream, that the Plan doesn't do the walk visitor
-	switch plan := visitor.(type) {
-	case *exec.SourcePlan:
-		u.Debugf("Accept():  %T  %#v", plan, plan)
-		return m.Query(plan.SqlSource.Source)
-	}
+	u.Debugf("Accept():  %T  %#v", visitor, visitor)
+	// switch plan := visitor.(type) {
+	// case *exec.Source:
+	// 	//return nil //m.Query(plan.SqlSource.Source)
+	// 	return nil, expr.ErrNotImplemented
+	// }
 	return nil, expr.ErrNotImplemented
 }
 

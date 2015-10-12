@@ -50,7 +50,7 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (expr.Task, error) {
 	case strings.ToLower(stmt.Identity) == "databases":
 		// SHOW databases;
 		vals := make([][]driver.Value, 1)
-		vals[0] = []driver.Value{m.schema.Name}
+		vals[0] = []driver.Value{m.Schema.Name}
 		source := membtree.NewStaticDataSource("databases", 0, vals, []string{"Database"})
 		m.Projection = expr.NewProjection()
 		m.Projection.AddColumnShort("Database", value.StringType)
@@ -80,17 +80,17 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (expr.Task, error) {
 		return exec.NewSequential("collation", tasks), nil
 	case strings.HasPrefix(raw, "show session"):
 		//SHOW SESSION VARIABLES LIKE 'lower_case_table_names';
-		source, proj := models.ShowVariables(m.schema, "lower_case_table_names", 0)
+		source, proj := models.ShowVariables(m.Schema, "lower_case_table_names", 0)
 		m.Projection = proj
 		tasks := make(exec.Tasks, 0)
 		sourceTask := exec.NewSource(nil, source)
 		u.Infof("source:  %#v", source)
 		tasks.Add(sourceTask)
 		return exec.NewSequential("session", tasks), nil
-	case strings.ToLower(stmt.Identity) == "tables" || strings.ToLower(stmt.Identity) == m.schema.Name:
+	case strings.ToLower(stmt.Identity) == "tables" || strings.ToLower(stmt.Identity) == m.Schema.Name:
 		if stmt.Full {
-			u.Debugf("show tables: %+v", m.schema)
-			tables := m.schema.Tables()
+			u.Debugf("show tables: %+v", m.Schema)
+			tables := m.Schema.Tables()
 			vals := make([][]driver.Value, len(tables))
 			row := 0
 			for _, tbl := range tables {
@@ -108,8 +108,8 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (expr.Task, error) {
 			return exec.NewSequential("show-tables", tasks), nil
 		}
 		// SHOW TABLES;
-		//u.Debugf("show tables: %+v", m.schema)
-		source, proj := models.ShowTables(m.schema)
+		//u.Debugf("show tables: %+v", m.Schema)
+		source, proj := models.ShowTables(m.Schema)
 		m.Projection = proj
 		tasks := make(exec.Tasks, 0)
 		sourceTask := exec.NewSource(nil, source)
@@ -134,10 +134,10 @@ func (m *Builder) VisitShow(stmt *expr.SqlShow) (expr.Task, error) {
 func (m *Builder) VisitDescribe(stmt *expr.SqlDescribe) (expr.Task, error) {
 	u.Debugf("VisitDescribe %+v", stmt)
 
-	if m.schema == nil {
+	if m.Schema == nil {
 		return nil, ErrNoSchemaSelected
 	}
-	tbl, err := m.schema.Table(strings.ToLower(stmt.Identity))
+	tbl, err := m.Schema.Table(strings.ToLower(stmt.Identity))
 	if err != nil {
 		u.Errorf("could not get table: %v", err)
 		return nil, err

@@ -19,11 +19,14 @@ import (
 )
 
 var (
+	//
+	_ datasource.Scanner = (*ResultReader)(nil)
 	// Ensure our MongoDataSource is a datasource.DataSource type
-	_ datasource.DataSource = (*MongoDataSource)(nil)
-	_ datasource.Scanner    = (*ResultReader)(nil)
-	// source
-	_ models.DataSource = (*MongoDataSource)(nil)
+	_ datasource.DataSource    = (*MongoDataSource)(nil)
+	_ datasource.SourcePlanner = (*MongoDataSource)(nil)
+
+	// DEPRECATE ME
+	//_ models.DataSource        = (*MongoDataSource)(nil)
 )
 
 const (
@@ -174,14 +177,9 @@ func (m *MongoDataSource) Open(collectionName string) (datasource.SourceConn, er
 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, collectionName)
 	}
 
-	es := NewSqlToMgo(tbl, m.sess)
-	//u.Debugf("SqlToMgo: %#v", es)
-	// resp, err := es.Query(stmt, m.sess)
-	// if err != nil {
-	// 	u.Error(err)
-	// 	return nil, err
-	// }
-	return es, nil
+	mgoSource := NewSqlToMgo(tbl, m.sess)
+	//u.Debugf("SqlToMgo: %T  %#v", mgoSource, mgoSource)
+	return mgoSource, nil
 }
 
 /*
@@ -211,8 +209,14 @@ func (m *MongoDataSource) Accept(plan expr.SubVisitor) (datasource.Scanner, erro
 	return nil, fmt.Errorf("Not implemented")
 }
 */
+
+func (m *MongoDataSource) Builder() (expr.SubVisitor, error) {
+	return nil, nil
+}
+
 func (m *MongoDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, error) {
 
+	panic("deprecated")
 	u.Debugf("get sourceTask for %v", stmt)
 	tblName := strings.ToLower(stmt.From[0].Name)
 
@@ -237,7 +241,7 @@ func (m *MongoDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, e
 }
 
 func (m *MongoDataSource) Table(table string) (*datasource.Table, error) {
-	//u.Debugf("get table for %s", table)
+	u.Debugf("get table for %s", table)
 	return m.loadTableSchema(table)
 }
 

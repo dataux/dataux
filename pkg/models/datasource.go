@@ -5,8 +5,9 @@ import (
 	"sync"
 
 	u "github.com/araddon/gou"
+
 	"github.com/araddon/qlbridge/datasource"
-	"github.com/araddon/qlbridge/expr"
+	//"github.com/araddon/qlbridge/expr"
 )
 
 var (
@@ -18,11 +19,14 @@ var (
 
 // A backend data source provider that also provides schema
 type DataSource interface {
-	datasource.DataSource
-	Table(table string) (*datasource.Table, error)
+	//datasource.DataSource
+	datasource.SchemaProvider
+	datasource.SourcePlanner
+	//datasource.SourceSelectPlanner
+	//Table(table string) (*datasource.Table, error)
 
 	// Get a Task for given expression
-	SourceTask(stmt *expr.SqlSelect) (SourceTask, error)
+	//SourceTask(stmt *expr.SqlSelect) (SourceTask, error)
 }
 
 type SourceTask interface {

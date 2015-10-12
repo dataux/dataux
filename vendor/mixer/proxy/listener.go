@@ -94,6 +94,7 @@ func (m *MysqlListener) Close() error {
 func (m *MysqlListener) OnConn(c net.Conn) {
 
 	conn := newConn(m, c)
+	u.Debugf("new conn p:%p", conn)
 
 	if !m.cfg.SupressRecover {
 		defer func() {

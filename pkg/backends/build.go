@@ -6,7 +6,7 @@ import (
 
 	u "github.com/araddon/gou"
 
-	"github.com/araddon/qlbridge/datasource"
+	//"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/datasource/membtree"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
@@ -52,14 +52,25 @@ type JobRunner interface {
 //   plan for execution of this query/job
 func BuildSqlJob(svr *models.ServerCtx, schemaDb, sqlText string) (*Builder, error) {
 
+	//return exec.BuildSqlProjectedJob(svr.RtConf, schemaDb, sqlText)
+
 	stmt, err := expr.ParseSql(sqlText)
 	if err != nil {
 		u.Warnf("Could not parse: %v", err)
 		return nil, err
 	}
 
-	//u.Infof("BuildSqlJob: schema='%s'", schemaDb)
-	builder := NewBuilder(svr, schemaDb)
+	sqlJob := &exec.SqlJob{
+		Stmt: stmt,
+		Conf: svr.RtConf,
+	}
+	execBuilder := exec.NewJobBuilder(svr.RtConf, schemaDb)
+
+	builder := NewBuilder(svr, sqlJob, schemaDb)
+	builder.JobBuilder = execBuilder
+
+	//u.LogTracef(u.WARN, "BuildSqlJob: schema='%s'  %#v", schemaDb, builder.schema)
+	u.Debugf("BuildSqlJob: schema='%s'  %#v", schemaDb, builder.Schema)
 	task, err := stmt.Accept(builder)
 	if err != nil {
 		u.Warnf("Could not build %v", err)
@@ -73,26 +84,28 @@ func BuildSqlJob(svr *models.ServerCtx, schemaDb, sqlText string) (*Builder, err
 	if !ok {
 		return nil, fmt.Errorf("Could not convert %T to TaskRunner", task)
 	}
-	builder.Job = &exec.SqlJob{tr, stmt, svr.RtConf}
+	builder.RootTask = tr
+
 	return builder, nil
+
 }
 
 // This is a Sql Plan Builder that chooses backends
 //   and routes/manages Requests
 type Builder struct {
-	schema     *datasource.Schema
-	svr        *models.ServerCtx
-	Projection *expr.Projection
-	Job        *exec.SqlJob
+	svr *models.ServerCtx
+	*exec.SqlJob
+	*exec.JobBuilder
 	//where      expr.Node
 	//children exec.Tasks
 	//writer   models.ResultWriter
 }
 
-func NewBuilder(svr *models.ServerCtx, db string) *Builder {
-	m := Builder{svr: svr}
-	m.schema = svr.Schema(db)
-	if m.schema == nil {
+func NewBuilder(svr *models.ServerCtx, job *exec.SqlJob, db string) *Builder {
+	m := Builder{svr: svr, SqlJob: job}
+	u.Infof("builder db=%q   svr=%#v", db, svr)
+	m.Schema = svr.Schema(db)
+	if m.Schema == nil {
 		u.Warnf("no schema? %v", db)
 	}
 	return &m
