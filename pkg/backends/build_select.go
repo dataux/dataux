@@ -1,26 +1,17 @@
 package backends
 
 import (
-	//"fmt"
-	//"strings"
+//u "github.com/araddon/gou"
 
-	u "github.com/araddon/gou"
-
-	//"github.com/araddon/qlbridge/datasource"
-	"github.com/araddon/qlbridge/datasource/membtree"
-	"github.com/araddon/qlbridge/exec"
-	"github.com/araddon/qlbridge/expr"
-	"github.com/araddon/qlbridge/value"
-
-	//"github.com/dataux/dataux/pkg/models"
+//"github.com/araddon/qlbridge/expr"
 )
 
-func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (expr.Task, error) {
-	if stmt.SystemQry() {
-		return m.VisitSysVariable(stmt)
-	}
-	return m.JobBuilder.VisitSelect(stmt)
-}
+// func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (expr.Task, error) {
+// 	if stmt.SystemQry() {
+// 		return m.VisitSysVariable(stmt)
+// 	}
+// 	return m.JobBuilder.VisitSelect(stmt)
+// }
 
 /*
 func (m *Builder) VisitSelect(stmt *expr.SqlSelect) (expr.Task, error) {
@@ -136,7 +127,7 @@ func (m *Builder) createProjection(stmt *expr.SqlSelect) *expr.Projection {
 	}
 	return p
 }
-*/
+
 func (m *Builder) VisitSelectDatabase(stmt *expr.SqlSelect) (expr.Task, error) {
 	u.Debugf("VisitSelectDatabase %+v", stmt)
 
@@ -162,3 +153,4 @@ func (m *Builder) VisitJoin(stmt *expr.SqlSource) (expr.Task, error) {
 	u.Debugf("VisitJoin %+v", stmt)
 	return nil, expr.ErrNotImplemented
 }
+*/

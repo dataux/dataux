@@ -57,7 +57,7 @@ func (m *SqlToMgo) Host() string {
 	//u.Warnf("TODO:  replace hardcoded es host")
 	return chooseBackend(m.schema.Name, m.schema)
 }
-func (m *SqlToMgo) Builder() (expr.SubVisitor, error) {
+func (m *SqlToMgo) SubSelectVisitor() (expr.SubVisitor, error) {
 	return m, nil
 }
 
@@ -133,7 +133,7 @@ func (m *SqlToMgo) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	return resultReader, nil
 }
 
-func (m *SqlToMgo) VisitSubSelect(from *expr.SqlSource) (expr.Task, error) {
+func (m *SqlToMgo) VisitSubSelect(from *expr.SqlSource) (expr.Task, expr.VisitStatus, error) {
 
 	var err error
 
@@ -151,7 +151,7 @@ func (m *SqlToMgo) VisitSubSelect(from *expr.SqlSource) (expr.Task, error) {
 		_, err = m.WalkNode(req.Where.Expr, &m.filter)
 		if err != nil {
 			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.String(), err)
-			return nil, err
+			return nil, expr.VisitError, err
 		}
 	}
 
@@ -159,14 +159,14 @@ func (m *SqlToMgo) VisitSubSelect(from *expr.SqlSource) (expr.Task, error) {
 	err = m.WalkSelectList()
 	if err != nil {
 		u.Warnf("Could Not evaluate Columns/Aggs %s %v", req.Columns.String(), err)
-		return nil, err
+		return nil, expr.VisitError, err
 	}
 
 	if len(req.GroupBy) > 0 {
 		err = m.WalkGroupBy()
 		if err != nil {
 			u.Warnf("Could Not evaluate GroupBys %s %v", req.GroupBy.String(), err)
-			return nil, err
+			return nil, expr.VisitError, err
 		}
 	}
 
@@ -206,7 +206,8 @@ func (m *SqlToMgo) VisitSubSelect(from *expr.SqlSource) (expr.Task, error) {
 	resultReader := NewResultReader(m, query)
 	m.resp = resultReader
 	resultReader.Finalize()
-	return resultReader, nil
+	u.Infof("after finalize")
+	return resultReader, expr.VisitFinal, nil
 }
 func (m *SqlToMgo) XXXAccept(visitor expr.SubVisitor) (datasource.Scanner, error) {
 	//u.Debugf("Accept(): %T  %#v", visitor, visitor)

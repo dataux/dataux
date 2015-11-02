@@ -22,8 +22,8 @@ var (
 	//
 	_ datasource.Scanner = (*ResultReader)(nil)
 	// Ensure our MongoDataSource is a datasource.DataSource type
-	_ datasource.DataSource    = (*MongoDataSource)(nil)
-	_ datasource.SourcePlanner = (*MongoDataSource)(nil)
+	_ datasource.DataSource          = (*MongoDataSource)(nil)
+	_ datasource.SourceSelectPlanner = (*MongoDataSource)(nil)
 
 	// DEPRECATE ME
 	//_ models.DataSource        = (*MongoDataSource)(nil)
@@ -210,7 +210,7 @@ func (m *MongoDataSource) Accept(plan expr.SubVisitor) (datasource.Scanner, erro
 }
 */
 
-func (m *MongoDataSource) Builder() (expr.SubVisitor, error) {
+func (m *MongoDataSource) SubSelectVisitor() (expr.SubVisitor, error) {
 	return nil, nil
 }
 

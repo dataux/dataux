@@ -39,6 +39,7 @@ func NewMySqlResultWriter(writer models.ResultWriter, proj *expr.Projection, sch
 	m := &MySqlResultWriter{writer: writer, projection: proj, schema: schema}
 	m.TaskBase = exec.NewTaskBase("MySqlResultWriter")
 	m.Rs = mysql.NewResultSet()
+
 	m.Handler = resultWrite(m)
 	return m
 }
@@ -99,6 +100,10 @@ func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 func (m *MySqlResultWriter) WriteHeaders() error {
 
+	s := m.schema
+	if s == nil {
+		panic("no schema")
+	}
 	//u.LogTracef(u.WARN, "wat?")
 	if m.projection == nil {
 		u.Warnf("no projection")
@@ -109,18 +114,15 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 		u.Warnf("Wat?   no columns?   %v", 0)
 		return nil
 	}
+
 	m.wroteHeaders = true
-	s := m.schema
-	if s == nil {
-		panic("no schema")
-	}
 	for i, col := range cols {
 		as := col.Name
 		if col.Col != nil {
 			as = col.Col.As
 		}
 		m.Rs.FieldNames[col.Name] = i
-		//u.Debugf("writeheader %s %v", col.Name, col.Type.String())
+		u.Debugf("writeheader %s %v", col.Name, col.Type.String())
 		switch col.Type {
 		case value.IntType:
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_LONG))
@@ -173,7 +175,7 @@ func (m *MySqlResultWriter) Finalize() error {
 func NewEmptyResultset(proj *expr.Projection) *mysql.Resultset {
 
 	r := new(mysql.Resultset)
-	//u.Debugf("projection: %#v", proj)
+	u.Debugf("projection: %#v", proj)
 	r.Fields = make([]*mysql.Field, len(proj.Columns))
 
 	for i, col := range proj.Columns {
@@ -191,8 +193,9 @@ func NewEmptyResultset(proj *expr.Projection) *mysql.Resultset {
 		default:
 			r.Fields[i].Name = []byte(col.As)
 		}
+		u.Infof("field: %#v", col)
 	}
-
+	r.FieldNames = make(map[string]int, len(proj.Columns))
 	r.Values = make([][]driver.Value, 0)
 	r.RowDatas = make([]mysql.RowData, 0)
 

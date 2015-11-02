@@ -21,7 +21,7 @@ var (
 type DataSource interface {
 	//datasource.DataSource
 	datasource.SchemaProvider
-	datasource.SourcePlanner
+	datasource.SourceSelectPlanner
 	//datasource.SourceSelectPlanner
 	//Table(table string) (*datasource.Table, error)
 

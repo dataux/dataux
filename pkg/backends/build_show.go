@@ -1,5 +1,6 @@
 package backends
 
+/*
 import (
 	"database/sql/driver"
 	"fmt"
@@ -152,3 +153,4 @@ func (m *Builder) VisitDescribe(stmt *expr.SqlDescribe) (expr.Task, error) {
 
 	return exec.NewSequential("describe", tasks), nil
 }
+*/

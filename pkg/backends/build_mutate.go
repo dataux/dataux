@@ -1,5 +1,6 @@
 package backends
 
+/*
 import (
 	"fmt"
 	"strings"
@@ -126,3 +127,4 @@ func (m *Builder) VisitDelete(stmt *expr.SqlDelete) (expr.Task, error) {
 
 	return exec.NewSequential("delete", tasks), nil
 }
+*/

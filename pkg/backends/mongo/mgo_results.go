@@ -55,6 +55,7 @@ func NewResultReader(req *SqlToMgo, q *mgo.Query) *ResultReader {
 	m.TaskBase = exec.NewTaskBase("mgo-resultreader")
 	m.query = q
 	m.Req = req
+	m.buildProjection()
 	// m.TaskBase.Handler = func(ctx *expr.Context, msg datasource.Message) bool {
 	// 	switch mt := msg.(type) {
 	// 	case *datasource.SqlDriverMessage:
@@ -95,7 +96,7 @@ func (m *ResultReader) buildProjection() {
 	} else {
 		for _, col := range m.Req.sel.Columns {
 			if fld, ok := m.Req.tbl.FieldMap[col.SourceField]; ok {
-				//u.Debugf("column: %#v", col)
+				u.Debugf("column: %#v", col)
 				cols = append(cols, expr.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
 			} else {
 				u.Debugf("Could not find: '%v' in %#v", col.SourceField, m.Req.tbl.FieldMap)
@@ -144,10 +145,10 @@ func (m *ResultReader) CreateIterator(filter expr.Node) datasource.Iterator {
 }
 
 func (m *ResultReader) Run(context *expr.Context) error {
-	defer context.Recover()
+	//defer context.Recover()
 	defer func() {
 		m.TaskBase.Close()
-		u.Debugf("nice, finalize vals in ResultReader: %v", len(m.Vals))
+		u.Debugf("nice, finalize ResultReader row ct %v", len(m.Vals))
 	}()
 
 	sigChan := m.SigChan()
@@ -219,7 +220,7 @@ func (m *ResultReader) Run(context *expr.Context) error {
 			}
 		}
 		m.Vals = append(m.Vals, vals)
-		u.Debugf("new row ct: %v", len(m.Vals))
+		u.Debugf("new row ct: %v cols:%v vals:%v", len(m.Vals), colNames, vals)
 		//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
 		msg := datasource.NewSqlDriverMessageMap(uint64(len(m.Vals)), vals, colNames)
 		u.Infof("In source Scanner iter %#v", msg)

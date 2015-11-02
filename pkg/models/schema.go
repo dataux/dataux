@@ -1,12 +1,8 @@
 package models
 
 import (
-	"database/sql/driver"
-
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
-	"github.com/araddon/qlbridge/datasource/membtree"
-	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
 
 	"github.com/dataux/dataux/vendor/mixer/mysql"
@@ -16,6 +12,7 @@ var (
 	_ = u.EMPTY
 )
 
+/*
 func DescribeTable(tbl *datasource.Table) (*membtree.StaticDataSource, *expr.Projection) {
 	if len(tbl.Fields) == 0 {
 		u.Warnf("NO Fields!!!!! for %s p=%p", tbl.Name, tbl)
@@ -50,14 +47,14 @@ func ShowTables(s *datasource.Schema) (*membtree.StaticDataSource, *expr.Project
 }
 
 func ShowVariables(s *datasource.Schema, name string, val driver.Value) (*membtree.StaticDataSource, *expr.Projection) {
-	/*
+	/ *
 	   MariaDB [(none)]> SHOW SESSION VARIABLES LIKE 'lower_case_table_names';
 	   +------------------------+-------+
 	   | Variable_name          | Value |
 	   +------------------------+-------+
 	   | lower_case_table_names | 0     |
 	   +------------------------+-------+
-	*/
+	* /
 	vals := make([][]driver.Value, 1)
 	vals[0] = []driver.Value{name, val}
 	dataSource := membtree.NewStaticDataSource("schematables", 0, vals, []string{"Variable_name", "Value"})
@@ -66,6 +63,7 @@ func ShowVariables(s *datasource.Schema, name string, val driver.Value) (*membtr
 	p.AddColumnShort("Value", value.StringType)
 	return dataSource, p
 }
+*/
 
 func TableToMysqlResultset(tbl *datasource.Table) *mysql.Resultset {
 	rs := new(mysql.Resultset)

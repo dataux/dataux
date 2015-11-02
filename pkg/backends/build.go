@@ -2,15 +2,11 @@ package backends
 
 import (
 	"fmt"
-	"strings"
 
 	u "github.com/araddon/gou"
 
-	//"github.com/araddon/qlbridge/datasource"
-	"github.com/araddon/qlbridge/datasource/membtree"
 	"github.com/araddon/qlbridge/exec"
-	"github.com/araddon/qlbridge/expr"
-	"github.com/araddon/qlbridge/value"
+	//"github.com/araddon/qlbridge/expr"
 	"github.com/dataux/dataux/pkg/models"
 )
 
@@ -18,7 +14,7 @@ var (
 	_ = u.EMPTY
 
 	// Ensure that we implement the Exec Visitor interface
-	_ expr.Visitor = (*Builder)(nil)
+	//_ expr.Visitor = (*Builder)(nil)
 
 	// Standard errors
 	ErrNotSupported     = fmt.Errorf("DataUX: Not supported")
@@ -33,63 +29,61 @@ const (
 )
 
 /*
-
-Source ->  Where  -> GroupBy/Counts etc  -> Projection -> ResultWriter
-
-- Since we don't really need the Where, GroupBy, etc
-
-Source ->    Projection  -> ResultWriter
-
-
-type JobRunner interface {
-	Run() error
-	Close() error
+// This is a Sql Plan Builder that chooses backends
+//   and routes/manages Requests
+type Builder struct {
+	//svr *models.ServerCtx
+	*exec.SqlJob
+	//*exec.JobBuilder
+	//where      expr.Node
+	//children exec.Tasks
+	//writer   models.ResultWriter
 }
-
 */
-
 // Create Job made up of sub-tasks in DAG that is the
 //   plan for execution of this query/job
-func BuildSqlJob(svr *models.ServerCtx, schemaDb, sqlText string) (*Builder, error) {
+func BuildSqlJob(svr *models.ServerCtx, schemaDb, sqlText string) (*exec.SqlJob, error) {
 
-	//return exec.BuildSqlProjectedJob(svr.RtConf, schemaDb, sqlText)
+	return exec.BuildSqlProjectedJob(svr.RtConf, schemaDb, sqlText)
+	/*
+		stmt, err := expr.ParseSql(sqlText)
+		if err != nil {
+			u.Warnf("Could not parse: %v", err)
+			return nil, err
+		}
 
-	stmt, err := expr.ParseSql(sqlText)
-	if err != nil {
-		u.Warnf("Could not parse: %v", err)
-		return nil, err
-	}
+		sqlJob := &exec.SqlJob{
+			Stmt: stmt,
+			Conf: svr.RtConf,
+		}
+		execBuilder := exec.NewJobBuilder(svr.RtConf, schemaDb)
 
-	sqlJob := &exec.SqlJob{
-		Stmt: stmt,
-		Conf: svr.RtConf,
-	}
-	execBuilder := exec.NewJobBuilder(svr.RtConf, schemaDb)
+		builder := NewBuilder(svr, sqlJob, schemaDb)
+		builder.JobBuilder = execBuilder
 
-	builder := NewBuilder(svr, sqlJob, schemaDb)
-	builder.JobBuilder = execBuilder
+		//u.LogTracef(u.WARN, "BuildSqlJob: schema='%s'  %#v", schemaDb, builder.schema)
+		u.Debugf("BuildSqlJob: schema='%s'  %#v", schemaDb, builder.Schema)
+		task, err := stmt.Accept(builder)
+		if err != nil {
+			u.Warnf("Could not build %v", err)
+			return nil, err
+		}
+		if task == nil {
+			// If No Error, and no Exec Tasks, then we already wrote results
+			return nil, nil
+		}
+		tr, ok := task.(exec.TaskRunner)
+		if !ok {
+			return nil, fmt.Errorf("Could not convert %T to TaskRunner", task)
+		}
+		builder.RootTask = tr
 
-	//u.LogTracef(u.WARN, "BuildSqlJob: schema='%s'  %#v", schemaDb, builder.schema)
-	u.Debugf("BuildSqlJob: schema='%s'  %#v", schemaDb, builder.Schema)
-	task, err := stmt.Accept(builder)
-	if err != nil {
-		u.Warnf("Could not build %v", err)
-		return nil, err
-	}
-	if task == nil {
-		// If No Error, and no Exec Tasks, then we already wrote results
-		return nil, nil
-	}
-	tr, ok := task.(exec.TaskRunner)
-	if !ok {
-		return nil, fmt.Errorf("Could not convert %T to TaskRunner", task)
-	}
-	builder.RootTask = tr
-
-	return builder, nil
+		return builder, nil
+	*/
 
 }
 
+/*
 // This is a Sql Plan Builder that chooses backends
 //   and routes/manages Requests
 type Builder struct {
@@ -172,3 +166,4 @@ func (m *Builder) VisitCommand(stmt *expr.SqlCommand) (expr.Task, error) {
 	tasks := make(exec.Tasks, 0)
 	return exec.NewSequential("sys-command", tasks), nil
 }
+*/
