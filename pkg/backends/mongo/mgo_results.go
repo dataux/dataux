@@ -21,8 +21,9 @@ var (
 	_ models.ResultProvider = (*ResultReader)(nil)
 
 	// Ensure we implement datasource.DataSource, Scanner
-	_ datasource.DataSource = (*ResultReader)(nil)
-	_ datasource.Scanner    = (*ResultReader)(nil)
+	_ datasource.DataSource    = (*ResultReader)(nil)
+	_ datasource.SchemaColumns = (*ResultReader)(nil)
+	_ datasource.Scanner       = (*ResultReader)(nil)
 )
 
 // Mongo ResultReader implements result paging, reading
@@ -96,10 +97,10 @@ func (m *ResultReader) buildProjection() {
 	} else {
 		for _, col := range m.Req.sel.Columns {
 			if fld, ok := m.Req.tbl.FieldMap[col.SourceField]; ok {
-				u.Debugf("column: %#v", col)
+				//u.Debugf("column: %#v", col)
 				cols = append(cols, expr.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
 			} else {
-				u.Debugf("Could not find: '%v' in %#v", col.SourceField, m.Req.tbl.FieldMap)
+				//u.Debugf("Could not find: '%v' in %#v", col.SourceField, m.Req.tbl.FieldMap)
 				//u.Warnf("%#v", col)
 			}
 		}
@@ -110,7 +111,7 @@ func (m *ResultReader) buildProjection() {
 	}
 	m.cols = colNames
 	m.proj.Columns = cols
-	//u.Debugf("leaving Columns:  %v", len(m.proj.Columns))
+	//u.Debugf("leaving buildProjection:  %p", m.proj)
 }
 
 func (m *ResultReader) Tables() []string {
@@ -145,14 +146,14 @@ func (m *ResultReader) CreateIterator(filter expr.Node) datasource.Iterator {
 }
 
 func (m *ResultReader) Run(context *expr.Context) error {
-	//defer context.Recover()
-	defer func() {
-		m.TaskBase.Close()
-		u.Debugf("nice, finalize ResultReader row ct %v", len(m.Vals))
-	}()
-
 	sigChan := m.SigChan()
 	outCh := m.MessageOut()
+	//defer context.Recover()
+	defer func() {
+		close(outCh) // closing output channels is the signal to stop
+		//m.TaskBase.Close()
+		u.Debugf("nice, finalize ResultReader out: %p  row ct %v", outCh, len(m.Vals))
+	}()
 
 	m.finalized = true
 	m.buildProjection()
@@ -220,10 +221,10 @@ func (m *ResultReader) Run(context *expr.Context) error {
 			}
 		}
 		m.Vals = append(m.Vals, vals)
-		u.Debugf("new row ct: %v cols:%v vals:%v", len(m.Vals), colNames, vals)
+		//u.Debugf("new row ct: %v cols:%v vals:%v", len(m.Vals), colNames, vals)
 		//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
 		msg := datasource.NewSqlDriverMessageMap(uint64(len(m.Vals)), vals, colNames)
-		u.Infof("In source Scanner iter %#v", msg)
+		//u.Infof("In source Scanner iter %#v", msg)
 		select {
 		case <-sigChan:
 			return nil
@@ -231,11 +232,12 @@ func (m *ResultReader) Run(context *expr.Context) error {
 			// continue
 		}
 	}
+	//u.Debugf("about to close")
 	if err := iter.Close(); err != nil {
 		u.Errorf("could not iter: %v", err)
 		return err
 	}
-	u.Infof("finished query, took: %v for %v rows", time.Now().Sub(n), len(m.Vals))
+	u.Debugf("finished query, took: %v for %v rows", time.Now().Sub(n), len(m.Vals))
 	return nil
 }
 func (m *ResultReader) Finalize() error { return nil }

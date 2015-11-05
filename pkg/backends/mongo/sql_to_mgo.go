@@ -23,7 +23,7 @@ var (
 	_ = json.Marshal
 
 	// ????
-	//_ datasource.SourcePlanner = (*SqlToMgo)(nil)
+	_ datasource.SourceSelectPlanner = (*SqlToMgo)(nil)
 )
 
 // Sql To Mongo Request
@@ -57,8 +57,15 @@ func (m *SqlToMgo) Host() string {
 	//u.Warnf("TODO:  replace hardcoded es host")
 	return chooseBackend(m.schema.Name, m.schema)
 }
+
 func (m *SqlToMgo) SubSelectVisitor() (expr.SubVisitor, error) {
 	return m, nil
+}
+func (m *SqlToMgo) Projection() (*expr.Projection, error) {
+	return m.resp.proj, nil
+}
+func (m *SqlToMgo) Columns() []string {
+	return m.resp.Columns()
 }
 
 func (m *SqlToMgo) Query(req *expr.SqlSelect) (*ResultReader, error) {
@@ -198,15 +205,15 @@ func (m *SqlToMgo) VisitSubSelect(from *expr.SqlSource) (expr.Task, expr.VisitSt
 		}
 	}
 
-	filterBy, _ := json.Marshal(m.filter)
-	u.Infof("filter: %#v", m.filter)
-	u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
+	//filterBy, _ := json.Marshal(m.filter)
+	//u.Infof("filter: %#v", m.filter)
+	//u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
 	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter).Limit(limit)
 
 	resultReader := NewResultReader(m, query)
 	m.resp = resultReader
 	resultReader.Finalize()
-	u.Infof("after finalize")
+	u.Infof("after finalize proj: %p", m.resp.proj)
 	return resultReader, expr.VisitFinal, nil
 }
 func (m *SqlToMgo) XXXAccept(visitor expr.SubVisitor) (datasource.Scanner, error) {

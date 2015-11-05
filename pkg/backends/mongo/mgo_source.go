@@ -13,7 +13,7 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
-	"github.com/araddon/qlbridge/expr"
+	//"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/models"
 )
@@ -22,8 +22,7 @@ var (
 	//
 	_ datasource.Scanner = (*ResultReader)(nil)
 	// Ensure our MongoDataSource is a datasource.DataSource type
-	_ datasource.DataSource          = (*MongoDataSource)(nil)
-	_ datasource.SourceSelectPlanner = (*MongoDataSource)(nil)
+	_ datasource.DataSource = (*MongoDataSource)(nil)
 
 	// DEPRECATE ME
 	//_ models.DataSource        = (*MongoDataSource)(nil)
@@ -208,7 +207,7 @@ func (m *MongoDataSource) Accept(plan expr.SubVisitor) (datasource.Scanner, erro
 	// }
 	return nil, fmt.Errorf("Not implemented")
 }
-*/
+
 
 func (m *MongoDataSource) SubSelectVisitor() (expr.SubVisitor, error) {
 	return nil, nil
@@ -239,9 +238,9 @@ func (m *MongoDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, e
 
 	return resp, nil
 }
-
+*/
 func (m *MongoDataSource) Table(table string) (*datasource.Table, error) {
-	u.Debugf("get table for %s", table)
+	//u.Debugf("get table for %s", table)
 	return m.loadTableSchema(table)
 }
 

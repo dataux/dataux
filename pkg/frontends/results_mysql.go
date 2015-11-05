@@ -47,9 +47,9 @@ func (m *MySqlResultWriter) Close() error {
 
 	if m.Rs == nil || len(m.Rs.Fields) == 0 {
 		m.Rs = NewEmptyResultset(m.projection)
-		//u.Infof("nil resultwriter Close() has RS?%v rowct:%v", m.Rs == nil, len(m.Rs.RowDatas))
+		u.Infof("nil resultwriter Close() has RS?%v rowct:%v", m.Rs == nil, len(m.Rs.RowDatas))
 	} else {
-		//u.Infof("in mysql resultwriter Close() has RS?%v rowct:%v", m.Rs == nil, len(m.Rs.RowDatas))
+		u.Infof("in mysql resultwriter Close() has RS?%v rowct:%v", m.Rs == nil, len(m.Rs.RowDatas))
 	}
 	m.writer.WriteResult(m.Rs)
 	return nil
@@ -74,6 +74,7 @@ func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 		switch mt := msg.Body().(type) {
 		case *datasource.SqlDriverMessageMap:
 			m.Rs.AddRowValues(mt.Values())
+			//u.Debugf( "return from mysql.resultWrite")
 			return true
 		case map[string]driver.Value:
 			vals := make([]driver.Value, len(m.projection.Columns))
@@ -109,7 +110,7 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 		u.Warnf("no projection")
 	}
 	cols := m.projection.Columns
-	//u.Debugf("writing mysql headers: %v", cols)
+	u.Debugf("proj: %p writing mysql headers: %v", m.projection, cols)
 	if len(cols) == 0 {
 		u.Warnf("Wat?   no columns?   %v", 0)
 		return nil

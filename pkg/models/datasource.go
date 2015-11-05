@@ -19,9 +19,9 @@ var (
 
 // A backend data source provider that also provides schema
 type DataSource interface {
-	//datasource.DataSource
-	datasource.SchemaProvider
-	datasource.SourceSelectPlanner
+	datasource.DataSource
+	//datasource.SchemaProvider
+	//datasource.SourceSelectPlanner
 	//datasource.SourceSelectPlanner
 	//Table(table string) (*datasource.Table, error)
 

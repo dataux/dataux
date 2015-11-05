@@ -170,7 +170,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 
 	switch stmt := job.Stmt.(type) {
 	case *expr.SqlSelect, *expr.SqlShow, *expr.SqlDescribe:
-		u.Debugf("adding mysql result writer: %#v", job.Projection)
+		u.Debugf("adding mysql result writer: projection: %p", job.Projection)
 		resultWriter := NewMySqlResultWriter(writer, job.Projection, m.schema)
 		job.RootTask.Add(resultWriter)
 	case *expr.SqlInsert, *expr.SqlUpsert, *expr.SqlUpdate, *expr.SqlDelete:
