@@ -256,23 +256,28 @@ func TestSelectLimit(t *testing.T) {
 	})
 }
 
-func TestSelectAggs(t *testing.T) {
+/*
+func TestSelectAggsSimple(t *testing.T) {
 
 	// TODO:  Not implemented
 	t.Fail()
 	return
+	// db.article.aggregate([{"$group":{_id: null, count: {"$sum":1}}}]);
+	// db.article.aggregate([{"$group":{_id: "$author", count: {"$sum":1}}}]);
+
 	data := struct {
-		Oldest int `db:"oldest_repo"`
-		Card   int `db:"users_who_released"`
+		Ct     int    `db:"article_ct"`
+		Author string `db:"author"`
 	}{}
 	validateQuerySpec(t, QuerySpec{
-		Sql:         "select cardinality(`actor`) AS users_who_released, min(`repository.id`) as oldest_repo from github_release;",
-		ExpectRowCt: 1,
+		Sql:         "select author, count(*) AS article_ct from article group by author;",
+		ExpectRowCt: 3,
 		ValidateRowData: func() {
 			//u.Debugf("%v", data)
-			assert.Tf(t, data.Card == 1772, "%v", data)
-			assert.Tf(t, data.Oldest == 27, "%v", data)
-
+			switch data.Author {
+			case "bjorn":
+				assert.Tf(t, data.Ct == 2, "%v", data)
+			}
 		},
 		RowData: &data,
 	})
@@ -299,9 +304,7 @@ func TestSelectAggs(t *testing.T) {
 }
 
 func TestSelectAggsGroupBy(t *testing.T) {
-	/*
-		NOTE:   This fails because of parsing the response, not because request is bad
-	*/
+	// TODO implement
 	return
 	data := struct {
 		Actor string
@@ -332,7 +335,7 @@ func TestSelectAggsGroupBy(t *testing.T) {
 		RowData: &data2,
 	})
 }
-
+*/
 func TestSelectWhereEqual(t *testing.T) {
 	/*
 		data := struct {

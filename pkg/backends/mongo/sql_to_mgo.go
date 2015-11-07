@@ -22,7 +22,8 @@ var (
 
 	_ = json.Marshal
 
-	// ????
+	// Implement Datasource interface that allows Mongo
+	//  to fully implement a full select statement
 	_ datasource.SourceSelectPlanner = (*SqlToMgo)(nil)
 )
 
@@ -53,10 +54,10 @@ func NewSqlToMgo(table *datasource.Table, sess *mgo.Session) *SqlToMgo {
 	}
 }
 
-func (m *SqlToMgo) Host() string {
-	//u.Warnf("TODO:  replace hardcoded es host")
-	return chooseBackend(m.schema.Name, m.schema)
-}
+// func (m *SqlToMgo) Host() string {
+// 	//u.Warnf("TODO:  replace hardcoded es host")
+// 	return chooseBackend(m.schema.Name, m.schema)
+// }
 
 func (m *SqlToMgo) SubSelectVisitor() (expr.SubVisitor, error) {
 	return m, nil
@@ -66,78 +67,6 @@ func (m *SqlToMgo) Projection() (*expr.Projection, error) {
 }
 func (m *SqlToMgo) Columns() []string {
 	return m.resp.Columns()
-}
-
-func (m *SqlToMgo) Query(req *expr.SqlSelect) (*ResultReader, error) {
-
-	var err error
-	m.sel = req
-	limit := req.Limit
-	if limit == 0 {
-		limit = DefaultLimit
-	}
-
-	if req.Where != nil {
-		m.filter = bson.M{}
-		_, err = m.WalkNode(req.Where.Expr, &m.filter)
-		if err != nil {
-			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.String(), err)
-			return nil, err
-		}
-	}
-
-	// Evaluate the Select columns
-	err = m.WalkSelectList()
-	if err != nil {
-		u.Warnf("Could Not evaluate Columns/Aggs %s %v", req.Columns.String(), err)
-		return nil, err
-	}
-
-	if len(req.GroupBy) > 0 {
-		err = m.WalkGroupBy()
-		if err != nil {
-			u.Warnf("Could Not evaluate GroupBys %s %v", req.GroupBy.String(), err)
-			return nil, err
-		}
-	}
-
-	//u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
-	if len(m.sel.OrderBy) > 0 {
-		m.sort = make([]bson.M, len(m.sel.OrderBy))
-		for i, col := range m.sel.OrderBy {
-			// We really need to look at any funcs?   walk this out
-			switch col.Order {
-			case "ASC":
-				m.sort[i] = bson.M{col.As: 1}
-			case "DESC":
-				m.sort[i] = bson.M{col.As: -1}
-			default:
-				// default sorder order = ?
-				m.sort[i] = bson.M{col.As: -1}
-			}
-		}
-		var sort interface{}
-		if len(m.sort) == 1 {
-			sort = m.sort[0]
-		} else {
-			sort = m.sort
-		}
-		if len(m.filter) > 0 {
-			m.filter = bson.M{"$query": m.filter, "$orderby": sort}
-		} else {
-			m.filter = bson.M{"$query": bson.M{}, "$orderby": sort}
-		}
-	}
-
-	filterBy, _ := json.Marshal(m.filter)
-	u.Infof("filter: %#v", m.filter)
-	u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
-	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter).Limit(limit)
-
-	resultReader := NewResultReader(m, query)
-	m.resp = resultReader
-	resultReader.Finalize()
-	return resultReader, nil
 }
 
 func (m *SqlToMgo) VisitSubSelect(from *expr.SqlSource) (expr.Task, expr.VisitStatus, error) {
@@ -216,18 +145,6 @@ func (m *SqlToMgo) VisitSubSelect(from *expr.SqlSource) (expr.Task, expr.VisitSt
 	u.Infof("after finalize proj: %p", m.resp.proj)
 	return resultReader, expr.VisitFinal, nil
 }
-func (m *SqlToMgo) XXXAccept(visitor expr.SubVisitor) (datasource.Scanner, error) {
-	//u.Debugf("Accept(): %T  %#v", visitor, visitor)
-	// TODO:   this is really bad, this should not be a type switch
-	//         something pretty wrong upstream, that the Plan doesn't do the walk visitor
-	u.Debugf("Accept():  %T  %#v", visitor, visitor)
-	// switch plan := visitor.(type) {
-	// case *exec.Source:
-	// 	//return nil //m.Query(plan.SqlSource.Source)
-	// 	return nil, expr.ErrNotImplemented
-	// }
-	return nil, expr.ErrNotImplemented
-}
 
 // Aggregations from the <select_list>
 //
@@ -268,7 +185,7 @@ func (m *SqlToMgo) WalkSelectList() error {
 			// case *expr.StringNode:
 			// 	return nil, value.NewStringValue(curNode.Text), nil
 			default:
-				//u.Debugf("likely a projection, not agg T:%T  %v", curNode, curNode)
+				u.Debugf("likely a projection, not agg T:%T  %v", curNode, curNode)
 				//panic("Unrecognized node type")
 			}
 		}
@@ -277,9 +194,12 @@ func (m *SqlToMgo) WalkSelectList() error {
 	return nil
 }
 
-// Aggregations from the <select_list>
+// Group By Clause:  Mongo is a little weird where they move the
+//    group by expressions INTO the aggregation clause
 //
-//    WHERE .. GROUP BY x,y,z
+//    operation(field) FROM x GROUP BY x,y,z
+//
+//    db.article.aggregate([{"$group":{_id: "$author", count: {"$sum":1}}}]);
 //
 func (m *SqlToMgo) WalkGroupBy() error {
 
@@ -373,7 +293,7 @@ func (m *SqlToMgo) WalkNode(cur expr.Node, q *bson.M) (value.Value, error) {
 	case *expr.FuncNode:
 		return m.walkFilterFunc(curNode, q)
 	case *expr.IdentityNode:
-		u.Warnf("wat????   %v", curNode.String())
+		u.Warnf("we are trying to project?   %v", curNode.String())
 		*q = bson.M{"terms": bson.M{"field": curNode.String()}}
 		return value.NewStringValue(curNode.String()), nil
 	case *expr.MultiArgNode:
@@ -603,7 +523,7 @@ func (m *SqlToMgo) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, 
 }
 
 // Take an expression func, ensure we don't do runtime-checking (as the function)
-//   doesn't really exist, then map that function to an Mongo Map function
+//   doesn't really exist, then map that function to an Mongo Aggregation/MapReduce function
 //
 //    min, max, avg, sum, cardinality, terms
 //
@@ -651,14 +571,15 @@ func (m *SqlToMgo) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {
 
 	case "count":
 		m.hasSingleValue = true
-		u.Debugf("how do we want to use count(*)?  hit.hits?   or exists()?")
+		u.Debugf("how do we want to use count(*)?  ?")
 		val, ok := eval(node.Args[0])
 		if !ok {
 			u.Errorf("Must be valid: %v", node.String())
 			return nil, fmt.Errorf("Invalid argument: %v", node.String())
 		}
 		if val.ToString() == "*" {
-			return nil, nil
+			//return nil, nil
+			return bson.M{"$sum": 2}, nil
 		} else {
 			return bson.M{"exists": bson.M{"field": val.ToString()}}, nil
 		}

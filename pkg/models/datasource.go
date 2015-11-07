@@ -7,7 +7,6 @@ import (
 	u "github.com/araddon/gou"
 
 	"github.com/araddon/qlbridge/datasource"
-	//"github.com/araddon/qlbridge/expr"
 )
 
 var (
@@ -20,19 +19,11 @@ var (
 // A backend data source provider that also provides schema
 type DataSource interface {
 	datasource.DataSource
-	//datasource.SchemaProvider
-	//datasource.SourceSelectPlanner
-	//datasource.SourceSelectPlanner
-	//Table(table string) (*datasource.Table, error)
-
-	// Get a Task for given expression
-	//SourceTask(stmt *expr.SqlSelect) (SourceTask, error)
 }
 
-type SourceTask interface {
-	//exec.TaskRunner
-	datasource.Scanner
-}
+// type SourceTask interface {
+// 	datasource.Scanner
+// }
 
 type DataSourceCreator func(*datasource.SourceSchema, *Config) DataSource
 

@@ -30,7 +30,6 @@ var (
 // - driver.Rows
 type ResultReader struct {
 	*exec.TaskBase
-	exit          <-chan bool
 	finalized     bool
 	hasprojection bool
 	cursor        int
@@ -57,21 +56,6 @@ func NewResultReader(req *SqlToMgo, q *mgo.Query) *ResultReader {
 	m.query = q
 	m.Req = req
 	m.buildProjection()
-	// m.TaskBase.Handler = func(ctx *expr.Context, msg datasource.Message) bool {
-	// 	switch mt := msg.(type) {
-	// 	case *datasource.SqlDriverMessage:
-	// 		u.Debugf("Result:  T:%T  vals:%#v", msg, mt.Vals)
-	// 	case nil:
-	// 		u.Warnf("got nil")
-	// 		// Signal to quit
-	// 		return false
-
-	// 	default:
-	// 		u.Errorf("could not convert to message reader: %T", msg)
-	// 	}
-
-	// 	return true
-	// }
 	return m
 }
 
@@ -83,6 +67,7 @@ func (m *ResultReader) buildProjection() {
 		return
 	}
 	m.hasprojection = true
+
 	m.proj = expr.NewProjection()
 	cols := m.proj.Columns
 	sql := m.Req.sel
@@ -111,6 +96,7 @@ func (m *ResultReader) buildProjection() {
 	}
 	m.cols = colNames
 	m.proj.Columns = cols
+
 	//u.Debugf("leaving buildProjection:  %p", m.proj)
 }
 
@@ -138,7 +124,7 @@ func (m *ResultReader) Schema() *datasource.Schema {
 
 func (m *ResultReader) MesgChan(filter expr.Node) <-chan datasource.Message {
 	iter := m.CreateIterator(filter)
-	return datasource.SourceIterChannel(iter, filter, m.exit)
+	return datasource.SourceIterChannel(iter, filter, m.SigChan())
 }
 
 func (m *ResultReader) CreateIterator(filter expr.Node) datasource.Iterator {
@@ -242,86 +228,6 @@ func (m *ResultReader) Run(context *expr.Context) error {
 }
 func (m *ResultReader) Finalize() error { return nil }
 
-// Finalize maps the Mongo Documents/results into
-//    [][]interface{}   which is compabitble with sql/driver values
-//
-func (m *ResultReader) XXXFinalize() error {
-
-	m.finalized = true
-	m.buildProjection()
-
-	u.LogTracef(u.WARN, "hello")
-	defer func() {
-		u.Debugf("nice, finalize vals in ResultReader: %v", len(m.Vals))
-	}()
-
-	sql := m.Req.sel
-
-	m.Vals = make([][]driver.Value, 0)
-
-	if sql.CountStar() {
-		// Count *
-		vals := make([]driver.Value, 1)
-		ct, err := m.query.Count()
-		if err != nil {
-			u.Errorf("could not get count: %v", err)
-			return err
-		}
-		vals[0] = ct
-		m.Vals = append(m.Vals, vals)
-		return nil
-	}
-
-	cols := m.proj.Columns
-	if len(cols) == 0 {
-		u.Errorf("WTF?  no cols? %v", cols)
-	}
-
-	n := time.Now()
-	iter := m.query.Iter()
-	for {
-		var bm bson.M
-		if !iter.Next(&bm) {
-			break
-		}
-		//u.Debugf("col? %v", bm)
-		vals := make([]driver.Value, len(cols))
-		for i, col := range cols {
-			if val, ok := bm[col.Name]; ok {
-				switch vt := val.(type) {
-				case bson.ObjectId:
-					vals[i] = vt.Hex()
-				case bson.M, bson.D:
-					by, err := json.Marshal(vt)
-					if err != nil {
-						u.Warnf("could not convert bson -> json: %v  for %#v", err, vt)
-						vals[i] = make([]byte, 0)
-					} else {
-						vals[i] = by
-					}
-				default:
-					vals[i] = vt
-				}
-
-			} else {
-				// Not returned in query, sql hates missing fields
-				// Should we zero/empty fill here or in mysql handler?
-				if col.Type == value.StringType {
-					vals[i] = ""
-				}
-			}
-		}
-		m.Vals = append(m.Vals, vals)
-		u.Debugf("new row ct: %v", len(m.Vals))
-	}
-	if err := iter.Close(); err != nil {
-		u.Errorf("could not iter: %v", err)
-		return err
-	}
-	u.Infof("finished query, took: %v for %v rows", time.Now().Sub(n), len(m.Vals))
-	return nil
-}
-
 // Implement sql/driver Rows Next() interface
 func (m *ResultReader) Next(row []driver.Value) error {
 	if m.cursor >= len(m.Vals) {
@@ -337,7 +243,7 @@ func (m *ResultReader) Next(row []driver.Value) error {
 
 func (m *ResultReaderNext) Next() datasource.Message {
 	select {
-	case <-m.exit:
+	case <-m.SigChan():
 		return nil
 	default:
 		if !m.finalized {

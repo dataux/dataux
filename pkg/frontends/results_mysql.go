@@ -110,7 +110,7 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 		u.Warnf("no projection")
 	}
 	cols := m.projection.Columns
-	u.Debugf("proj: %p writing mysql headers: %v", m.projection, cols)
+	u.Debugf("projection: %p writing mysql headers %s", m.projection, m.projection)
 	if len(cols) == 0 {
 		u.Warnf("Wat?   no columns?   %v", 0)
 		return nil

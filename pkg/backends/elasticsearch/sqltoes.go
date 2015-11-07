@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	u "github.com/araddon/gou"
+
 	"github.com/araddon/qlbridge/datasource"
-	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/value"
@@ -19,7 +19,8 @@ var (
 	DefaultLimit = 20
 
 	// planner
-	_ expr.SubVisitor = (*SqlToEs)(nil)
+	//_ expr.SubVisitor = (*SqlToEs)(nil)
+	_ datasource.SourceSelectPlanner = (*SqlToEs)(nil)
 )
 
 type esMap map[string]interface{}
@@ -63,11 +64,19 @@ func chooseBackend(schema *datasource.SourceSchema) string {
 	return ""
 }
 
-func (m *SqlToEs) VisitSubSelect(from *expr.SqlSource) (expr.Task, error) {
+func (m *SqlToEs) Projection() (*expr.Projection, error) {
+	return m.resp.proj, nil
+}
+
+func (m *SqlToEs) SubSelectVisitor() (expr.SubVisitor, error) {
+	return m, nil
+}
+
+func (m *SqlToEs) VisitSubSelect(from *expr.SqlSource) (expr.Task, expr.VisitStatus, error) {
 	return m.Query(from.Source)
 }
 
-func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
+func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, expr.VisitStatus, error) {
 
 	var err error
 	m.sel = req
@@ -80,20 +89,20 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 		_, err = m.WalkNode(req.Where.Expr, &m.filter)
 		if err != nil {
 			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.String(), err)
-			return nil, err
+			return nil, expr.VisitError, err
 		}
 	}
 
 	err = m.WalkSelectList()
 	if err != nil {
 		u.Warnf("Could Not evaluate Columns/Aggs %s %v", req.Columns.String(), err)
-		return nil, err
+		return nil, expr.VisitError, err
 	}
 	if len(req.GroupBy) > 0 {
 		err = m.WalkGroupBy()
 		if err != nil {
 			u.Warnf("Could Not evaluate GroupBys %s %v", req.GroupBy.String(), err)
-			return nil, err
+			return nil, expr.VisitError, err
 		}
 	}
 
@@ -157,12 +166,12 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	jhResp, err := u.JsonHelperHttp("POST", query, esReq)
 	if err != nil {
 		u.Errorf("err %v", err)
-		return nil, err
+		return nil, expr.VisitError, err
 	}
 	//u.Debugf("%s", jhResp.PrettyJson())
 
 	if len(jhResp) == 0 {
-		return nil, fmt.Errorf("No response, error fetching elasticsearch query")
+		return nil, expr.VisitError, fmt.Errorf("No response, error fetching elasticsearch query")
 	}
 
 	resp := NewResultReader(m)
@@ -192,7 +201,7 @@ func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	// }
 	resp.Finalize()
 
-	return resp, nil
+	return resp, expr.VisitFinal, nil
 }
 
 // Aggregations from the <select_list>

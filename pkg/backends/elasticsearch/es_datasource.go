@@ -14,8 +14,8 @@ import (
 )
 
 var (
-	// Ensure our ElasticsearchDataSource is a SourceTask type
-	_ models.DataSource = (*ElasticsearchDataSource)(nil)
+	// implement interfaces
+	_ datasource.DataSource = (*ElasticsearchDataSource)(nil)
 )
 
 const (
@@ -79,6 +79,7 @@ func (m *ElasticsearchDataSource) Builder(stmt *expr.SqlSelect) (expr.SubVisitor
 	return es, nil
 }
 
+/*
 func (m *ElasticsearchDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, error) {
 
 	u.Debugf("get sourceTask for %v", stmt)
@@ -103,7 +104,7 @@ func (m *ElasticsearchDataSource) SourceTask(stmt *expr.SqlSelect) (models.Sourc
 
 	return resp, nil
 }
-
+*/
 func (m *ElasticsearchDataSource) Open(schemaName string) (datasource.SourceConn, error) {
 	//u.Debugf("Open(%v)", schemaName)
 	tbl, err := m.schema.Table(schemaName)

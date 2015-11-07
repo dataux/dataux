@@ -13,19 +13,13 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
-	//"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/models"
 )
 
 var (
-	//
-	_ datasource.Scanner = (*ResultReader)(nil)
-	// Ensure our MongoDataSource is a datasource.DataSource type
+	// implement interfaces
 	_ datasource.DataSource = (*MongoDataSource)(nil)
-
-	// DEPRECATE ME
-	//_ models.DataSource        = (*MongoDataSource)(nil)
 )
 
 const (
@@ -37,7 +31,7 @@ func init() {
 	models.DataSourceRegister("mongo", NewMongoDataSource)
 }
 
-// Mongo Data Source, is a singleton, non-threadsafe connection
+// Mongo Data Source implements qlbridge DataSource interfaces
 //  to a backend mongo server
 type MongoDataSource struct {
 	db        string
@@ -55,7 +49,9 @@ func NewMongoDataSource(schema *datasource.SourceSchema, conf *models.Config) mo
 	m.conf = conf
 	m.db = strings.ToLower(schema.Name)
 	// Register our datasource.Datasources in registry
-	m.Init()
+	if err := m.Init(); err != nil {
+		u.Errorf("Could not open Mongo datasource %v", err)
+	}
 	datasource.Register("mongo", &m)
 	return &m
 }
@@ -79,20 +75,6 @@ func (m *MongoDataSource) Init() error {
 	return m.loadSchema()
 }
 
-func (m *MongoDataSource) loadSchema() error {
-
-	if err := m.loadDatabases(); err != nil {
-		u.Errorf("could not load mongo databases: %v", err)
-		return err
-	}
-
-	if err := m.loadTableNames(); err != nil {
-		u.Errorf("could not load mongo tables: %v", err)
-		return err
-	}
-	return nil
-}
-
 func (m *MongoDataSource) Close() error {
 	u.Infof("Closing MongoDataSource %p", m)
 	m.mu.Lock()
@@ -104,6 +86,49 @@ func (m *MongoDataSource) Close() error {
 		u.Infof("Told to close mgomodelstore %p but session=%p closed=%t", m, m.closed)
 	}
 	m.closed = true
+	return nil
+}
+
+func (m *MongoDataSource) DataSource() datasource.DataSource {
+	return m
+}
+
+func (m *MongoDataSource) Tables() []string {
+	return m.schema.Tables()
+}
+
+func (m *MongoDataSource) Open(collectionName string) (datasource.SourceConn, error) {
+	//u.Debugf("Open(%v)", collectionName)
+	tbl, err := m.schema.Table(collectionName)
+	if err != nil {
+		return nil, err
+	}
+	if tbl == nil {
+		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, collectionName)
+		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, collectionName)
+	}
+
+	mgoSource := NewSqlToMgo(tbl, m.sess.Clone())
+	//u.Debugf("SqlToMgo: %T  %#v", mgoSource, mgoSource)
+	return mgoSource, nil
+}
+
+func (m *MongoDataSource) Table(table string) (*datasource.Table, error) {
+	//u.Debugf("get table for %s", table)
+	return m.loadTableSchema(table)
+}
+
+func (m *MongoDataSource) loadSchema() error {
+
+	if err := m.loadDatabases(); err != nil {
+		u.Errorf("could not load mongo databases: %v", err)
+		return err
+	}
+
+	if err := m.loadTableNames(); err != nil {
+		u.Errorf("could not load mongo tables: %v", err)
+		return err
+	}
 	return nil
 }
 
@@ -156,92 +181,6 @@ func (m *MongoDataSource) connect() error {
 	}
 
 	return nil
-}
-
-func (m *MongoDataSource) DataSource() datasource.DataSource {
-	return m
-}
-func (m *MongoDataSource) Tables() []string {
-	return m.schema.Tables()
-}
-
-func (m *MongoDataSource) Open(collectionName string) (datasource.SourceConn, error) {
-	//u.Debugf("Open(%v)", collectionName)
-	tbl, err := m.schema.Table(collectionName)
-	if err != nil {
-		return nil, err
-	}
-	if tbl == nil {
-		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, collectionName)
-		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, collectionName)
-	}
-
-	mgoSource := NewSqlToMgo(tbl, m.sess)
-	//u.Debugf("SqlToMgo: %T  %#v", mgoSource, mgoSource)
-	return mgoSource, nil
-}
-
-/*
-func (m *MongoDataSource) Accept(plan expr.SubVisitor) (datasource.Scanner, error) {
-
-	u.Errorf("Accept %v", plan)
-	// switch sql := plan.(type) {
-	// case *expr.SqlSelect:
-	// 	tblName := strings.ToLower(sql.From[0].Name)
-
-	// 	tbl, _ := m.schema.Table(tblName)
-	// 	if tbl == nil {
-	// 		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, tblName)
-	// 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, tblName)
-	// 	}
-
-	// 	es := NewSqlToMgo(tbl)
-	// 	u.Debugf("SqlToMgo: %#v", es)
-	// 	resp, err := es.Query(sql, m.sess)
-	// 	if err != nil {
-	// 		u.Error(err)
-	// 		return nil, err
-	// 	}
-
-	// 	return resp, nil
-	// }
-	return nil, fmt.Errorf("Not implemented")
-}
-
-
-func (m *MongoDataSource) SubSelectVisitor() (expr.SubVisitor, error) {
-	return nil, nil
-}
-
-func (m *MongoDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, error) {
-
-	panic("deprecated")
-	u.Debugf("get sourceTask for %v", stmt)
-	tblName := strings.ToLower(stmt.From[0].Name)
-
-	tbl, err := m.schema.Table(tblName)
-	if err != nil {
-		return nil, err
-	}
-	if tbl == nil {
-		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, tblName)
-		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, tblName)
-	}
-
-	sqlToMgo := NewSqlToMgo(tbl, m.sess)
-	u.Debugf("SqlToMgo: %#v", sqlToMgo)
-	resp, err := sqlToMgo.Query(stmt)
-	if err != nil {
-		u.Error(err)
-		return nil, err
-	}
-
-	return resp, nil
-}
-*/
-func (m *MongoDataSource) Table(table string) (*datasource.Table, error) {
-	//u.Debugf("get table for %s", table)
-	return m.loadTableSchema(table)
 }
 
 func (m *MongoDataSource) loadDatabases() error {
@@ -427,64 +366,3 @@ func discoverType(iVal interface{}) value.ValueType {
 	}
 	return value.NilType
 }
-
-/*
-func (m *MongoDataSource) addTypeInfo(tbl *models.Table, colName string, valType value.ValueType) {
-
-	switch val := iVal.(type) {
-	case bson.ObjectId:
-		u.Debugf("found bson.ObjectId: %v='%v'", colName, val)
-		tbl.AddField(models.NewField(colName, value.StringType, 24, "bson.ObjectID AUTOGEN"))
-		tbl.AddValues([]driver.Value{colName, "string", "NO", "PRI", "AUTOGEN", ""})
-	case bson.M:
-		u.Debugf("found bson.M: %v='%v'", colName, val)
-		tbl.AddField(models.NewField(colName, value.MapValueType, 24, "bson.M"))
-		tbl.AddValues([]driver.Value{colName, "object", "NO", "", "", "Nested Map Type"})
-	case map[string]interface{}:
-		u.Debugf("found map[string]interface{}: %v='%v'", colName, val)
-		tbl.AddField(models.NewField(colName, value.MapValueType, 24, "map[string]interface{}"))
-		tbl.AddValues([]driver.Value{colName, "object", "NO", "", "", "Nested Map Type"})
-	case int:
-		u.Debugf("found int: %v='%v'", colName, val)
-		tbl.AddField(models.NewField(colName, value.IntType, 32, "int"))
-		tbl.AddValues([]driver.Value{colName, "int", "NO", "", "", "int"})
-	case int64:
-		u.Debugf("found int64: %v='%v'", colName, val)
-		tbl.AddField(models.NewField(colName, value.IntType, 32, "long"))
-		tbl.AddValues([]driver.Value{colName, "long", "NO", "", "", "long"})
-	case float64:
-		u.Debugf("found float64: %v='%v'", colName, val)
-		tbl.AddField(models.NewField(colName, value.NumberType, 32, "float64"))
-		tbl.AddValues([]driver.Value{colName, "float64", "NO", "", "", "float64"})
-	case string:
-		u.Debugf("found string: %v='%v'", colName, val)
-		tbl.AddField(models.NewField(colName, value.StringType, 32, "string"))
-		tbl.AddValues([]driver.Value{colName, "string", "NO", "", "", "string"})
-	case time.Time:
-		u.Debugf("found time.Time: %v='%v'", colName, val)
-		tbl.AddField(models.NewField(colName, value.TimeType, 32, "datetime"))
-		tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
-	case *time.Time:
-		u.Debugf("found time.Time: %v='%v'", colName, val)
-		tbl.AddField(models.NewField(colName, value.TimeType, 32, "datetime"))
-		tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
-	case []uint8:
-		// This is most likely binary data, json.RawMessage, or []bytes
-		u.Debugf("found []uint8: %v='%v'", colName, val)
-		tbl.AddField(models.NewField(colName, value.ByteSliceType, 24, "[]byte"))
-		tbl.AddValues([]driver.Value{colName, "binary", "NO", "", "", "Binary data:  []byte"})
-	case []string:
-		u.Warnf("NOT IMPLEMENTED:  found []string %v='%v'", colName, val)
-	case []interface{}:
-		u.Infof("NOT IMPLEMENTED:   found []interface{}: %v='%v'", colName, val)
-		typ := value.NilType
-		for _, sliceVal := range val {
-
-		}
-		tbl.AddField(models.NewField(colName, value.ByteSliceType, 24, "[]byte"))
-		tbl.AddValues([]driver.Value{colName, "binary", "NO", "", "", "Binary data:  []byte"})
-	default:
-		u.Warnf("not recognized type: %v %T", colName, iVal)
-	}
-}
-*/

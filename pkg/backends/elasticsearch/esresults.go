@@ -8,10 +8,9 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
-	//"github.com/araddon/qlbridge/exec"
+	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
-	//"github.com/dataux/dataux/pkg/backends"
 	"github.com/dataux/dataux/pkg/models"
 )
 
@@ -27,7 +26,7 @@ var (
 //   to dataux/driver values
 //
 type ResultReader struct {
-	exit          <-chan bool
+	*exec.TaskBase
 	finalized     bool
 	hasprojection bool
 	cursor        int
@@ -49,6 +48,7 @@ type ResultReaderNext struct {
 
 func NewResultReader(req *SqlToEs) *ResultReader {
 	m := &ResultReader{}
+	m.TaskBase = exec.NewTaskBase("es-resultreader")
 	m.Req = req
 	return m
 }
@@ -138,27 +138,36 @@ func (m *ResultReader) MesgChan(filter expr.Node) <-chan datasource.Message {
 		u.LogTracef(u.WARN, "wat, no iter?")
 		return nil
 	}
-	return datasource.SourceIterChannel(iter, filter, m.exit)
+	return datasource.SourceIterChannel(iter, filter, m.SigChan())
 }
 
-// Finalize maps the Es Documents/results into
-//    [][]interface{}
+// Run()
 //
 //  Normally, finalize is responsible for ensuring schema, setu
 //   but in the case of elasticsearch, since it is a non-streaming
 //   response, we build out values in advance
-func (m *ResultReader) Finalize() error {
+func (m *ResultReader) Run(context *expr.Context) error {
+
+	sigChan := m.SigChan()
+	outCh := m.MessageOut()
 
 	m.finalized = true
 	m.buildProjection()
 
+	//defer context.Recover()
 	defer func() {
-		u.Debugf("nice, finalize vals in ResultReader: %v", len(m.Vals))
+		close(outCh) // closing output channels is the signal to stop
+		//m.TaskBase.Close()
+		u.Debugf("nice, finalize ResultReader out: %p  row ct %v", outCh, len(m.Vals))
 	}()
 
 	sql := m.Req.sel
 
 	m.Vals = make([][]driver.Value, 0)
+	colNames := make(map[string]int, len(m.proj.Columns))
+	for i, col := range m.proj.Columns {
+		colNames[col.As] = i
+	}
 
 	if sql.Star {
 		// ??
@@ -167,7 +176,7 @@ func (m *ResultReader) Finalize() error {
 		vals := make([]driver.Value, 1)
 		vals[0] = m.Total
 		m.Vals = append(m.Vals, vals)
-		return nil
+
 	} else if len(m.Aggs) > 0 {
 
 		if m.Req.hasMultiValue && m.Req.hasSingleValue {
@@ -230,9 +239,29 @@ func (m *ResultReader) Finalize() error {
 			}
 		}
 
-		//return m.conn.WriteResultset(m.conn.Status, rs)
-		return nil
+	} else {
+		if err := m.pageDocs(); err != nil {
+			u.Errorf("error: %v", err)
+		}
 	}
+
+	for i, vals := range m.Vals {
+		//u.Debugf("new row ct: %v cols:%v vals:%v", len(m.Vals), colNames, vals)
+		//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
+		msg := datasource.NewSqlDriverMessageMap(uint64(i), vals, colNames)
+		//u.Infof("In source Scanner iter %#v", msg)
+		select {
+		case <-sigChan:
+			return nil
+		case outCh <- msg:
+			// continue
+		}
+	}
+
+	return nil
+}
+
+func (m *ResultReader) pageDocs() error {
 
 	metaFields := map[string]byte{"_id": 1, "_type": 1, "_score": 1}
 
@@ -255,12 +284,12 @@ func (m *ResultReader) Finalize() error {
 
 	cols := m.proj.Columns
 	if len(cols) == 0 {
-		u.Errorf("WTF?  no cols? %v", cols)
+		u.Errorf("wat?  no cols? %v", cols)
 	}
 	for _, doc := range m.Docs {
 		if len(doc) > 0 {
-			// by, _ := json.MarshalIndent(doc, " ", " ")
-			// u.Debugf("doc: %v", string(by))
+			//by, _ := json.MarshalIndent(doc, " ", " ")
+			//u.Debugf("doc: %v", string(by))
 			if useFields {
 				doc = doc.Helper("fields")
 				if len(doc) < 1 {
@@ -279,7 +308,7 @@ func (m *ResultReader) Finalize() error {
 				//u.Debugf("looking for? %v in %#v", key, doc)
 
 				if useFields {
-					//u.Debugf("use fields: '%s' type=%v Strings()='%v'  doc=%#v", col.Name, col.Type.String(), doc.Strings(key), doc)
+					u.Debugf("use fields: '%s' type=%v Strings()='%v'  doc=%#v", col.Name, col.Type.String(), doc.Strings(key), doc)
 					switch col.Type {
 					case value.StringType:
 						if docVals := doc.Strings(col.Name); len(docVals) > 0 {
@@ -310,10 +339,13 @@ func (m *ResultReader) Finalize() error {
 					}
 				} else {
 
+					u.Debugf("col.type %v type %v", key, col.Type.String())
+
 					switch col.Type {
 					case value.StringType:
 
 						strVal := doc.String(key)
+						u.Debugf("strval: %s=%q", key, strVal)
 						if strVal != "" {
 							vals[fldI] = strVal
 						} else {
@@ -346,13 +378,14 @@ func (m *ResultReader) Finalize() error {
 
 				fldI++
 			}
-			//u.Infof("vals: %#v", vals)
+			u.Infof("vals: %#v", vals)
 			m.Vals = append(m.Vals, vals)
 		}
 	}
 
 	return nil
 }
+func (m *ResultReader) Finalize() error { return nil }
 
 // Implement sql/driver Rows Next() interface
 func (m *ResultReader) Next(row []driver.Value) error {
@@ -369,7 +402,7 @@ func (m *ResultReader) Next(row []driver.Value) error {
 
 func (m *ResultReaderNext) Next() datasource.Message {
 	select {
-	case <-m.exit:
+	case <-m.SigChan():
 		return nil
 	default:
 		if !m.finalized {
