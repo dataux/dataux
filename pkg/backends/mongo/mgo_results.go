@@ -13,7 +13,6 @@ import (
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
-	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/models"
 )
 
@@ -21,27 +20,24 @@ var (
 	_ models.ResultProvider = (*ResultReader)(nil)
 
 	// Ensure we implement datasource.DataSource, Scanner
-	_ datasource.DataSource    = (*ResultReader)(nil)
-	_ datasource.SchemaColumns = (*ResultReader)(nil)
-	_ datasource.Scanner       = (*ResultReader)(nil)
+	_ exec.TaskRunner = (*ResultReader)(nil)
+	//_ datasource.SchemaColumns = (*ResultReader)(nil)
+	//_ datasource.Scanner       = (*ResultReader)(nil)
 )
 
 // Mongo ResultReader implements result paging, reading
 // - driver.Rows
 type ResultReader struct {
 	*exec.TaskBase
-	finalized     bool
-	hasprojection bool
-	cursor        int
-	proj          *expr.Projection
-	cols          []string
-	Docs          []u.JsonHelper
-	Vals          [][]driver.Value
-	Total         int
-	Aggs          u.JsonHelper
-	ScrollId      string
-	query         *mgo.Query
-	Req           *SqlToMgo
+	finalized bool
+	cursor    int
+	Docs      []u.JsonHelper
+	Vals      [][]driver.Value
+	Total     int
+	Aggs      u.JsonHelper
+	ScrollId  string
+	query     *mgo.Query
+	sql       *SqlToMgo
 }
 
 // A wrapper, allowing us to implement sql/driver Next() interface
@@ -54,52 +50,13 @@ func NewResultReader(req *SqlToMgo, q *mgo.Query) *ResultReader {
 	m := &ResultReader{}
 	m.TaskBase = exec.NewTaskBase("mgo-resultreader")
 	m.query = q
-	m.Req = req
-	m.buildProjection()
+	m.sql = req
 	return m
 }
 
 func (m *ResultReader) Close() error { return nil }
 
-func (m *ResultReader) buildProjection() {
-
-	if m.hasprojection {
-		return
-	}
-	m.hasprojection = true
-
-	m.proj = expr.NewProjection()
-	cols := m.proj.Columns
-	sql := m.Req.sel
-	if sql.Star {
-		// Select Each field, grab fields from Table Schema
-		for _, fld := range m.Req.tbl.Fields {
-			cols = append(cols, expr.NewResultColumn(fld.Name, len(cols), nil, fld.Type))
-		}
-	} else if sql.CountStar() {
-		// Count *
-		cols = append(cols, expr.NewResultColumn("count", len(cols), nil, value.IntType))
-	} else {
-		for _, col := range m.Req.sel.Columns {
-			if fld, ok := m.Req.tbl.FieldMap[col.SourceField]; ok {
-				//u.Debugf("column: %#v", col)
-				cols = append(cols, expr.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
-			} else {
-				//u.Debugf("Could not find: '%v' in %#v", col.SourceField, m.Req.tbl.FieldMap)
-				//u.Warnf("%#v", col)
-			}
-		}
-	}
-	colNames := make([]string, len(cols))
-	for i, col := range cols {
-		colNames[i] = col.As
-	}
-	m.cols = colNames
-	m.proj.Columns = cols
-
-	//u.Debugf("leaving buildProjection:  %p", m.proj)
-}
-
+/*
 func (m *ResultReader) Tables() []string {
 	return nil
 }
@@ -117,11 +74,10 @@ func (m *ResultReader) Open(connInfo string) (datasource.SourceConn, error) {
 	panic("Not implemented")
 	return m, nil
 }
-
 func (m *ResultReader) Schema() *datasource.Schema {
-	return m.Req.tbl.Schema
+	return m.sql.tbl.Schema
 }
-
+*/
 func (m *ResultReader) MesgChan(filter expr.Node) <-chan datasource.Message {
 	iter := m.CreateIterator(filter)
 	return datasource.SourceIterChannel(iter, filter, m.SigChan())
@@ -142,11 +98,10 @@ func (m *ResultReader) Run(context *expr.Context) error {
 	}()
 
 	m.finalized = true
-	m.buildProjection()
 
 	//u.LogTracef(u.WARN, "hello")
 
-	sql := m.Req.sel
+	sql := m.sql.sel
 
 	m.Vals = make([][]driver.Value, 0)
 
@@ -163,7 +118,7 @@ func (m *ResultReader) Run(context *expr.Context) error {
 		return nil
 	}
 
-	cols := m.proj.Columns
+	cols := m.sql.sel.Columns
 	colNames := make(map[string]int, len(cols))
 	for i, col := range cols {
 		colNames[col.As] = i
@@ -182,7 +137,7 @@ func (m *ResultReader) Run(context *expr.Context) error {
 		//u.Debugf("col? %v", bm)
 		vals := make([]driver.Value, len(cols))
 		for i, col := range cols {
-			if val, ok := bm[col.Name]; ok {
+			if val, ok := bm[col.As]; ok {
 				switch vt := val.(type) {
 				case bson.ObjectId:
 					vals[i] = vt.Hex()
@@ -201,9 +156,9 @@ func (m *ResultReader) Run(context *expr.Context) error {
 			} else {
 				// Not returned in query, sql hates missing fields
 				// Should we zero/empty fill here or in mysql handler?
-				if col.Type == value.StringType {
-					vals[i] = ""
-				}
+				// if col.Type == value.StringType {
+				// 	vals[i] = ""
+				// }
 			}
 		}
 		m.Vals = append(m.Vals, vals)

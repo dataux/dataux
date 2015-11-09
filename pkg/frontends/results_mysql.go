@@ -7,6 +7,7 @@ import (
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
+	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/value"
 
 	"github.com/dataux/dataux/pkg/models"
@@ -22,7 +23,7 @@ type MySqlResultWriter struct {
 	writer       models.ResultWriter
 	schema       *datasource.Schema
 	Rs           *mysql.Resultset
-	projection   *expr.Projection
+	projection   *plan.Projection
 	wroteHeaders bool
 	*exec.TaskBase
 }
@@ -34,7 +35,7 @@ type MySqlExecResultWriter struct {
 	*exec.TaskBase
 }
 
-func NewMySqlResultWriter(writer models.ResultWriter, proj *expr.Projection, schema *datasource.Schema) *MySqlResultWriter {
+func NewMySqlResultWriter(writer models.ResultWriter, proj *plan.Projection, schema *datasource.Schema) *MySqlResultWriter {
 
 	m := &MySqlResultWriter{writer: writer, projection: proj, schema: schema}
 	m.TaskBase = exec.NewTaskBase("MySqlResultWriter")
@@ -73,12 +74,13 @@ func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 		switch mt := msg.Body().(type) {
 		case *datasource.SqlDriverMessageMap:
+			u.Infof("write: %#v", mt.Values())
 			m.Rs.AddRowValues(mt.Values())
 			//u.Debugf( "return from mysql.resultWrite")
 			return true
 		case map[string]driver.Value:
-			vals := make([]driver.Value, len(m.projection.Columns))
-			for _, col := range m.projection.Columns {
+			vals := make([]driver.Value, len(m.projection.Proj.Columns))
+			for _, col := range m.projection.Proj.Columns {
 				if val, ok := mt[col.As]; !ok {
 					u.Warnf("could not find result val: %v name=%s", col.As, col.Name)
 				} else {
@@ -109,8 +111,8 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 	if m.projection == nil {
 		u.Warnf("no projection")
 	}
-	cols := m.projection.Columns
-	u.Debugf("projection: %p writing mysql headers %s", m.projection, m.projection)
+	cols := m.projection.Proj.Columns
+	u.Debugf("projection: %p writing mysql headers %s", m.projection.Proj, m.projection.Proj)
 	if len(cols) == 0 {
 		u.Warnf("Wat?   no columns?   %v", 0)
 		return nil
@@ -155,31 +157,19 @@ func (m *MySqlResultWriter) Finalize() error {
 			return err
 		}
 	}
-
-	// vals := make([]driver.Value, len(m.resp.Columns()))
-	// for {
-
-	// 	err := m.resp.Next(vals)
-	// 	if err != nil && err == io.EOF {
-	// 		break
-	// 	} else if err != nil {
-	// 		u.Error(err)
-	// 		return err
-	// 	}
-	// 	u.Debugf("vals: %v", vals)
-	// 	m.Rs.AddRowValues(vals)
-	// }
-
 	return nil
 }
 
-func NewEmptyResultset(proj *expr.Projection) *mysql.Resultset {
+func NewEmptyResultset(pp *plan.Projection) *mysql.Resultset {
 
 	r := new(mysql.Resultset)
-	u.Debugf("projection: %#v", proj)
-	r.Fields = make([]*mysql.Field, len(proj.Columns))
+	u.Debugf("projection: %#v", pp)
+	r.Fields = make([]*mysql.Field, len(pp.Proj.Columns))
+	r.FieldNames = make(map[string]int, len(r.Fields))
+	r.Values = make([][]driver.Value, 0)
+	r.RowDatas = make([]mysql.RowData, 0)
 
-	for i, col := range proj.Columns {
+	for i, col := range pp.Proj.Columns {
 		r.Fields[i] = &mysql.Field{}
 		switch {
 		case col.Star:
@@ -196,10 +186,6 @@ func NewEmptyResultset(proj *expr.Projection) *mysql.Resultset {
 		}
 		u.Infof("field: %#v", col)
 	}
-	r.FieldNames = make(map[string]int, len(proj.Columns))
-	r.Values = make([][]driver.Value, 0)
-	r.RowDatas = make([]mysql.RowData, 0)
-
 	return r
 }
 

@@ -9,10 +9,12 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	u "github.com/araddon/gou"
+
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
+	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/value"
 	"github.com/araddon/qlbridge/vm"
 )
@@ -24,7 +26,7 @@ var (
 
 	// Implement Datasource interface that allows Mongo
 	//  to fully implement a full select statement
-	_ datasource.SourceSelectPlanner = (*SqlToMgo)(nil)
+	_ plan.SourceSelectPlanner = (*SqlToMgo)(nil)
 )
 
 // Sql To Mongo Request
@@ -32,6 +34,9 @@ var (
 type SqlToMgo struct {
 	*exec.TaskBase
 	resp           *ResultReader
+	proj           *expr.Projection
+	cols           []string
+	hasprojection  bool
 	tbl            *datasource.Table
 	sel            *expr.SqlSelect
 	schema         *datasource.SourceSchema
@@ -54,29 +59,62 @@ func NewSqlToMgo(table *datasource.Table, sess *mgo.Session) *SqlToMgo {
 	}
 }
 
-// func (m *SqlToMgo) Host() string {
-// 	//u.Warnf("TODO:  replace hardcoded es host")
-// 	return chooseBackend(m.schema.Name, m.schema)
-// }
+/*
+func (m *SqlToMgo) SubSelectVisitor() (expr.SubVisitor, error) { return m, nil }
+func (m *SqlToMgo) Projection() (*expr.Projection, error)      { return m.proj, nil }
+func (m *SqlToMgo) buildProjection() {
 
-func (m *SqlToMgo) SubSelectVisitor() (expr.SubVisitor, error) {
-	return m, nil
+	if m.hasprojection {
+		return
+	}
+	m.hasprojection = true
+
+	m.proj = expr.NewProjection()
+	cols := m.proj.Columns
+	sql := m.sel
+	if sql.Star {
+		// Select Each field, grab fields from Table Schema
+		for _, fld := range m.tbl.Fields {
+			cols = append(cols, expr.NewResultColumn(fld.Name, len(cols), nil, fld.Type))
+		}
+	} else if sql.CountStar() {
+		// Count *
+		cols = append(cols, expr.NewResultColumn("count", len(cols), nil, value.IntType))
+	} else {
+		for _, col := range m.sel.Columns {
+			if fld, ok := m.tbl.FieldMap[col.SourceField]; ok {
+				//u.Debugf("column: %#v", col)
+				cols = append(cols, expr.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
+			} else {
+				//u.Debugf("Could not find: '%v' in %#v", col.SourceField, m.tbl.FieldMap)
+				//u.Warnf("%#v", col)
+			}
+		}
+	}
+	colNames := make([]string, len(cols))
+	for i, col := range cols {
+		colNames[i] = col.As
+	}
+	m.cols = colNames
+	m.proj.Columns = cols
+
+	//u.Debugf("leaving buildProjection:  %p", m.proj)
 }
-func (m *SqlToMgo) Projection() (*expr.Projection, error) {
-	return m.resp.proj, nil
-}
+*/
+
 func (m *SqlToMgo) Columns() []string {
-	return m.resp.Columns()
+	return m.cols
 }
 
-func (m *SqlToMgo) VisitSubSelect(from *expr.SqlSource) (expr.Task, expr.VisitStatus, error) {
+func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.VisitStatus, error) {
 
 	var err error
 
-	req := from.Source
+	req := sp.Source
 	u.Infof("mongo.VisitSubSelect %v", req.String())
 
 	m.sel = req
+
 	limit := req.Limit
 	if limit == 0 {
 		limit = DefaultLimit
@@ -139,10 +177,12 @@ func (m *SqlToMgo) VisitSubSelect(from *expr.SqlSource) (expr.Task, expr.VisitSt
 	//u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
 	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter).Limit(limit)
 
+	//m.buildProjection()
+
 	resultReader := NewResultReader(m, query)
 	m.resp = resultReader
 	resultReader.Finalize()
-	u.Infof("after finalize proj: %p", m.resp.proj)
+	u.Infof("after finalize proj: %p", m.proj)
 	return resultReader, expr.VisitFinal, nil
 }
 
@@ -384,7 +424,7 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 		u.Warnf("not ok: %v  l:%v  r:%v", node, lhval, rhval)
 		return nil, fmt.Errorf("could not evaluate: %v", node.String())
 	}
-	u.Debugf("walkBinary: %v  l:%v  r:%v  %T  %T", node, lhval, rhval, lhval, rhval)
+	//u.Debugf("walkBinary: %v  l:%v  r:%v  %T  %T", node, lhval, rhval, lhval, rhval)
 	switch node.Operator.T {
 	case lex.TokenLogicAnd:
 		// this doesn't yet implement x AND y AND z

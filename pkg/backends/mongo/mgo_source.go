@@ -89,12 +89,10 @@ func (m *MongoDataSource) Close() error {
 	return nil
 }
 
-func (m *MongoDataSource) DataSource() datasource.DataSource {
-	return m
-}
-
-func (m *MongoDataSource) Tables() []string {
-	return m.schema.Tables()
+func (m *MongoDataSource) DataSource() datasource.DataSource { return m }
+func (m *MongoDataSource) Tables() []string                  { return m.schema.Tables() }
+func (m *MongoDataSource) Table(table string) (*datasource.Table, error) {
+	return m.loadTableSchema(table)
 }
 
 func (m *MongoDataSource) Open(collectionName string) (datasource.SourceConn, error) {
@@ -111,11 +109,6 @@ func (m *MongoDataSource) Open(collectionName string) (datasource.SourceConn, er
 	mgoSource := NewSqlToMgo(tbl, m.sess.Clone())
 	//u.Debugf("SqlToMgo: %T  %#v", mgoSource, mgoSource)
 	return mgoSource, nil
-}
-
-func (m *MongoDataSource) Table(table string) (*datasource.Table, error) {
-	//u.Debugf("get table for %s", table)
-	return m.loadTableSchema(table)
 }
 
 func (m *MongoDataSource) loadSchema() error {

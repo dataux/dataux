@@ -2,15 +2,7 @@ package models
 
 import (
 	"database/sql/driver"
-
-	//u "github.com/araddon/gou"
-	//"github.com/araddon/qlbridge/expr"
-	//"github.com/araddon/qlbridge/value"
 )
-
-// type ResultSession interface {
-// 	ResultProvider() ResultProvider
-// }
 
 type ResultWriter interface {
 	WriteResult(Result) error
@@ -41,18 +33,3 @@ type ResultProvider interface {
 	// Next should return io.EOF when there are no more rows.
 	Next(dest []driver.Value) error
 }
-
-// type ValsMessage struct {
-// 	Vals []driver.Value
-// 	Id   uint64
-// }
-
-// func (m ValsMessage) Key() uint64       { return m.Id }
-// func (m ValsMessage) Body() interface{} { return m.Vals }
-
-// type ResultColumn struct {
-// 	Name   string          // Original path/name for query field
-// 	Pos    int             // Ordinal position in sql statement
-// 	SqlCol *expr.Column    // the original sql column
-// 	Type   value.ValueType // Type
-// }
