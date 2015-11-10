@@ -15,8 +15,7 @@ import (
 )
 
 var (
-	loadTestData *bool   = flag.Bool("loadtestdata", false, "Load elasticsearch test data, only needed once")
-	eshost       *string = flag.String("host", "localhost", "Elasticsearch Server Host Address")
+	eshost *string = flag.String("host", "localhost", "Elasticsearch Server Host Address")
 )
 
 func init() {

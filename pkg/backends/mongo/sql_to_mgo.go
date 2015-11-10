@@ -34,9 +34,8 @@ var (
 type SqlToMgo struct {
 	*exec.TaskBase
 	resp           *ResultReader
-	proj           *expr.Projection
 	cols           []string
-	hasprojection  bool
+	sp             *plan.SourcePlan
 	tbl            *datasource.Table
 	sel            *expr.SqlSelect
 	schema         *datasource.SourceSchema
@@ -48,6 +47,8 @@ type SqlToMgo struct {
 	sort           []bson.M
 	hasMultiValue  bool // Multi-Value vs Single-Value aggs
 	hasSingleValue bool // single value agg
+	//proj           *expr.Projection
+	//hasprojection  bool
 }
 
 func NewSqlToMgo(table *datasource.Table, sess *mgo.Session) *SqlToMgo {
@@ -59,49 +60,6 @@ func NewSqlToMgo(table *datasource.Table, sess *mgo.Session) *SqlToMgo {
 	}
 }
 
-/*
-func (m *SqlToMgo) SubSelectVisitor() (expr.SubVisitor, error) { return m, nil }
-func (m *SqlToMgo) Projection() (*expr.Projection, error)      { return m.proj, nil }
-func (m *SqlToMgo) buildProjection() {
-
-	if m.hasprojection {
-		return
-	}
-	m.hasprojection = true
-
-	m.proj = expr.NewProjection()
-	cols := m.proj.Columns
-	sql := m.sel
-	if sql.Star {
-		// Select Each field, grab fields from Table Schema
-		for _, fld := range m.tbl.Fields {
-			cols = append(cols, expr.NewResultColumn(fld.Name, len(cols), nil, fld.Type))
-		}
-	} else if sql.CountStar() {
-		// Count *
-		cols = append(cols, expr.NewResultColumn("count", len(cols), nil, value.IntType))
-	} else {
-		for _, col := range m.sel.Columns {
-			if fld, ok := m.tbl.FieldMap[col.SourceField]; ok {
-				//u.Debugf("column: %#v", col)
-				cols = append(cols, expr.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
-			} else {
-				//u.Debugf("Could not find: '%v' in %#v", col.SourceField, m.tbl.FieldMap)
-				//u.Warnf("%#v", col)
-			}
-		}
-	}
-	colNames := make([]string, len(cols))
-	for i, col := range cols {
-		colNames[i] = col.As
-	}
-	m.cols = colNames
-	m.proj.Columns = cols
-
-	//u.Debugf("leaving buildProjection:  %p", m.proj)
-}
-*/
-
 func (m *SqlToMgo) Columns() []string {
 	return m.cols
 }
@@ -109,7 +67,7 @@ func (m *SqlToMgo) Columns() []string {
 func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.VisitStatus, error) {
 
 	var err error
-
+	m.sp = sp
 	req := sp.Source
 	u.Infof("mongo.VisitSubSelect %v", req.String())
 
@@ -172,17 +130,14 @@ func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.Visit
 		}
 	}
 
-	//filterBy, _ := json.Marshal(m.filter)
-	//u.Infof("filter: %#v", m.filter)
-	//u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
+	filterBy, _ := json.Marshal(m.filter)
+	u.Infof("filter: %#v", m.filter)
+	u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
 	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter).Limit(limit)
-
-	//m.buildProjection()
 
 	resultReader := NewResultReader(m, query)
 	m.resp = resultReader
 	resultReader.Finalize()
-	u.Infof("after finalize proj: %p", m.proj)
 	return resultReader, expr.VisitFinal, nil
 }
 
@@ -224,8 +179,10 @@ func (m *SqlToMgo) WalkSelectList() error {
 			// 	return nil, value.NewStringValue(curNode.Text), nil
 			// case *expr.StringNode:
 			// 	return nil, value.NewStringValue(curNode.Text), nil
+			case *expr.IdentityNode:
+				//u.Debugf("likely a projection, not agg T:%T  %v", curNode, curNode)
 			default:
-				u.Debugf("likely a projection, not agg T:%T  %v", curNode, curNode)
+				u.Warnf("unrecognized not agg T:%T  %v", curNode, curNode)
 				//panic("Unrecognized node type")
 			}
 		}
@@ -297,7 +254,7 @@ func (m *SqlToMgo) WalkAggs(cur expr.Node) (q bson.M, _ error) {
 	// case *expr.StringNode:
 	// 	return nil, value.NewStringValue(curNode.Text), nil
 	default:
-		u.Debugf("likely a projection, not agg T:%T  %v", cur, cur)
+		u.Warnf("likely ?? not agg T:%T  %v", cur, cur)
 		//panic("Unrecognized node type")
 	}
 	// if cur.Negate {
@@ -611,7 +568,7 @@ func (m *SqlToMgo) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {
 
 	case "count":
 		m.hasSingleValue = true
-		u.Debugf("how do we want to use count(*)?  ?")
+		u.Warnf("how do we want to use count(*)?  ?")
 		val, ok := eval(node.Args[0])
 		if !ok {
 			u.Errorf("Must be valid: %v", node.String())

@@ -13,6 +13,7 @@ import (
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
+	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/models"
 )
 
@@ -55,34 +56,10 @@ func NewResultReader(req *SqlToMgo, q *mgo.Query) *ResultReader {
 }
 
 func (m *ResultReader) Close() error { return nil }
-
-/*
-func (m *ResultReader) Tables() []string {
-	return nil
-}
-
-func (m *ResultReader) Columns() []string {
-	return m.cols
-}
-
-func (m *ResultReader) Projection() (*expr.Projection, error) {
-	m.buildProjection()
-	return m.proj, nil
-}
-
-func (m *ResultReader) Open(connInfo string) (datasource.SourceConn, error) {
-	panic("Not implemented")
-	return m, nil
-}
-func (m *ResultReader) Schema() *datasource.Schema {
-	return m.sql.tbl.Schema
-}
-*/
 func (m *ResultReader) MesgChan(filter expr.Node) <-chan datasource.Message {
 	iter := m.CreateIterator(filter)
 	return datasource.SourceIterChannel(iter, filter, m.SigChan())
 }
-
 func (m *ResultReader) CreateIterator(filter expr.Node) datasource.Iterator {
 	return &ResultReaderNext{m}
 }
@@ -118,7 +95,8 @@ func (m *ResultReader) Run(context *expr.Context) error {
 		return nil
 	}
 
-	cols := m.sql.sel.Columns
+	//cols := m.sql.sel.Columns
+	cols := m.sql.sp.Proj.Columns
 	colNames := make(map[string]int, len(cols))
 	for i, col := range cols {
 		colNames[col.As] = i
@@ -134,10 +112,10 @@ func (m *ResultReader) Run(context *expr.Context) error {
 		if !iter.Next(&bm) {
 			break
 		}
-		//u.Debugf("col? %v", bm)
+		u.Debugf("col? %v", bm)
 		vals := make([]driver.Value, len(cols))
 		for i, col := range cols {
-			if val, ok := bm[col.As]; ok {
+			if val, ok := bm[col.Col.SourceField]; ok {
 				switch vt := val.(type) {
 				case bson.ObjectId:
 					vals[i] = vt.Hex()
@@ -156,9 +134,9 @@ func (m *ResultReader) Run(context *expr.Context) error {
 			} else {
 				// Not returned in query, sql hates missing fields
 				// Should we zero/empty fill here or in mysql handler?
-				// if col.Type == value.StringType {
-				// 	vals[i] = ""
-				// }
+				if col.Type == value.StringType {
+					vals[i] = ""
+				}
 			}
 		}
 		m.Vals = append(m.Vals, vals)

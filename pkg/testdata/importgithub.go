@@ -1,4 +1,4 @@
-package testdata
+package main
 
 import (
 	"bufio"
@@ -73,7 +73,6 @@ func PutGithubMappings(host string) {
 		    }
 		}`)
 	}
-
 }
 
 //  Load a set of historical data from Github into Elasticsearch
@@ -102,8 +101,8 @@ func LoadGithubToEs(host string, year, month, daysToImport, hoursToImport int) {
 	}()
 
 	//http://data.githubarchive.org/2015-01-01-15.json.g
-	for day := 1; day <= daysToImport; day++ {
-		for hr := 0; hr < hoursToImport; hr++ {
+	for day := 2; day <= daysToImport; day++ {
+		for hr := 7; hr < hoursToImport; hr++ {
 			downUrl := fmt.Sprintf("http://data.githubarchive.org/%d-%02d-%02d-%d.json.gz", year, month, day, hr)
 
 			u.Info("Starting Download ", downUrl)

@@ -11,6 +11,7 @@ import (
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
+	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/value"
 	"github.com/araddon/qlbridge/vm"
 )
@@ -19,8 +20,7 @@ var (
 	DefaultLimit = 20
 
 	// planner
-	//_ expr.SubVisitor = (*SqlToEs)(nil)
-	_ datasource.SourceSelectPlanner = (*SqlToEs)(nil)
+	_ plan.SourceSelectPlanner = (*SqlToEs)(nil)
 )
 
 type esMap map[string]interface{}
@@ -64,22 +64,11 @@ func chooseBackend(schema *datasource.SourceSchema) string {
 	return ""
 }
 
-func (m *SqlToEs) Projection() (*expr.Projection, error) {
-	return m.resp.proj, nil
-}
-
-func (m *SqlToEs) SubSelectVisitor() (expr.SubVisitor, error) {
-	return m, nil
-}
-
-func (m *SqlToEs) VisitSubSelect(from *expr.SqlSource) (expr.Task, expr.VisitStatus, error) {
-	return m.Query(from.Source)
-}
-
-func (m *SqlToEs) Query(req *expr.SqlSelect) (*ResultReader, expr.VisitStatus, error) {
+func (m *SqlToEs) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.VisitStatus, error) {
 
 	var err error
-	m.sel = req
+	req := sp.SqlSource.Source
+	m.sel = sp.SqlSource.Source
 	if req.Limit == 0 {
 		req.Limit = DefaultLimit
 	}
