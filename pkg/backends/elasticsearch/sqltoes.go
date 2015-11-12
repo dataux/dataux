@@ -202,7 +202,7 @@ func (m *SqlToEs) WalkSelectList() error {
 	m.aggs = esMap{}
 	for i := len(m.sel.Columns) - 1; i >= 0; i-- {
 		col := m.sel.Columns[i]
-		u.Debugf("i=%d of %d  %v %#v ", i, len(m.sel.Columns), col.Key(), col)
+		//u.Debugf("i=%d of %d  %v %#v ", i, len(m.sel.Columns), col.Key(), col)
 		if col.Expr != nil {
 			switch curNode := col.Expr.(type) {
 			// case *expr.NumberNode:
@@ -316,7 +316,7 @@ func (m *SqlToEs) WalkAggs(cur expr.Node) (q esMap, _ error) {
 //
 //  TODO:  think we need to separate Value Nodes from those that return es types?
 func (m *SqlToEs) WalkNode(cur expr.Node, q *esMap) (value.Value, error) {
-	u.Debugf("walkFilter: %#v", cur)
+	//u.Debugf("walkFilter: %#v", cur)
 	switch curNode := cur.(type) {
 	case *expr.NumberNode, *expr.StringNode:
 		nodeVal, ok := vm.Eval(nil, cur)
@@ -361,11 +361,11 @@ func (m *SqlToEs) walkFilterTri(node *expr.TriNode, q *esMap) (value.Value, erro
 	//u.Debugf("arg1? %v  ok?%v", arg1val, aok)
 	arg2val, bok := vm.Eval(nil, node.Args[1])
 	arg3val, cok := vm.Eval(nil, node.Args[2])
-	u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
+	//u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
 	if !aok || !bok || !cok {
 		return nil, fmt.Errorf("Could not evaluate args: %v", node.String())
 	}
-	u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
+	//u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
 	switch node.Operator.T {
 	case lex.TokenBetween:
 		*q = esMap{"range": esMap{arg1val.ToString(): esMap{"gte": arg2val.ToString(), "lte": arg3val.ToString()}}}
@@ -391,7 +391,7 @@ func (m *SqlToEs) walkMultiFilter(node *expr.MultiArgNode, q *esMap) (value.Valu
 
 	// First argument must be field name in this context
 	fldName := node.Args[0].String()
-	u.Debugf("walkMulti: %v", node.String())
+	//u.Debugf("walkMulti: %v", node.String())
 	switch node.Operator.T {
 	case lex.TokenIN:
 		//q = esMap{"range": esMap{arg1val.ToString(): esMap{"gte": arg2val.ToString(), "lte": arg3val.ToString()}}}
@@ -437,7 +437,7 @@ func (m *SqlToEs) walkFilterBinary(node *expr.BinaryNode, q *esMap) (value.Value
 		u.Warnf("not ok: %v  l:%v  r:%v", node, lhval, rhval)
 		return nil, fmt.Errorf("could not evaluate: %v", node.String())
 	}
-	u.Debugf("walkBinary: op:%q  node:%v  l:%v  r:%v  %T  %T", node.Operator.V, node, lhval, rhval, lhval, rhval)
+	//u.Debugf("walkBinary: op:%q  node:%v  l:%v  r:%v  %T  %T", node.Operator.V, node, lhval, rhval, lhval, rhval)
 	switch node.Operator.T {
 	case lex.TokenLogicAnd:
 		// this doesn't yet implement x AND y AND z

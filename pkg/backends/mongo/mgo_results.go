@@ -112,7 +112,7 @@ func (m *ResultReader) Run(context *expr.Context) error {
 		if !iter.Next(&bm) {
 			break
 		}
-		u.Debugf("col? %v", bm)
+		//u.Debugf("col? %v", bm)
 		vals := make([]driver.Value, len(cols))
 		for i, col := range cols {
 			if val, ok := bm[col.Col.SourceField]; ok {

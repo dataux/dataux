@@ -230,6 +230,7 @@ func (m *MongoDataSource) loadTableSchema(table string) (*datasource.Table, erro
 	*/
 	tbl := datasource.NewTable(table, m.schema)
 	coll := m.sess.DB(m.db).C(table)
+	colNames := make([]string, 0)
 
 	var sampleRows []map[string]interface{}
 	if err := coll.Find(nil).Limit(30).All(&sampleRows); err != nil {
@@ -245,6 +246,7 @@ func (m *MongoDataSource) loadTableSchema(table string) (*datasource.Table, erro
 			if tbl.HasField(colName) {
 				continue
 			}
+
 			switch val := iVal.(type) {
 			case bson.ObjectId:
 				//u.Debugf("found bson.ObjectId: %v='%v'", colName, val)
@@ -310,18 +312,21 @@ func (m *MongoDataSource) loadTableSchema(table string) (*datasource.Table, erro
 					tbl.AddField(datasource.NewField(colName, value.SliceValueType, 24, "[]value"))
 					tbl.AddValues([]driver.Value{colName, "[]value", "NO", "", "", "[]value"})
 				}
-
+			case nil:
+				// ??
+				u.Warnf("could not infer from nil: colName  %v ", colName)
+				continue
 			default:
-				if iVal != nil {
-					u.Warnf("not recognized type: %v %T", colName, iVal)
-				} else {
-					u.Warnf("could not infer from nil: %v", colName)
-				}
+				u.Warnf("not recognized type: v=%v T:%T", colName, iVal)
+				continue
 			}
+
+			colNames = append(colNames, colName)
 		}
 	}
 
 	// buildMongoFields(s, tbl, jh, "", 0)
+	tbl.SetColumns(colNames)
 	m.schema.AddTable(tbl)
 
 	return tbl, nil

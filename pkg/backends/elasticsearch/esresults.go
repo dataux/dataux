@@ -67,7 +67,7 @@ func (m *ResultReader) buildProjection() {
 	if sql.Star {
 		// Select Each field, grab fields from Table Schema
 		for _, fld := range m.Req.tbl.Fields {
-			u.Infof("found %#v", fld)
+			//u.Infof("found %#v", fld)
 			cols = append(cols, expr.NewResultColumn(fld.Name, len(cols), nil, fld.Type))
 		}
 	} else if sql.CountStar() {
@@ -87,7 +87,7 @@ func (m *ResultReader) buildProjection() {
 			// MultiValue returns are resultsets that have multiple rows for a single expression, ie top 10 terms for this field, etc
 			// if len(sql.GroupBy) > 0 {
 			// We store the Field Name Here
-			u.Debugf("why MultiValue Aggs? %#v", m.Req)
+			//u.Debugf("why MultiValue Aggs? %#v", m.Req)
 			cols = append(cols, expr.NewResultColumn("field_name", len(cols), nil, value.StringType))
 			cols = append(cols, expr.NewResultColumn("key", len(cols), nil, value.StringType)) // the value of the field
 			cols = append(cols, expr.NewResultColumn("count", len(cols), nil, value.IntType))
@@ -95,7 +95,7 @@ func (m *ResultReader) buildProjection() {
 	} else {
 		for _, col := range m.Req.sel.Columns {
 			if fld, ok := m.Req.tbl.FieldMap[col.SourceField]; ok {
-				u.Debugf("column: %#v", col)
+				//u.Debugf("column: %#v", col)
 				cols = append(cols, expr.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
 			} else {
 				u.Debugf("Could not find: %v", col.String())
@@ -339,13 +339,13 @@ func (m *ResultReader) pageDocs() error {
 					}
 				} else {
 
-					u.Debugf("col.type %v type %v", key, col.Type.String())
+					//u.Debugf("col.type %v type %v", key, col.Type.String())
 
 					switch col.Type {
 					case value.StringType:
 
 						strVal := doc.String(key)
-						u.Debugf("strval: %s=%q", key, strVal)
+						//u.Debugf("strval: %s=%q", key, strVal)
 						if strVal != "" {
 							vals[fldI] = strVal
 						} else {
@@ -366,7 +366,7 @@ func (m *ResultReader) pageDocs() error {
 					case value.NumberType:
 						vals[fldI] = doc.Float64(key)
 					case value.ByteSliceType:
-						u.Debugf("blob?  %v", key)
+						//u.Debugf("blob?  %v", key)
 						if docVal := doc.Get(key); docVal != nil {
 							by, _ := json.Marshal(docVal)
 							vals[fldI] = string(by)
@@ -378,7 +378,7 @@ func (m *ResultReader) pageDocs() error {
 
 				fldI++
 			}
-			u.Infof("vals: %#v", vals)
+			//u.Debugf("vals: %#v", vals)
 			m.Vals = append(m.Vals, vals)
 		}
 	}

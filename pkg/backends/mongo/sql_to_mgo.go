@@ -34,7 +34,6 @@ var (
 type SqlToMgo struct {
 	*exec.TaskBase
 	resp           *ResultReader
-	cols           []string
 	sp             *plan.SourcePlan
 	tbl            *datasource.Table
 	sel            *expr.SqlSelect
@@ -47,6 +46,7 @@ type SqlToMgo struct {
 	sort           []bson.M
 	hasMultiValue  bool // Multi-Value vs Single-Value aggs
 	hasSingleValue bool // single value agg
+	//cols           []string
 	//proj           *expr.Projection
 	//hasprojection  bool
 }
@@ -61,7 +61,7 @@ func NewSqlToMgo(table *datasource.Table, sess *mgo.Session) *SqlToMgo {
 }
 
 func (m *SqlToMgo) Columns() []string {
-	return m.cols
+	return m.tbl.Columns()
 }
 
 func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.VisitStatus, error) {
@@ -69,13 +69,16 @@ func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.Visit
 	var err error
 	m.sp = sp
 	req := sp.Source
-	u.Infof("mongo.VisitSubSelect %v", req.String())
+	u.Infof("mongo.VisitSubSelect %v final:%v", req.String(), sp.Final)
 
 	m.sel = req
 
 	limit := req.Limit
 	if limit == 0 {
 		limit = DefaultLimit
+	}
+	if !sp.Final {
+		limit = 1e10
 	}
 
 	if req.Where != nil {
@@ -131,6 +134,7 @@ func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.Visit
 	}
 
 	filterBy, _ := json.Marshal(m.filter)
+	//u.Infof("tbl %#v", m.tbl.Columns(), m.tbl)
 	u.Infof("filter: %#v", m.filter)
 	u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
 	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter).Limit(limit)

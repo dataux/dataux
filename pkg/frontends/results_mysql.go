@@ -74,7 +74,7 @@ func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 		switch mt := msg.Body().(type) {
 		case *datasource.SqlDriverMessageMap:
-			u.Infof("write: %#v", mt.Values())
+			//u.Infof("write: %#v", mt.Values())
 			m.Rs.AddRowValues(mt.Values())
 			//u.Debugf( "return from mysql.resultWrite")
 			return true
@@ -112,7 +112,7 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 		u.Warnf("no projection")
 	}
 	cols := m.projection.Proj.Columns
-	u.Debugf("projection: %p writing mysql headers %s", m.projection.Proj, m.projection.Proj)
+	//u.Debugf("projection: %p writing mysql headers %s", m.projection.Proj, m.projection.Proj)
 	if len(cols) == 0 {
 		u.Warnf("Wat?   no columns?   %v", 0)
 		return nil
@@ -125,7 +125,7 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 			as = col.Col.As
 		}
 		m.Rs.FieldNames[col.Name] = i
-		u.Debugf("writeheader %s %v", col.Name, col.Type.String())
+		//u.Debugf("writeheader %s %v", col.Name, col.Type.String())
 		switch col.Type {
 		case value.IntType:
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_LONG))
@@ -163,7 +163,7 @@ func (m *MySqlResultWriter) Finalize() error {
 func NewEmptyResultset(pp *plan.Projection) *mysql.Resultset {
 
 	r := new(mysql.Resultset)
-	u.Debugf("projection: %#v", pp)
+	//u.Debugf("projection: %#v", pp)
 	r.Fields = make([]*mysql.Field, len(pp.Proj.Columns))
 	r.FieldNames = make(map[string]int, len(r.Fields))
 	r.Values = make([][]driver.Value, 0)
@@ -184,7 +184,7 @@ func NewEmptyResultset(pp *plan.Projection) *mysql.Resultset {
 		default:
 			r.Fields[i].Name = []byte(col.As)
 		}
-		u.Infof("field: %#v", col)
+		//u.Debugf("field: %#v", col)
 	}
 	return r
 }
