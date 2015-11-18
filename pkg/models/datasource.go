@@ -21,10 +21,6 @@ type DataSource interface {
 	datasource.DataSource
 }
 
-// type SourceTask interface {
-// 	datasource.Scanner
-// }
-
 type DataSourceCreator func(*datasource.SourceSchema, *Config) DataSource
 
 func DataSourceRegister(sourceType string, fn DataSourceCreator) {

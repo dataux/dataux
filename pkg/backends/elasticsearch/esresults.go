@@ -17,9 +17,9 @@ import (
 var (
 	_ models.ResultProvider = (*ResultReader)(nil)
 
-	// Ensure we implement datasource.DataSource, Scanner
-	_ datasource.DataSource = (*ResultReader)(nil)
-	_ datasource.Scanner    = (*ResultReader)(nil)
+	// Ensure we implement Scanner
+	_ expr.Task          = (*ResultReader)(nil)
+	_ datasource.Scanner = (*ResultReader)(nil)
 )
 
 // Elasticsearch ResultProvider, adapts the elasticsearch http json
@@ -106,26 +106,8 @@ func (m *ResultReader) buildProjection() {
 	u.Debugf("leaving Columns:  %v", len(m.proj.Columns))
 }
 
-func (m *ResultReader) Tables() []string {
-	return nil
-}
-
 func (m *ResultReader) Columns() []string {
 	return m.cols
-}
-
-func (m *ResultReader) Projection() (*expr.Projection, error) {
-	m.buildProjection()
-	return m.proj, nil
-}
-
-func (m *ResultReader) Open(connInfo string) (datasource.SourceConn, error) {
-	panic("Not implemented")
-	return m, nil
-}
-
-func (m *ResultReader) Schema() *datasource.Schema {
-	return m.Req.tbl.Schema
 }
 
 func (m *ResultReader) CreateIterator(filter expr.Node) datasource.Iterator {
