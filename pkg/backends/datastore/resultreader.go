@@ -9,6 +9,7 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/models"
@@ -17,14 +18,14 @@ import (
 var (
 	_ models.ResultProvider = (*ResultReader)(nil)
 
-	// Ensure we implement datasource.DataSource, Scanner
-	_ datasource.DataSource = (*ResultReader)(nil)
-	_ datasource.Scanner    = (*ResultReader)(nil)
+	// Ensure we implement TaskRunner
+	_ exec.TaskRunner = (*ResultReader)(nil)
 )
 
 // Google Datastore ResultReader implements result paging, reading
 // - driver.Rows
 type ResultReader struct {
+	*exec.TaskBase
 	exit          <-chan bool
 	finalized     bool
 	hasprojection bool
@@ -44,6 +45,7 @@ type ResultReaderNext struct {
 
 func NewResultReader(req *SqlToDatstore) *ResultReader {
 	m := &ResultReader{}
+	m.TaskBase = exec.NewTaskBase("gds-resultreader")
 	m.Req = req
 	return m
 }
@@ -85,28 +87,6 @@ func (m *ResultReader) buildProjection() {
 	m.cols = colNames
 	m.proj.Columns = cols
 	//u.Debugf("leaving Columns:  %v", len(m.proj.Columns))
-}
-
-func (m *ResultReader) Tables() []string {
-	return nil
-}
-
-func (m *ResultReader) Columns() []string {
-	return m.cols
-}
-
-func (m *ResultReader) Projection() (*expr.Projection, error) {
-	m.buildProjection()
-	return m.proj, nil
-}
-
-func (m *ResultReader) Open(connInfo string) (datasource.SourceConn, error) {
-	panic("Not implemented")
-	return m, nil
-}
-
-func (m *ResultReader) Schema() *datasource.Schema {
-	return m.Req.tbl.Schema
 }
 
 func (m *ResultReader) MesgChan(filter expr.Node) <-chan datasource.Message {

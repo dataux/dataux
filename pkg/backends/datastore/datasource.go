@@ -37,12 +37,12 @@ var (
 	ErrNoSchema = fmt.Errorf("No schema or configuration exists")
 
 	// Ensure our Google DataStore implements datasource.DataSource interface
-	_ datasource.DataSource     = (*GoogleDSDataSource)(nil)
-	_ datasource.SourceMutation = (*GoogleDSDataSource)(nil)
+	_ datasource.DataSource = (*GoogleDSDataSource)(nil)
+	//_ datasource.SourceMutation = (*GoogleDSDataSource)(nil)
 	//_ datasource.Deletion       = (*GoogleDSDataSource)(nil)
 	//_ datasource.Scanner    = (*ResultReader)(nil)
 	// source
-	_ models.DataSource = (*GoogleDSDataSource)(nil)
+	//_ models.DataSource = (*GoogleDSDataSource)(nil)
 )
 
 func init() {
@@ -178,23 +178,13 @@ func (m *GoogleDSDataSource) Open(tableName string) (datasource.SourceConn, erro
 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, tableName)
 	}
 
-	//es := NewSqlToMgo(tbl, m.sess)
-	//u.Debugf("SqlToMgo: %#v", es)
-	// resp, err := es.Query(stmt, m.sess)
-	// if err != nil {
-	// 	u.Error(err)
-	// 	return nil, err
-	// }
-	//return es, nil
-	sqlDs := NewSqlToDatstore(tbl, m.dsClient, m.dsCtx)
-	return sqlDs, nil
-
-	return nil, nil
+	gdsSource := NewSqlToDatstore(tbl, m.dsClient, m.dsCtx)
+	return gdsSource, nil
 }
 
-func (m *GoogleDSDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, error) {
-	return m.GetBySelect(stmt)
-}
+// func (m *GoogleDSDataSource) SourceTask(stmt *expr.SqlSelect) (models.SourceTask, error) {
+// 	return m.GetBySelect(stmt)
+// }
 
 func (m *GoogleDSDataSource) GetBySelect(stmt *expr.SqlSelect) (*ResultReader, error) {
 
@@ -217,7 +207,6 @@ func (m *GoogleDSDataSource) GetBySelect(stmt *expr.SqlSelect) (*ResultReader, e
 		u.Errorf("Google datastore query interpreter failed: %v", err)
 		return nil, err
 	}
-
 	return resp, nil
 }
 

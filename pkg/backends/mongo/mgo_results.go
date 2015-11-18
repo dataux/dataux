@@ -20,10 +20,8 @@ import (
 var (
 	_ models.ResultProvider = (*ResultReader)(nil)
 
-	// Ensure we implement datasource.DataSource, Scanner
+	// Ensure we implement TaskRunner
 	_ exec.TaskRunner = (*ResultReader)(nil)
-	//_ datasource.SchemaColumns = (*ResultReader)(nil)
-	//_ datasource.Scanner       = (*ResultReader)(nil)
 )
 
 // Mongo ResultReader implements result paging, reading

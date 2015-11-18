@@ -13,6 +13,7 @@ import (
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
+	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/vm"
 )
 
@@ -22,7 +23,7 @@ var (
 	_ = json.Marshal
 
 	// planner
-	_ datasource.SourcePlanner = (*SqlToDatstore)(nil)
+	_ plan.SourceSelectPlanner = (*SqlToDatstore)(nil)
 )
 
 // Sql To Google Datastore Maps a Sql request into an equivalent
@@ -111,16 +112,16 @@ func (m *SqlToDatstore) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	return resultReader, nil
 }
 
-func (m *SqlToDatstore) Accept(visitor expr.SubVisitor) (datasource.Scanner, error) {
-	//u.Debugf("Accept(): %T  %#v", visitor, visitor)
+func (m *SqlToDatstore) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.VisitStatus, error) {
+	//u.Debugf("VisitSourceSelect(): %T  %#v", visitor, visitor)
 	// TODO:   this is really bad, this should not be a type switch
 	//         something pretty wrong upstream, that the Plan doesn't do the walk visitor
-	switch plan := visitor.(type) {
-	case *exec.SourcePlan:
-		u.Debugf("Accept():  %T  %#v", plan, plan)
-		return m.Query(plan.SqlSource.Source)
+	u.Debugf("VisitSourceSelect():  %T  %#v", sp, sp)
+	reader, err := m.Query(sp.SqlSource.Source)
+	if err != nil {
+		return nil, expr.VisitError, nil
 	}
-	return nil, expr.ErrNotImplemented
+	return reader, expr.VisitContinue, nil
 }
 
 // WalkWhereNode() an expression, and its AND logic to create an appropriately
