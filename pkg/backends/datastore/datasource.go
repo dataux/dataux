@@ -295,14 +295,14 @@ func (m *GoogleDSDataSource) loadTableSchema(tableLower, tableOriginal string) (
 	props := pageQuery(m.dsClient.Run(m.dsCtx, datastore.NewQuery(tableOriginal).Limit(20)))
 	for _, row := range props {
 
-		for _, p := range row.props {
+		for i, p := range row.props {
 			//u.Warnf("%#v ", p)
 			colName := strings.ToLower(p.Name)
 
 			if tbl.HasField(colName) {
 				continue
 			}
-			//u.Debugf("%d found col: %s %T=%v", i, colName, p.Value, p.Value)
+			u.Debugf("%d found col: %s %T=%v", i, colName, p.Value, p.Value)
 			switch val := p.Value.(type) {
 			case *datastore.Key:
 				//u.Debugf("found datastore.Key: %v='%#v'", colName, val)
@@ -347,7 +347,7 @@ func (m *GoogleDSDataSource) loadTableSchema(tableLower, tableOriginal string) (
 	}
 	//if len(tbl.FieldMap) > 0 {
 
-	u.Infof("caching schema:%p   %q", m.schema, tableOriginal)
+	u.Infof("caching schema:%p   %q  cols=%v", m.schema, tableOriginal, colNames)
 	m.schema.AddTable(tbl)
 	tbl.SetColumns(colNames)
 	return tbl, nil
@@ -419,8 +419,8 @@ func (m *schemaType) Load(props []datastore.Property) error {
 	m.Vals = make(map[string]interface{}, len(props))
 	m.props = props
 	//u.Infof("Load: %#v", props)
-	for _, p := range props {
-		//u.Infof("prop: %#v", p)
+	for i, p := range props {
+		u.Infof("%d prop: %#v", i, p)
 		m.Vals[p.Name] = p.Value
 	}
 	return nil

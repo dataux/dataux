@@ -472,6 +472,7 @@ func TestUpdateSimple(t *testing.T) {
 		Created time.Time
 		Updated time.Time
 	}{}
+	u.Warnf("about to insert")
 	validateQuerySpec(t, tu.QuerySpec{
 		Exec: `INSERT INTO DataUxTestUser 
 							(id, name, deleted, created, updated, roles) 
@@ -480,8 +481,8 @@ func TestUpdateSimple(t *testing.T) {
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
 	})
-	u.Infof("about to test post update")
-	return
+	u.Warnf("about to test post update")
+	//return
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         `select id, name, deleted, roles, created, updated from DataUxTestUser WHERE id = "user815"`,
 		ExpectRowCt: 1,
@@ -493,21 +494,31 @@ func TestUpdateSimple(t *testing.T) {
 		},
 		RowData: &data,
 	})
-
-	validateQuerySpec(t, tu.QuerySpec{
-		Exec:            `UPDATE DataUxTestUser SET name = "was_updated", [deleted] = true WHERE id = "user815"`,
-		ValidateRowData: func() {},
-		ExpectRowCt:     1,
-	})
-
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         `SELECT id, name, deleted, roles, created, updated FROM DataUxTestUser WHERE id = "user815"`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			u.Infof("%v", data)
 			assert.Tf(t, data.Id == "user815", "%v", data)
-			assert.Tf(t, data.Name == "was_updated", "%v", data)
-			assert.Tf(t, data.Deleted == true, "Not deleted? %v", data)
+			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
+		},
+		RowData: &data,
+	})
+	u.Warnf("about to update")
+	validateQuerySpec(t, tu.QuerySpec{
+		Exec:            `UPDATE DataUxTestUser SET name = "was_updated", [deleted] = true WHERE id = "user815"`,
+		ValidateRowData: func() {},
+		ExpectRowCt:     1,
+	})
+	u.Warnf("about to final read")
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         `SELECT id, name, deleted, roles, created, updated FROM DataUxTestUser WHERE id = "user815"`,
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			u.Infof("%v", data)
+			assert.Tf(t, data.Id == "user815", "fr1 %v", data)
+			assert.Tf(t, data.Name == "was_updated", "fr2 %v", data)
+			assert.Tf(t, data.Deleted == true, "fr3 deleted? %v", data)
 		},
 		RowData: &data,
 	})

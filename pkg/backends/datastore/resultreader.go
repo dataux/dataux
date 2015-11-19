@@ -186,7 +186,7 @@ func (m *ResultReader) Run(context *expr.Context) error {
 				for i, col := range cols {
 					if col.Name == prop.Name {
 						vals[i] = prop.Value
-						//u.Debugf("%-10s %T\t%v", col.Name, prop.Value, prop.Value)
+						u.Debugf("%-10s %T\t%v", col.Name, prop.Value, prop.Value)
 						break
 					}
 				}
@@ -243,7 +243,7 @@ func (m *Row) Load(props []datastore.Property) error {
 	m.props = props
 	//u.Infof("Load: %#v", props)
 	for i, p := range props {
-		//u.Infof("%d prop: %#v", i, p)
+		u.Infof("%d prop: %#v", i, p)
 		m.Vals[i] = p.Value
 	}
 	return nil

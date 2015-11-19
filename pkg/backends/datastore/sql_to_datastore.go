@@ -65,7 +65,7 @@ func (m *SqlToDatstore) Host() string {
 func (m *SqlToDatstore) Query(req *expr.SqlSelect) (*ResultReader, error) {
 
 	m.query = datastore.NewQuery(m.tbl.NameOriginal)
-	//u.Debugf("%s   query:%p", m.tbl.NameOriginal, m.query)
+	u.Debugf("%s   query:%p", m.tbl.NameOriginal, m.query)
 	var err error
 	m.sel = req
 	limit := req.Limit
@@ -117,6 +117,29 @@ func (m *SqlToDatstore) Query(req *expr.SqlSelect) (*ResultReader, error) {
 	return resultReader, nil
 }
 
+func (m *SqlToDatstore) getEntity(req *expr.SqlSelect) (*Row, error) {
+
+	m.query = datastore.NewQuery(m.tbl.NameOriginal)
+	if req.Where != nil {
+		err := m.WalkWhereNode(req.Where.Expr)
+		if err != nil {
+			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.String(), err)
+			return nil, err
+		}
+	}
+
+	var rows []*Row
+	keys, err := m.dsClient.GetAll(m.dsCtx, m.query, &rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(keys) == 1 {
+		rows[0].key = keys[0]
+		return rows[0], nil
+	}
+	return nil, fmt.Errorf("expected one row got %v", len(rows))
+}
+
 func (m *SqlToDatstore) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.VisitStatus, error) {
 	//u.Debugf("VisitSourceSelect(): %T  %#v", visitor, visitor)
 	// TODO:   this is really bad, this should not be a type switch
@@ -150,42 +173,55 @@ func (m *SqlToDatstore) Put(ctx context.Context, key datasource.Key, val interfa
 		return nil, fmt.Errorf("Must have schema for updates in DataStore")
 	}
 
+	/*
+		TODO:
+		  we need to (optionally?) wrap this in a
+		  transaction and do a read, write in transaction
+	*/
 	var dskey *datastore.Key
 	props := make([]datastore.Property, 0)
 
 	cols := m.tbl.Columns()
 	var row []driver.Value
-	u.Infof("PUT columns? %v", cols)
+	//u.Infof("PUT columns? %v", cols)
 	curRow := make([]driver.Value, len(cols))
 
 	if key != nil {
 		dskey = datastore.NewKey(m.dsCtx, m.tbl.NameOriginal, fmt.Sprintf("%v", key.Key()), 0, nil)
 	}
 
+	var sel *expr.SqlSelect
 	switch sqlReq := m.stmt.(type) {
 	case *expr.SqlInsert:
 		cols = sqlReq.ColumnNames()
 	case *expr.SqlUpdate:
 		// need to fetch first?
-		sel := sqlReq.SqlSelect()
-		//u.Debugf("new Select:  %s", sel)
-		res, err := m.Query(sel)
+		sel = sqlReq.SqlSelect()
+	case *expr.SqlUpsert:
+		sel = sqlReq.SqlSelect()
+	}
+	if sel != nil {
+		u.Warnf("fetch first w Select:  %s", sel)
+		entity, err := m.getEntity(sel)
 		if err != nil {
 			u.Errorf("wat?  %v", err)
 			return nil, err
 		}
 
-		if len(res.Vals) == 1 {
-			curRow = res.Vals[0]
+		if len(entity.Vals) > 0 {
+			curRow = entity.Vals
+			for i, v := range curRow {
+				u.Debugf("%d read current %v", i, v)
+			}
 		} else {
-			u.Warnf("should only have one to update in Put(): %v", len(res.Vals))
+			u.Warnf("should only have one to update in Put(): %v  %#v", len(entity.Vals), entity)
 		}
 	}
 
 	switch valT := val.(type) {
 	case []driver.Value:
 		row = valT
-		u.Infof("row len=%v   fieldlen=%v col len=%v", len(row), len(m.tbl.Fields), len(cols))
+		//u.Infof("row len=%v   fieldlen=%v col len=%v", len(row), len(m.tbl.Fields), len(cols))
 		for _, f := range m.tbl.Fields {
 			for i, colName := range cols {
 				if f.Name == colName {
@@ -217,13 +253,12 @@ func (m *SqlToDatstore) Put(ctx context.Context, key datasource.Key, val interfa
 		for i, f := range m.tbl.Fields {
 			for colName, driverVal := range valT {
 				if f.Name == colName {
-					u.Debugf("PUT field: i=%d col=%s val=%v  T:%T", i, colName, driverVal, driverVal)
+					u.Debugf("PUT field: i=%d col=%s val=%v  T:%T cur:%v", i, colName, driverVal, driverVal, curRow[i])
 					switch val := driverVal.(type) {
 					case string, []byte, int, int64, bool:
-
 						curRow[i] = val
 					case time.Time:
-						curRow[i] = &val
+						curRow[i] = val
 					case []value.Value:
 						by, err := json.Marshal(val)
 						if err != nil {
@@ -238,6 +273,7 @@ func (m *SqlToDatstore) Put(ctx context.Context, key datasource.Key, val interfa
 				}
 			}
 			//u.Infof(" %v curRow? %d %#v", f.Name, len(curRow), curRow)
+			u.Debugf("%d writing %-10s %T\t%v", i, f.Name, curRow[i], curRow[i])
 			props = append(props, datastore.Property{Name: f.Name, Value: curRow[i]})
 		}
 
