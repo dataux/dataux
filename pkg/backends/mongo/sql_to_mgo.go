@@ -141,7 +141,7 @@ func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.Visit
 
 	resultReader := NewResultReader(m, query)
 	m.resp = resultReader
-	resultReader.Finalize()
+	//resultReader.Finalize()
 	return resultReader, expr.VisitFinal, nil
 }
 

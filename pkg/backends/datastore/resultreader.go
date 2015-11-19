@@ -2,7 +2,6 @@ package datastore
 
 import (
 	"database/sql/driver"
-	"io"
 	"time"
 
 	"google.golang.org/cloud/datastore"
@@ -12,12 +11,9 @@ import (
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
-	"github.com/dataux/dataux/pkg/models"
 )
 
 var (
-	_ models.ResultProvider = (*ResultReader)(nil)
-
 	// Ensure we implement TaskRunner
 	_ exec.TaskRunner = (*ResultReader)(nil)
 )
@@ -89,27 +85,23 @@ func (m *ResultReader) buildProjection() {
 	//u.Debugf("leaving Columns:  %v", len(m.proj.Columns))
 }
 
-func (m *ResultReader) MesgChan(filter expr.Node) <-chan datasource.Message {
-	iter := m.CreateIterator(filter)
-	return datasource.SourceIterChannel(iter, filter, m.exit)
-}
-
-func (m *ResultReader) CreateIterator(filter expr.Node) datasource.Iterator {
-	return &ResultReaderNext{m}
-}
-
-// Finalize maps the Google Datastore properties into
+// Runs the Google Datastore properties into
 //    [][]interface{}   which is compabitble with sql/driver values
 // as well as making a projection, ie column selection
 //
-func (m *ResultReader) Finalize() error {
+// func (m *ResultReader) Finalize() error {
+func (m *ResultReader) Run(context *expr.Context) error {
 
+	sigChan := m.SigChan()
+	outCh := m.MessageOut()
+	//defer context.Recover()
+	defer func() {
+		close(outCh) // closing output channels is the signal to stop
+		//m.TaskBase.Close()
+		u.Debugf("nice, finalize ResultReader out: %p  row ct %v", outCh, len(m.Vals))
+	}()
 	m.finalized = true
 	m.buildProjection()
-
-	defer func() {
-		u.Debugf("nice, finalize vals in ResultReader: %v", len(m.Vals))
-	}()
 
 	sql := m.Req.sel
 	u.Infof("query: %#v", m.Req.query)
@@ -131,7 +123,12 @@ func (m *ResultReader) Finalize() error {
 		return nil
 	}
 
-	cols := m.proj.Columns
+	//cols := m.proj.Columns
+	cols := m.Req.plan.Proj.Columns
+	colNames := make(map[string]int, len(cols))
+	for i, col := range cols {
+		colNames[col.As] = i
+	}
 	needsProjection := false
 	posMap := make([]int, len(cols))
 	if len(cols) == 0 {
@@ -140,9 +137,6 @@ func (m *ResultReader) Finalize() error {
 		// Doing projection on server side datastore really seems to
 		// introduce all kinds of weird errors and rules, so mostly just
 		// do projection here in proxy
-
-		// q = q.Project(m.cols...)
-		// q.Project(m.cols...)
 
 		needsProjection = true
 		for i, col := range cols {
@@ -177,6 +171,7 @@ func (m *ResultReader) Finalize() error {
 		key, err := iter.Next(&row)
 		if err != nil {
 			if err == datastore.Done {
+				u.Infof("done? rowct=%v", len(m.Vals))
 				break
 			}
 			u.Errorf("uknown datastore error: %v", err)
@@ -184,8 +179,9 @@ func (m *ResultReader) Finalize() error {
 		}
 
 		row.key = key
+		var vals []driver.Value
 		if needsProjection {
-			vals := make([]driver.Value, len(cols))
+			vals = make([]driver.Value, len(cols))
 			for _, prop := range row.props {
 				for i, col := range cols {
 					if col.Name == prop.Name {
@@ -198,46 +194,23 @@ func (m *ResultReader) Finalize() error {
 			//u.Debugf("%v", vals)
 			m.Vals = append(m.Vals, vals)
 		} else {
+			vals = row.Vals
 			m.Vals = append(m.Vals, row.Vals)
 		}
-
+		u.Debugf("new row ct: %v cols:%v vals:%v", len(m.Vals), colNames, vals)
+		//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
+		msg := datasource.NewSqlDriverMessageMap(uint64(len(m.Vals)), vals, colNames)
+		u.Debugf("In gds source iter %#v", vals)
+		select {
+		case <-sigChan:
+			return nil
+		case outCh <- msg:
+			// continue
+		}
 		//u.Debugf("vals:  %v", row.Vals)
 	}
 	u.Infof("finished query, took: %v for %v rows", time.Now().Sub(queryStart), len(m.Vals))
 	return nil
-}
-
-// Implement sql/driver Rows Next() interface
-func (m *ResultReader) Next(row []driver.Value) error {
-	if m.cursor >= len(m.Vals) {
-		return io.EOF
-	}
-	m.cursor++
-	u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
-	for i, val := range m.Vals[m.cursor-1] {
-		row[i] = val
-	}
-	return nil
-}
-
-func (m *ResultReaderNext) Next() datasource.Message {
-	select {
-	case <-m.exit:
-		return nil
-	default:
-		if !m.finalized {
-			if err := m.Finalize(); err != nil {
-				u.Errorf("Could not finalize: %v", err)
-				return nil
-			}
-		}
-		if m.cursor >= len(m.Vals) {
-			return nil
-		}
-		m.cursor++
-		//u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
-		return &datasource.SqlDriverMessage{m.Vals[m.cursor-1], uint64(m.cursor)}
-	}
 }
 
 func pageRowsQuery(iter *datastore.Iterator) []Row {

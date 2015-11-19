@@ -4,22 +4,18 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"io"
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
-	"github.com/dataux/dataux/pkg/models"
 )
 
 var (
-	_ models.ResultProvider = (*ResultReader)(nil)
-
 	// Ensure we implement Scanner
-	_ expr.Task          = (*ResultReader)(nil)
-	_ datasource.Scanner = (*ResultReader)(nil)
+	_ expr.Task = (*ResultReader)(nil)
+	//_ datasource.Scanner = (*ResultReader)(nil)
 )
 
 // Elasticsearch ResultProvider, adapts the elasticsearch http json
@@ -108,19 +104,6 @@ func (m *ResultReader) buildProjection() {
 
 func (m *ResultReader) Columns() []string {
 	return m.cols
-}
-
-func (m *ResultReader) CreateIterator(filter expr.Node) datasource.Iterator {
-	return &ResultReaderNext{m}
-}
-
-func (m *ResultReader) MesgChan(filter expr.Node) <-chan datasource.Message {
-	iter := m.CreateIterator(filter)
-	if m == nil {
-		u.LogTracef(u.WARN, "wat, no iter?")
-		return nil
-	}
-	return datasource.SourceIterChannel(iter, filter, m.SigChan())
 }
 
 // Run()
@@ -366,38 +349,4 @@ func (m *ResultReader) pageDocs() error {
 	}
 
 	return nil
-}
-func (m *ResultReader) Finalize() error { return nil }
-
-// Implement sql/driver Rows Next() interface
-func (m *ResultReader) Next(row []driver.Value) error {
-	if m.cursor >= len(m.Vals) {
-		return io.EOF
-	}
-	m.cursor++
-	u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
-	for i, val := range m.Vals[m.cursor-1] {
-		row[i] = val
-	}
-	return nil
-}
-
-func (m *ResultReaderNext) Next() datasource.Message {
-	select {
-	case <-m.SigChan():
-		return nil
-	default:
-		if !m.finalized {
-			if err := m.Finalize(); err != nil {
-				u.Errorf("Could not finalize: %v", err)
-				return nil
-			}
-		}
-		if m.cursor >= len(m.Vals) {
-			return nil
-		}
-		m.cursor++
-		//u.Debugf("ResultReader.Next():  cursor:%v  %v", m.cursor, len(m.Vals[m.cursor-1]))
-		return &datasource.SqlDriverMessage{m.Vals[m.cursor-1], uint64(m.cursor)}
-	}
 }

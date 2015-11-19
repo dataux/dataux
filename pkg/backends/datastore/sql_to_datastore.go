@@ -1,9 +1,11 @@
 package datastore
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"golang.org/x/net/context"
 	"google.golang.org/cloud/datastore"
@@ -14,6 +16,7 @@ import (
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/value"
 	"github.com/araddon/qlbridge/vm"
 )
 
@@ -32,7 +35,9 @@ type SqlToDatstore struct {
 	*exec.TaskBase
 	resp           *ResultReader
 	tbl            *datasource.Table
+	plan           *plan.SourcePlan
 	sel            *expr.SqlSelect
+	stmt           expr.SqlStatement
 	schema         *datasource.SourceSchema
 	dsCtx          context.Context
 	dsClient       *datastore.Client
@@ -108,7 +113,7 @@ func (m *SqlToDatstore) Query(req *expr.SqlSelect) (*ResultReader, error) {
 
 	resultReader := NewResultReader(m)
 	m.resp = resultReader
-	resultReader.Finalize()
+	//resultReader.Finalize()
 	return resultReader, nil
 }
 
@@ -117,11 +122,164 @@ func (m *SqlToDatstore) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.
 	// TODO:   this is really bad, this should not be a type switch
 	//         something pretty wrong upstream, that the Plan doesn't do the walk visitor
 	u.Debugf("VisitSourceSelect():  %T  %#v", sp, sp)
+	m.plan = sp
 	reader, err := m.Query(sp.SqlSource.Source)
 	if err != nil {
 		return nil, expr.VisitError, nil
 	}
 	return reader, expr.VisitContinue, nil
+}
+
+// interface for SourceMutation
+//CreateMutator(stmt expr.SqlStatement) (Mutator, error)
+func (m *SqlToDatstore) CreateMutator(stmt expr.SqlStatement) (datasource.Mutator, error) {
+	m.stmt = stmt
+	return m, nil
+}
+
+// interface for Upsert.Put()
+func (m *SqlToDatstore) Put(ctx context.Context, key datasource.Key, val interface{}) (datasource.Key, error) {
+
+	if key == nil {
+		u.Debugf("didn't have key?  %v", val)
+		//return nil, fmt.Errorf("Must have key for updates in DataStore")
+	}
+
+	if m.schema == nil {
+		u.Warnf("must have schema")
+		return nil, fmt.Errorf("Must have schema for updates in DataStore")
+	}
+
+	var dskey *datastore.Key
+	props := make([]datastore.Property, 0)
+
+	cols := m.tbl.Columns()
+	var row []driver.Value
+	u.Infof("PUT columns? %v", cols)
+	curRow := make([]driver.Value, len(cols))
+
+	if key != nil {
+		dskey = datastore.NewKey(m.dsCtx, m.tbl.NameOriginal, fmt.Sprintf("%v", key.Key()), 0, nil)
+	}
+
+	switch sqlReq := m.stmt.(type) {
+	case *expr.SqlInsert:
+		cols = sqlReq.ColumnNames()
+	case *expr.SqlUpdate:
+		// need to fetch first?
+		sel := sqlReq.SqlSelect()
+		//u.Debugf("new Select:  %s", sel)
+		res, err := m.Query(sel)
+		if err != nil {
+			u.Errorf("wat?  %v", err)
+			return nil, err
+		}
+
+		if len(res.Vals) == 1 {
+			curRow = res.Vals[0]
+		} else {
+			u.Warnf("should only have one to update in Put(): %v", len(res.Vals))
+		}
+	}
+
+	switch valT := val.(type) {
+	case []driver.Value:
+		row = valT
+		u.Infof("row len=%v   fieldlen=%v col len=%v", len(row), len(m.tbl.Fields), len(cols))
+		for _, f := range m.tbl.Fields {
+			for i, colName := range cols {
+				if f.Name == colName {
+
+					switch val := row[i].(type) {
+					case string, []byte, int, int64, bool, time.Time:
+						//u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, row[i], row[i])
+						props = append(props, datastore.Property{Name: f.Name, Value: val})
+					case []value.Value:
+						by, err := json.Marshal(val)
+						if err != nil {
+							u.Errorf("Error converting field %v  err=%v", val, err)
+						}
+						//u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, string(by), by)
+						props = append(props, datastore.Property{Name: f.Name, Value: by})
+					default:
+						u.Warnf("unsupported conversion: %T  %v", val, val)
+						props = append(props, datastore.Property{Name: f.Name, Value: val})
+					}
+
+					break
+				}
+			}
+		}
+		// Create the key by position?  HACK
+		dskey = datastore.NewKey(m.dsCtx, m.tbl.NameOriginal, fmt.Sprintf("%v", row[0]), 0, nil)
+
+	case map[string]driver.Value:
+		for i, f := range m.tbl.Fields {
+			for colName, driverVal := range valT {
+				if f.Name == colName {
+					u.Debugf("PUT field: i=%d col=%s val=%v  T:%T", i, colName, driverVal, driverVal)
+					switch val := driverVal.(type) {
+					case string, []byte, int, int64, bool:
+
+						curRow[i] = val
+					case time.Time:
+						curRow[i] = &val
+					case []value.Value:
+						by, err := json.Marshal(val)
+						if err != nil {
+							u.Errorf("Error converting field %v  err=%v", val, err)
+						}
+						curRow[i] = by
+					default:
+						u.Warnf("unsupported conversion: %T  %v", val, val)
+
+					}
+					break
+				}
+			}
+			//u.Infof(" %v curRow? %d %#v", f.Name, len(curRow), curRow)
+			props = append(props, datastore.Property{Name: f.Name, Value: curRow[i]})
+		}
+
+	default:
+		u.Warnf("unsupported type: %T  %#v", val, val)
+		return nil, fmt.Errorf("Was not []driver.Value?  %T", val)
+	}
+
+	//u.Debugf("has key? sourcekey: %v  dskey:%#v", key, dskey)
+	//u.Debugf("dskey:  %s   table=%s", dskey, m.tbl.NameOriginal)
+	//u.Debugf("props:  %v", props)
+
+	pl := datastore.PropertyList(props)
+	dskey, err := m.dsClient.Put(m.dsCtx, dskey, &pl)
+	if err != nil {
+		u.Errorf("could not save? %v", err)
+		return nil, err
+	}
+	newKey := datasource.NewKeyCol("id", dskey.String())
+	return newKey, nil
+}
+
+func (m *SqlToDatstore) PutMulti(ctx context.Context, keys []datasource.Key, src interface{}) ([]datasource.Key, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *SqlToDatstore) Delete(key driver.Value) (int, error) {
+	dskey := datastore.NewKey(m.dsCtx, m.tbl.NameOriginal, fmt.Sprintf("%v", key), 0, nil)
+	u.Infof("dskey:  %s   table=%s", dskey, m.tbl.NameOriginal)
+	err := m.dsClient.Delete(m.dsCtx, dskey)
+	if err != nil {
+		u.Errorf("could not delete? %v", err)
+		return 0, err
+	}
+	return 1, nil
+}
+func (m *SqlToDatstore) DeleteExpression(where expr.Node) (int, error) {
+	delKey := datasource.KeyFromWhere(where)
+	if delKey != nil {
+		return m.Delete(delKey.Key())
+	}
+	return 0, fmt.Errorf("Could not delete with that where expression: %s", where)
 }
 
 // WalkWhereNode() an expression, and its AND logic to create an appropriately

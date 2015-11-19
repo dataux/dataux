@@ -188,7 +188,7 @@ func (m *SqlToEs) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.VisitS
 	// } else {
 	// 	resp.ScrollId = scrollId
 	// }
-	resp.Finalize()
+	//resp.Finalize()
 
 	return resp, expr.VisitFinal, nil
 }
