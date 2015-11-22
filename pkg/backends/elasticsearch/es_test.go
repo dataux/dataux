@@ -318,7 +318,7 @@ func TestSelectWhereBetween(t *testing.T) {
 		Sql:         `select actor, repository.name from github_push where repository.stargazers_count BETWEEN "1000" AND 1100;`,
 		ExpectRowCt: 20,
 		ValidateRowData: func() {
-			u.Debugf("%#v", data)
+			//u.Debugf("%#v", data)
 			assert.Tf(t, data.Name != "", "%v", data)
 			//assert.Tf(t, data.Ct == 74995 || data.Ct == 74994, "%v", data)
 		},

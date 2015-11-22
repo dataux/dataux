@@ -187,7 +187,7 @@ func TestMongoToEsJoin(t *testing.T) {
 		ValidateRowData: func() {
 			switch data.Actor {
 			case "araddon":
-				u.Debugf("arddon:  %#v", data)
+				u.Debugf("araddon:  %#v", data)
 				assert.Tf(t, data.Repo == "qlparser" || data.Repo == "dateparse", "%#v", data)
 			default:
 				//assert.Tf(t, false, "Should not have found this column: %#v", data)

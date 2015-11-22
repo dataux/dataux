@@ -104,7 +104,7 @@ func (m *ResultReader) Run(context *expr.Context) error {
 	m.buildProjection()
 
 	sql := m.Req.sel
-	u.Infof("query: %#v", m.Req.query)
+	//u.Infof("query: %#v", m.Req.query)
 	q := m.Req.query
 
 	m.Vals = make([][]driver.Value, 0)
@@ -127,12 +127,13 @@ func (m *ResultReader) Run(context *expr.Context) error {
 	cols := m.Req.plan.Proj.Columns
 	colNames := make(map[string]int, len(cols))
 	for i, col := range cols {
-		colNames[col.As] = i
+		colNames[col.Name] = i
+		//u.Debugf("col.name=%v  col.as=%s", col.Name, col.As)
 	}
 	needsProjection := false
 	posMap := make([]int, len(cols))
 	if len(cols) == 0 {
-		u.Errorf("WTF?  no cols? %v", cols)
+		u.Errorf("no cols? %v  *?", cols)
 	} else {
 		// Doing projection on server side datastore really seems to
 		// introduce all kinds of weird errors and rules, so mostly just
@@ -181,26 +182,35 @@ func (m *ResultReader) Run(context *expr.Context) error {
 		row.key = key
 		var vals []driver.Value
 		if needsProjection {
+
 			vals = make([]driver.Value, len(cols))
 			for _, prop := range row.props {
+				//found := false
 				for i, col := range cols {
+					//u.Infof("prop.name=%s col.Name=%s", prop.Name, col.Name)
 					if col.Name == prop.Name {
 						vals[i] = prop.Value
-						u.Debugf("%-10s %T\t%v", col.Name, prop.Value, prop.Value)
+						//u.Debugf("%-2d col.name=%-10s prop.T %T\tprop.v%v", i, col.Name, prop.Value, prop.Value)
+						//found = true
 						break
 					}
 				}
+				// if !found {
+				// 	u.Warnf("not found? %#v", prop)
+				// }
 			}
+
 			//u.Debugf("%v", vals)
+			//vals = row.Vals
 			m.Vals = append(m.Vals, vals)
 		} else {
-			vals = row.Vals
-			m.Vals = append(m.Vals, row.Vals)
+			vals = row.Vals(colNames)
+			m.Vals = append(m.Vals, vals)
 		}
 		u.Debugf("new row ct: %v cols:%v vals:%v", len(m.Vals), colNames, vals)
 		//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
 		msg := datasource.NewSqlDriverMessageMap(uint64(len(m.Vals)), vals, colNames)
-		u.Debugf("In gds source iter %#v", vals)
+		//u.Debugf("In gds source iter %#v", vals)
 		select {
 		case <-sigChan:
 			return nil
@@ -233,19 +243,35 @@ func pageRowsQuery(iter *datastore.Iterator) []Row {
 }
 
 type Row struct {
-	Vals  []driver.Value
+	vals  []driver.Value
 	props []datastore.Property
 	key   *datastore.Key
 }
 
+func (m *Row) Vals(cols map[string]int) []driver.Value {
+	if len(m.vals) > 0 {
+		return m.vals
+	}
+	m.vals = make([]driver.Value, len(cols))
+	for colName, idx := range cols {
+		for _, p := range m.props {
+			if p.Name == colName {
+				//u.Infof("%d prop: %#v", idx, p)
+				m.vals[idx] = p.Value
+			}
+		}
+
+	}
+	return m.vals
+}
 func (m *Row) Load(props []datastore.Property) error {
-	m.Vals = make([]driver.Value, len(props))
+	//m.Vals = make([]driver.Value, len(props))
 	m.props = props
 	//u.Infof("Load: %#v", props)
-	for i, p := range props {
-		u.Infof("%d prop: %#v", i, p)
-		m.Vals[i] = p.Value
-	}
+	// for i, p := range props {
+	// 	u.Infof("%d prop: %#v", i, p)
+	// 	m.Vals[i] = p.Value
+	// }
 	return nil
 }
 func (m *Row) Save() ([]datastore.Property, error) {

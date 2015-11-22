@@ -418,9 +418,7 @@ type schemaType struct {
 func (m *schemaType) Load(props []datastore.Property) error {
 	m.Vals = make(map[string]interface{}, len(props))
 	m.props = props
-	//u.Infof("Load: %#v", props)
-	for i, p := range props {
-		u.Infof("%d prop: %#v", i, p)
+	for _, p := range props {
 		m.Vals[p.Name] = p.Value
 	}
 	return nil

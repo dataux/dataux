@@ -55,6 +55,7 @@ func NewMysqlListener(feConf *models.ListenerConfig, conf *models.Config) (*Mysq
 type MysqlListener struct {
 	cfg         *models.Config
 	feconf      *models.ListenerConfig
+	connCt      int
 	addr        string
 	user        string
 	password    string
@@ -94,20 +95,20 @@ func (m *MysqlListener) Close() error {
 func (m *MysqlListener) OnConn(c net.Conn) {
 
 	conn := newConn(m, c)
-	u.Debugf("new conn p:%p", conn)
+	u.Debugf("new conn id=%d p:%p", m.connCt, conn)
 
-	if !m.cfg.SupressRecover {
-		defer func() {
+	defer func() {
+		if !m.cfg.SupressRecover {
 			if err := recover(); err != nil {
 				const size = 4096
 				buf := make([]byte, size)
 				buf = buf[:runtime.Stack(buf, false)]
 				u.Errorf("onConn panic %v: %v\n%s", c.RemoteAddr().String(), err, buf)
 			}
-
-			conn.Close()
-		}()
-	}
+		}
+		m.connCt--
+		conn.Close()
+	}()
 
 	//u.Infof("client connected")
 	if err := conn.Handshake(); err != nil {
@@ -115,7 +116,8 @@ func (m *MysqlListener) OnConn(c net.Conn) {
 		c.Close()
 		return
 	}
-
+	m.connCt++
+	// Blocking
 	conn.Run()
 }
 

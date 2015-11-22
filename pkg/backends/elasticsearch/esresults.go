@@ -99,10 +99,16 @@ func (m *ResultReader) buildProjection() {
 		}
 	}
 	m.proj.Columns = cols
+	colNames := make([]string, len(cols))
+	for i, col := range cols {
+		colNames[i] = col.Name
+	}
+	m.cols = colNames
 	u.Debugf("leaving Columns:  %v", len(m.proj.Columns))
 }
 
 func (m *ResultReader) Columns() []string {
+	m.buildProjection()
 	return m.cols
 }
 

@@ -64,13 +64,19 @@ func chooseBackend(schema *datasource.SourceSchema) string {
 	return ""
 }
 
+func (m *SqlToEs) Columns() []string {
+	return m.resp.Columns()
+}
+
 func (m *SqlToEs) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.VisitStatus, error) {
 
 	var err error
 	req := sp.SqlSource.Source
 	m.sel = sp.SqlSource.Source
-	if req.Limit == 0 {
+	if req.Limit == 0 && sp.Final {
 		req.Limit = DefaultLimit
+	} else if req.Limit == 0 {
+		req.Limit = 1000
 	}
 
 	if req.Where != nil {
@@ -178,18 +184,7 @@ func (m *SqlToEs) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.VisitS
 	}
 
 	resp.Docs = jhResp.Helpers("hits.hits")
-
-	//u.Debugf("%s", resp.Aggs.PrettyJson())
-	u.Debugf("doc.ct = %v", len(resp.Docs))
-
-	// if scrollId, ok := jhResp.StringSafe("_scroll_id"); !ok {
-	// 	sysErr = errloc.NewErrLoc("Malformed elasticsearch response")
-	// 	return ents, total, continuation, sysErr
-	// } else {
-	// 	resp.ScrollId = scrollId
-	// }
-	//resp.Finalize()
-
+	u.Debugf("p:%p resp %T  doc.ct = %v  cols:%v", resp, resp, len(resp.Docs), resp.Columns())
 	return resp, expr.VisitFinal, nil
 }
 

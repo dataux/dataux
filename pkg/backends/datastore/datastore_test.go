@@ -472,7 +472,7 @@ func TestUpdateSimple(t *testing.T) {
 		Created time.Time
 		Updated time.Time
 	}{}
-	u.Warnf("about to insert")
+	//u.Warnf("about to insert")
 	validateQuerySpec(t, tu.QuerySpec{
 		Exec: `INSERT INTO DataUxTestUser 
 							(id, name, deleted, created, updated, roles) 
@@ -481,7 +481,7 @@ func TestUpdateSimple(t *testing.T) {
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
 	})
-	u.Warnf("about to test post update")
+	//u.Warnf("about to test post update")
 	//return
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         `select id, name, deleted, roles, created, updated from DataUxTestUser WHERE id = "user815"`,
@@ -504,13 +504,13 @@ func TestUpdateSimple(t *testing.T) {
 		},
 		RowData: &data,
 	})
-	u.Warnf("about to update")
+	//u.Warnf("about to update")
 	validateQuerySpec(t, tu.QuerySpec{
 		Exec:            `UPDATE DataUxTestUser SET name = "was_updated", [deleted] = true WHERE id = "user815"`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
 	})
-	u.Warnf("about to final read")
+	//u.Warnf("about to final read")
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         `SELECT id, name, deleted, roles, created, updated FROM DataUxTestUser WHERE id = "user815"`,
 		ExpectRowCt: 1,

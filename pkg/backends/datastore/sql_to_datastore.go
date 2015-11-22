@@ -65,7 +65,7 @@ func (m *SqlToDatstore) Host() string {
 func (m *SqlToDatstore) Query(req *expr.SqlSelect) (*ResultReader, error) {
 
 	m.query = datastore.NewQuery(m.tbl.NameOriginal)
-	u.Debugf("%s   query:%p", m.tbl.NameOriginal, m.query)
+	//u.Debugf("%s   query:%p", m.tbl.NameOriginal, m.query)
 	var err error
 	m.sel = req
 	limit := req.Limit
@@ -183,7 +183,11 @@ func (m *SqlToDatstore) Put(ctx context.Context, key datasource.Key, val interfa
 
 	cols := m.tbl.Columns()
 	var row []driver.Value
-	//u.Infof("PUT columns? %v", cols)
+	colNames := make(map[string]int, len(cols))
+	for i, colName := range cols {
+		colNames[colName] = i
+		//u.Debugf("col.name=%v  col.as=%s", col.Name, col.As)
+	}
 	curRow := make([]driver.Value, len(cols))
 
 	if key != nil {
@@ -201,20 +205,17 @@ func (m *SqlToDatstore) Put(ctx context.Context, key datasource.Key, val interfa
 		sel = sqlReq.SqlSelect()
 	}
 	if sel != nil {
-		u.Warnf("fetch first w Select:  %s", sel)
+		u.Debugf("fetch first w Select:  %s", sel)
 		entity, err := m.getEntity(sel)
 		if err != nil {
-			u.Errorf("wat?  %v", err)
+			u.Errorf("could not retrieve current entity state for update?  %v", err)
 			return nil, err
 		}
 
-		if len(entity.Vals) > 0 {
-			curRow = entity.Vals
-			for i, v := range curRow {
-				u.Debugf("%d read current %v", i, v)
-			}
+		if len(entity.props) > 0 {
+			curRow = entity.Vals(colNames)
 		} else {
-			u.Warnf("should only have one to update in Put(): %v  %#v", len(entity.Vals), entity)
+			u.Warnf("should only have one to update in Put(): %v  %#v", len(entity.props), entity)
 		}
 	}
 
@@ -253,7 +254,7 @@ func (m *SqlToDatstore) Put(ctx context.Context, key datasource.Key, val interfa
 		for i, f := range m.tbl.Fields {
 			for colName, driverVal := range valT {
 				if f.Name == colName {
-					u.Debugf("PUT field: i=%d col=%s val=%v  T:%T cur:%v", i, colName, driverVal, driverVal, curRow[i])
+					//u.Debugf("PUT field: i=%d col=%s val=%v  T:%T cur:%v", i, colName, driverVal, driverVal, curRow[i])
 					switch val := driverVal.(type) {
 					case string, []byte, int, int64, bool:
 						curRow[i] = val
@@ -273,7 +274,7 @@ func (m *SqlToDatstore) Put(ctx context.Context, key datasource.Key, val interfa
 				}
 			}
 			//u.Infof(" %v curRow? %d %#v", f.Name, len(curRow), curRow)
-			u.Debugf("%d writing %-10s %T\t%v", i, f.Name, curRow[i], curRow[i])
+			//u.Debugf("%d writing %-10s %T\t%v", i, f.Name, curRow[i], curRow[i])
 			props = append(props, datastore.Property{Name: f.Name, Value: curRow[i]})
 		}
 
@@ -284,7 +285,10 @@ func (m *SqlToDatstore) Put(ctx context.Context, key datasource.Key, val interfa
 
 	//u.Debugf("has key? sourcekey: %v  dskey:%#v", key, dskey)
 	//u.Debugf("dskey:  %s   table=%s", dskey, m.tbl.NameOriginal)
-	//u.Debugf("props:  %v", props)
+	// u.Debugf("props:  %v", props)
+	// for i, prop := range props {
+	// 	u.Debugf("i %d prop %#v", i, prop)
+	// }
 
 	pl := datastore.PropertyList(props)
 	dskey, err := m.dsClient.Put(m.dsCtx, dskey, &pl)
