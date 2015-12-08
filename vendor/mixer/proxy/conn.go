@@ -65,13 +65,7 @@ func newConn(m *MysqlListener, co net.Conn) *Conn {
 	c.pkg = mysql.NewPacketIO(co)
 
 	c.listener = m
-	if handlerMaker, ok := c.listener.handler.(models.HandlerSession); ok {
-		c.handler = handlerMaker.Clone(c)
-	} else {
-		u.Warnf("We are not cloning?  %T", c.listener.handler)
-		// not session specific so re-use handler
-		c.handler = c.listener.handler
-	}
+	c.handler = c.listener.handle.Open(c)
 
 	c.noRecover = c.listener.cfg.SupressRecover
 	c.c = co

@@ -81,7 +81,7 @@ func (m *HandlerSharded) Init() error {
 	return nil
 }
 
-func (m *HandlerShardedShared) Clone(connI interface{}) models.Handler {
+func (m *HandlerShardedShared) Open(connI interface{}) models.Handler {
 
 	handler := HandlerSharded{HandlerShardedShared: m}
 	if conn, ok := connI.(*Conn); ok {

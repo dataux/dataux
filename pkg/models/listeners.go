@@ -17,19 +17,19 @@ var (
 //  reader of requests which will be routed to a handler
 type Listener interface {
 	// Blocking runner
-	Run(handler Handler, stop chan bool) error
+	Run(handle ConnectionHandle, stop chan bool) error
 	Close() error
 }
 
 //type func(*models.Config) (models.Listener, error)
 type ListenerInit func(*ListenerConfig, *Config) (Listener, error)
 
-func ListenerRegister(name string, fn ListenerInit, handler Handler) {
+func ListenerRegister(name string, fn ListenerInit, connHandle ConnectionHandle) {
 	listenerMu.Lock()
 	defer listenerMu.Unlock()
 	name = strings.ToLower(name)
 	//u.Debugf("registering listener [%s] ", name)
-	listenerFuncs[name] = ListenerAndHandler{fn, handler}
+	listenerFuncs[name] = ListenerAndHandler{fn, connHandle}
 }
 
 func Listeners() map[string]ListenerAndHandler {
@@ -38,5 +38,5 @@ func Listeners() map[string]ListenerAndHandler {
 
 type ListenerAndHandler struct {
 	ListenerInit
-	Handler
+	ConnectionHandle
 }

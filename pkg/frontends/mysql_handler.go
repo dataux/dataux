@@ -17,6 +17,7 @@ import (
 )
 
 const (
+	// Default Max Allowed packets for connections
 	MaxAllowedPacket = 1024 * 1024
 )
 
@@ -26,8 +27,8 @@ var (
 	_ = pretty.Diff
 
 	// Ensure we meet our interfaces
-	_ models.HandlerSession = (*MySqlHandler)(nil)
-	_ models.Handler        = (*MySqlHandler)(nil)
+	_ models.ConnectionHandle = (*MySqlHandler)(nil)
+	_ models.Handler          = (*MySqlHandler)(nil)
 )
 
 // Handle request splitting, a single connection session
@@ -43,24 +44,27 @@ type MySqlHandlerShared struct {
 // not threadsafe, not shared
 type MySqlHandler struct {
 	*MySqlHandlerShared
+	sess *datasource.ContextSimple
 	conn *proxy.Conn
 }
 
-func NewMySqlHandler(svr *models.ServerCtx) (models.Handler, error) {
+func NewMySqlHandler(svr *models.ServerCtx) (models.ConnectionHandle, error) {
 	sharedHandler := &MySqlHandlerShared{svr: svr, conf: svr.Config}
 	err := sharedHandler.Init()
 	connHandler := &MySqlHandler{MySqlHandlerShared: sharedHandler}
 	return connHandler, err
 }
 
-func (m *MySqlHandlerShared) Init() error {
-	return nil
-}
+func (m *MySqlHandlerShared) Init() error { return nil }
 
-// Clone?   This is used to create a per-session copy of handler
-func (m *MySqlHandler) Clone(connI interface{}) models.Handler {
+// Clone this handler as each handler is a per-client/conn copy of handler
+// - this occurs once when a new tcp-conn is established
+// - it re-uses the HandlerShard with has schema, etc on it
+func (m *MySqlHandler) Open(connI interface{}) models.Handler {
 
 	handler := MySqlHandler{MySqlHandlerShared: m.MySqlHandlerShared}
+	handler.sess = NewMysqlSession()
+
 	if conn, ok := connI.(*proxy.Conn); ok {
 		//u.Debugf("Cloning Mysql handler %v", conn)
 		handler.conn = conn
@@ -70,28 +74,35 @@ func (m *MySqlHandler) Clone(connI interface{}) models.Handler {
 }
 
 func (m *MySqlHandler) Close() error {
-	return m.conn.Close()
+	if m.conn != nil {
+		err := m.conn.Close()
+		m.conn = nil
+		return err
+	}
+	return nil
 }
 
+// Implement the Handle interface for frontends
 func (m *MySqlHandler) Handle(writer models.ResultWriter, req *models.Request) error {
 	return m.chooseCommand(writer, req)
 }
 
+// Session level schema Use command of sql
 func (m *MySqlHandler) SchemaUse(db string) *datasource.Schema {
 	schema := m.svr.Schema(db)
-	if schema != nil {
-		m.schema = schema
-		//u.Debugf("Use Schema: %v", db)
-	} else {
+	if schema == nil {
 		u.Warnf("Could not find schema for db=%s", db)
+		return nil
 	}
+	m.schema = schema
 	return schema
 }
 
 func (m *MySqlHandler) chooseCommand(writer models.ResultWriter, req *models.Request) error {
 
+	// First byte of mysql is a "command" type
 	cmd := req.Raw[0]
-	req.Raw = req.Raw[1:]
+	req.Raw = req.Raw[1:] // take the rest which will get parsed
 
 	//u.Debugf("chooseCommand: %v:%v", cmd, mysql.CommandString(cmd))
 	switch cmd {
@@ -147,7 +158,9 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 
 	// Ensure it parses, right now we can't handle multiple statement (ie with semi-colons separating)
 	// sql = strings.TrimRight(sql, ";")
-	job, err := backends.BuildSqlJob(m.svr, m.schema.Name, sql)
+	req := expr.NewContextConn(m.schema.Name, sql)
+	req.Session = m.sess
+	job, err := backends.BuildSqlJob(m.svr, req)
 	if err != nil {
 		u.Debugf("error? %v", err)
 		sql = strings.ToLower(sql)
@@ -167,6 +180,8 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		// we are done, already wrote results
 		return nil
 	}
+	u.Infof("job.Ctx %p   Session %p", job.Ctx, job.Ctx.Session)
+	job.Ctx.Session = m.sess
 
 	switch stmt := job.Stmt.(type) {
 	case *expr.SqlSelect, *expr.SqlShow, *expr.SqlDescribe:
@@ -197,20 +212,12 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	}
 
 	job.Setup()
-	//go func() {
-	//u.Debugf("Start Job.Run")
 	err = job.Run()
-	//u.Debugf("After job.Run()")
 	if err != nil {
 		u.Errorf("error on Query.Run(): %v", err)
-		//resultWriter.ErrChan() <- err
-		//job.Close()
 	}
 	job.Close()
-	//u.Debugf("exiting Background Query")
-	//}()
 	return nil
-
 }
 
 func (m *MySqlHandler) writeOK(r *mysql.Result) error {

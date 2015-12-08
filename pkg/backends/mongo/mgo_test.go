@@ -59,8 +59,7 @@ func validateQuery(t *testing.T, querySql string, expectCols []string, expectCol
 func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 	testmysql.RunTestServer(t)
 	dbName := "datauxtest"
-	// for _, schema := range testmysql.Conf.Schema {
-	// }
+
 	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/"+dbName)
 	assert.Tf(t, err == nil, "%v", err)
 	defer dbx.Close()
@@ -126,6 +125,22 @@ func TestInvalidQuery(t *testing.T) {
 	assert.Tf(t, rows == nil, "must not get rows")
 }
 
+func TestSchemaQueries(t *testing.T) {
+	found := false
+	validateQuerySpec(t, QuerySpec{
+		Sql: `
+		select  
+			@@session.auto_increment_increment as auto_increment_increment, 
+  			@@character_set_client as character_set_client, 
+  			@@character_set_connection as character_set_connection`,
+		ExpectRowCt: 1,
+		ValidateRow: func(row []interface{}) {
+			u.Infof("%v", row)
+		},
+	})
+	assert.Tf(t, found, "Must have found @@vaars")
+}
+
 func TestShowTables(t *testing.T) {
 	data := struct {
 		Table string `db:"Table"`
@@ -143,7 +158,7 @@ func TestShowTables(t *testing.T) {
 		},
 		RowData: &data,
 	})
-	assert.Tf(t, found, "Must have found article")
+	assert.Tf(t, found, "Must have found article table with show")
 }
 
 func TestDescribeTable(t *testing.T) {

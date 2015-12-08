@@ -61,13 +61,13 @@ type MysqlListener struct {
 	password    string
 	running     bool
 	netlistener net.Listener
-	handler     models.Handler
+	handle      models.ConnectionHandle
 }
 
-func (m *MysqlListener) Run(handler models.Handler, stop chan bool) error {
+func (m *MysqlListener) Run(handle models.ConnectionHandle, stop chan bool) error {
 
-	m.handler = handler
-	//u.Debugf("using handler:  %T", handler)
+	m.handle = handle
+	//u.Debugf("using handler:  %T", handle)
 	m.running = true
 
 	for m.running {
@@ -123,21 +123,21 @@ func (m *MysqlListener) OnConn(c net.Conn) {
 
 func (m *MysqlListener) UpMaster(node string, addr string) error {
 
-	if shardHandler, ok := m.handler.(*HandlerSharded); ok {
+	if shardHandler, ok := m.handle.(*HandlerSharded); ok {
 		n := shardHandler.getNode(node)
 		if n == nil {
 			return fmt.Errorf("invalid node %s", node)
 		}
 		return n.upMaster(addr)
 	} else {
-		u.Warnf("UpMaster not implemented for T:%T", m.handler)
+		u.Warnf("UpMaster not implemented for T:%T", m.handle)
 	}
 	return nil
 }
 
 func (m *MysqlListener) UpSlave(node string, addr string) error {
 
-	if shardHandler, ok := m.handler.(*HandlerSharded); ok {
+	if shardHandler, ok := m.handle.(*HandlerSharded); ok {
 		n := shardHandler.getNode(node)
 		if n == nil {
 			return fmt.Errorf("invalid node %s", node)
@@ -145,13 +145,13 @@ func (m *MysqlListener) UpSlave(node string, addr string) error {
 
 		return n.upSlave(addr)
 	} else {
-		u.Warnf("UpSlave not implemented for T:%T", m.handler)
+		u.Warnf("UpSlave not implemented for T:%T", m.handle)
 	}
 	return nil
 }
 func (m *MysqlListener) DownMaster(node string) error {
 
-	if shardHandler, ok := m.handler.(*HandlerSharded); ok {
+	if shardHandler, ok := m.handle.(*HandlerSharded); ok {
 		n := shardHandler.getNode(node)
 		if n == nil {
 			return fmt.Errorf("invalid node %s", node)
@@ -159,14 +159,14 @@ func (m *MysqlListener) DownMaster(node string) error {
 		n.db = nil
 		return n.downMaster()
 	} else {
-		u.Warnf("DownMaster not implemented for T:%T", m.handler)
+		u.Warnf("DownMaster not implemented for T:%T", m.handle)
 	}
 	return nil
 }
 
 func (m *MysqlListener) DownSlave(node string) error {
 
-	if shardHandler, ok := m.handler.(*HandlerSharded); ok {
+	if shardHandler, ok := m.handle.(*HandlerSharded); ok {
 		return nil
 		n := shardHandler.getNode(node)
 		if n == nil {
@@ -174,7 +174,7 @@ func (m *MysqlListener) DownSlave(node string) error {
 		}
 		return n.downSlave()
 	} else {
-		u.Warnf("DownSlave not implemented for T:%T", m.handler)
+		u.Warnf("DownSlave not implemented for T:%T", m.handle)
 	}
 	return nil
 }
