@@ -95,9 +95,11 @@ func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 		} else {
 			// rowVals is an []interface{} of all of the column results
 			rowVals, err := rows.SliceScan()
-			//u.Infof("rowVals: %#v", rowVals)
+			u.Infof("rowVals: %#v", rowVals)
 			assert.Tf(t, err == nil, "%v", err)
-			assert.Tf(t, len(rowVals) == testSpec.ExpectColCt, "wanted cols but got %v", len(rowVals))
+			if testSpec.ExpectColCt > 0 {
+				assert.Tf(t, len(rowVals) == testSpec.ExpectColCt, "wanted cols but got %v", len(rowVals))
+			}
 			rowCt++
 			if testSpec.ValidateRow != nil {
 				testSpec.ValidateRow(rowVals)
@@ -126,7 +128,25 @@ func TestInvalidQuery(t *testing.T) {
 }
 
 func TestSchemaQueries(t *testing.T) {
+
 	found := false
+	data := struct {
+		Max int64 `db:"@@max_allowed_packet"`
+	}{}
+	validateQuerySpec(t, QuerySpec{
+		Sql: `
+		select @@max_allowed_packet`,
+		ExpectRowCt: 1,
+		RowData:     &data,
+		ValidateRowData: func() {
+			u.Infof("%v  T:%T", data, data.Max)
+			assert.T(t, data.Max == 4194304)
+			found = true
+		},
+	})
+	assert.Tf(t, found, "Must have found @@vaars")
+
+	found = false
 	validateQuerySpec(t, QuerySpec{
 		Sql: `
 		select  
@@ -136,6 +156,8 @@ func TestSchemaQueries(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRow: func(row []interface{}) {
 			u.Infof("%v", row)
+			assert.T(t, len(row) == 3)
+			found = true
 		},
 	})
 	assert.Tf(t, found, "Must have found @@vaars")

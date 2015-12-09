@@ -18,7 +18,7 @@ import (
 
 const (
 	// Default Max Allowed packets for connections
-	MaxAllowedPacket = 1024 * 1024
+	MaxAllowedPacket = 4194304
 )
 
 var (
@@ -44,7 +44,7 @@ type MySqlHandlerShared struct {
 // not threadsafe, not shared
 type MySqlHandler struct {
 	*MySqlHandlerShared
-	sess *datasource.ContextSimple
+	sess expr.ContextReader
 	conn *proxy.Conn
 }
 
@@ -63,7 +63,7 @@ func (m *MySqlHandlerShared) Init() error { return nil }
 func (m *MySqlHandler) Open(connI interface{}) models.Handler {
 
 	handler := MySqlHandler{MySqlHandlerShared: m.MySqlHandlerShared}
-	handler.sess = NewMysqlSession()
+	handler.sess = NewMySqlSessionVars()
 
 	if conn, ok := connI.(*proxy.Conn); ok {
 		//u.Debugf("Cloning Mysql handler %v", conn)

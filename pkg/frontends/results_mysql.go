@@ -48,9 +48,9 @@ func (m *MySqlResultWriter) Close() error {
 
 	if m.Rs == nil || len(m.Rs.Fields) == 0 {
 		m.Rs = NewEmptyResultset(m.projection)
-		u.Infof("nil resultwriter Close() has RS?%v rowct:%v", m.Rs == nil, len(m.Rs.RowDatas))
+		//u.Infof("nil resultwriter Close() has RS?%v rowct:%v", m.Rs == nil, len(m.Rs.RowDatas))
 	} else {
-		u.Infof("in mysql resultwriter Close() has RS?%v rowct:%v", m.Rs == nil, len(m.Rs.RowDatas))
+		//u.Infof("in mysql resultwriter Close() has RS?%v rowct:%v", m.Rs == nil, len(m.Rs.RowDatas))
 	}
 	m.writer.WriteResult(m.Rs)
 	return nil
@@ -91,7 +91,7 @@ func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 			m.Rs.AddRowValues(vals)
 			return true
 		case []driver.Value:
-			//u.Debugf("got msg in result writer: %#v", vals)
+			u.Debugf("got msg in result writer: %#v", mt)
 			m.Rs.AddRowValues(mt)
 			return true
 		}
