@@ -36,7 +36,7 @@ type Server struct {
 	frontends []models.Listener
 
 	// any handlers/transforms etc
-	handlers []models.Handler
+	handlers []models.ConnectionHandle
 
 	stop chan bool
 }
@@ -104,7 +104,7 @@ func (m *Server) loadFrontends() error {
 					u.Errorf("Could not get frontend", err)
 					return err
 				}
-				m.handlers = append(m.handlers, frontendSetup.Handler)
+				m.handlers = append(m.handlers, frontendSetup.ConnectionHandle)
 				m.frontends = append(m.frontends, frontend)
 				u.Infof("Loaded frontend %s ", name)
 			}
