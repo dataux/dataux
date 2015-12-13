@@ -36,6 +36,7 @@ func NewMySqlGlobalVars() *datasource.ContextSimple {
 	ctx.Data["@@license"] = value.NewStringValue("MIT")
 	ctx.Data["@@lower_case_table_names"] = value.NewIntValue(0)
 	ctx.Data["@@max_allowed_packet"] = value.NewIntValue(MaxAllowedPacket)
+	ctx.Data["@@max_allowed_packets"] = value.NewIntValue(MaxAllowedPacket)
 	ctx.Data["@@net_buffer_length"] = value.NewIntValue(16384)
 	ctx.Data["@@net_write_timeout"] = value.NewIntValue(600)
 	ctx.Data["@@query_cache_size"] = value.NewIntValue(1048576)

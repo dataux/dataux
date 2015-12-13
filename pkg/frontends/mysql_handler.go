@@ -104,7 +104,7 @@ func (m *MySqlHandler) chooseCommand(writer models.ResultWriter, req *models.Req
 	cmd := req.Raw[0]
 	req.Raw = req.Raw[1:] // take the rest which will get parsed
 
-	//u.Debugf("chooseCommand: %v:%v", cmd, mysql.CommandString(cmd))
+	u.Debugf("chooseCommand: %v:%v", cmd, mysql.CommandString(cmd))
 	switch cmd {
 	case mysql.COM_QUERY, mysql.COM_STMT_PREPARE:
 		return m.handleQuery(writer, string(req.Raw))
@@ -139,7 +139,7 @@ func (m *MySqlHandler) chooseCommand(writer models.ResultWriter, req *models.Req
 }
 
 func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err error) {
-	//u.Debugf("handleQuery: %v", sql)
+	u.Debugf("handleQuery: %v", sql)
 	if !m.conf.SupressRecover {
 		//u.Debugf("running recovery? ")
 		defer func() {

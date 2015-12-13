@@ -96,6 +96,7 @@ func buildResultset(names []string, values [][]interface{}) (*mysql.Resultset, e
 				return nil, err
 			}
 
+			u.Debugf("put val: %v  %v", j, value)
 			row = append(row, mysql.PutLengthEncodedString(b)...)
 		}
 

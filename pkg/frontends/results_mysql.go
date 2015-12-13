@@ -74,7 +74,7 @@ func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 		switch mt := msg.Body().(type) {
 		case *datasource.SqlDriverMessageMap:
-			//u.Infof("write: %#v", mt.Values())
+			u.Infof("write: %#v", mt.Values())
 			m.Rs.AddRowValues(mt.Values())
 			//u.Debugf( "return from mysql.resultWrite")
 			return true
@@ -84,7 +84,7 @@ func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 				if val, ok := mt[col.As]; !ok {
 					u.Warnf("could not find result val: %v name=%s", col.As, col.Name)
 				} else {
-					//u.Debugf("found col: %#v    val=%#v", col, val)
+					u.Debugf("found col: %#v    val=%#v", col, val)
 					vals[col.ColPos] = val
 				}
 			}
@@ -125,7 +125,7 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 			as = col.Col.As
 		}
 		m.Rs.FieldNames[col.Name] = i
-		//u.Debugf("writeheader %s %v", col.Name, col.Type.String())
+		u.Debugf("writeheader %s %v", col.Name, col.Type.String())
 		switch col.Type {
 		case value.IntType:
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_LONG))
