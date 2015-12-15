@@ -125,7 +125,7 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 			as = col.Col.As
 		}
 		m.Rs.FieldNames[col.Name] = i
-		u.Debugf("writeheader %s %v", col.Name, col.Type.String())
+		//u.Debugf("writeheader %s %v", col.Name, col.Type.String())
 		switch col.Type {
 		case value.IntType:
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_LONG))

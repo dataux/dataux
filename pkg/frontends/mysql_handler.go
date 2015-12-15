@@ -162,7 +162,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	req.Session = m.sess
 	job, err := backends.BuildSqlJob(m.svr, req)
 	if err != nil {
-		u.Debugf("error? %v", err)
+		//u.Debugf("error? %v", err)
 		sql = strings.ToLower(sql)
 		switch {
 		case strings.Contains(sql, "set autocommit"):
@@ -185,7 +185,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 
 	switch stmt := job.Stmt.(type) {
 	case *expr.SqlSelect, *expr.SqlShow, *expr.SqlDescribe:
-		//u.Debugf("adding mysql result writer: projection: %p", job.Projection)
+		u.Debugf("adding mysql result writer: projection: %p  %#v", job.Projection, job.Projection)
 		resultWriter := NewMySqlResultWriter(writer, job.Projection, m.schema)
 		job.RootTask.Add(resultWriter)
 	case *expr.SqlInsert, *expr.SqlUpsert, *expr.SqlUpdate, *expr.SqlDelete:

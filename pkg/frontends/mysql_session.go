@@ -15,6 +15,7 @@ func NewMySqlSessionVars() expr.ContextReader {
 	ctx := datasource.NewContextSimple()
 	ctx.Data["@@max_allowed_packet"] = value.NewIntValue(MaxAllowedPacket)
 	ctx.Data["@@session.auto_increment_increment"] = value.NewIntValue(1)
+	ctx.Data["@@session.tx_isolation"] = value.NewStringValue("REPEATABLE-READ")
 	rdr := datasource.NewNestedContextReader([]expr.ContextReader{
 		ctx,
 		mysqlGlobalVars,
