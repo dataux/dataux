@@ -113,6 +113,9 @@ func (c *Conn) Run() {
 
 		data, err := c.readPacket()
 		if err != nil {
+			if err == io.EOF { // remote end has hung up
+				return
+			}
 			u.Errorf("error on packet?  %v", err)
 			return
 		}

@@ -35,9 +35,9 @@ type MySqlExecResultWriter struct {
 	*exec.TaskBase
 }
 
-func NewMySqlResultWriter(writer models.ResultWriter, proj *plan.Projection, schema *datasource.Schema) *MySqlResultWriter {
+func NewMySqlResultWriter(writer models.ResultWriter, projPlan *plan.Projection, schema *datasource.Schema) *MySqlResultWriter {
 
-	m := &MySqlResultWriter{writer: writer, projection: proj, schema: schema}
+	m := &MySqlResultWriter{writer: writer, projection: projPlan, schema: schema}
 	m.TaskBase = exec.NewTaskBase("MySqlResultWriter")
 	m.Rs = mysql.NewResultSet()
 
@@ -74,7 +74,7 @@ func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 		switch mt := msg.Body().(type) {
 		case *datasource.SqlDriverMessageMap:
-			u.Infof("write: %#v", mt.Values())
+			//u.Infof("write: %#v", mt.Values())
 			m.Rs.AddRowValues(mt.Values())
 			//u.Debugf( "return from mysql.resultWrite")
 			return true
@@ -91,7 +91,7 @@ func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 			m.Rs.AddRowValues(vals)
 			return true
 		case []driver.Value:
-			u.Debugf("got msg in result writer: %#v", mt)
+			//u.Debugf("got msg in result writer: %#v", mt)
 			m.Rs.AddRowValues(mt)
 			return true
 		}
@@ -119,13 +119,18 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 	}
 
 	m.wroteHeaders = true
+	wasWriten := make(map[string]struct{}, len(cols))
 	for i, col := range cols {
 		as := col.Name
 		if col.Col != nil {
 			as = col.Col.As
 		}
+		if _, exists := wasWriten[col.Name]; exists {
+			continue
+		}
+		wasWriten[col.Name] = struct{}{}
 		m.Rs.FieldNames[col.Name] = i
-		//u.Debugf("writeheader %s %v", col.Name, col.Type.String())
+		u.Debugf("writeheader %s %v", col.Name, col.Type.String())
 		switch col.Type {
 		case value.IntType:
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_LONG))
