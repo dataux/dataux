@@ -135,11 +135,11 @@ func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.Visit
 
 	filterBy, _ := json.Marshal(m.filter)
 	//u.Infof("tbl %#v", m.tbl.Columns(), m.tbl)
-	u.Infof("filter: %#v", m.filter)
-	u.Debugf("db=%v  tbl=%v  \nfilter=%v \nsort=%v \nlimit=%v \nskip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
-	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter).Limit(limit)
+	//u.Infof("filter: %#v", m.filter)
+	u.Debugf("db=%v  tbl=%v filter=%v sort=%v limit=%v skip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
+	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter)
 
-	resultReader := NewResultReader(m, query)
+	resultReader := NewResultReader(m, query, limit)
 	m.resp = resultReader
 	//resultReader.Finalize()
 	return resultReader, expr.VisitFinal, nil
@@ -236,8 +236,8 @@ func (m *SqlToMgo) WalkGroupBy() error {
 }
 
 // WalkAggs() aggregate expressions when used ast part of <select_list>
-//  - For Aggregates (functions) it builds aggs
-//  - For Projectsion (non-functions) it does nothing, that will be done later during projection
+//  - For Aggregates (functions) it builds appropriate underlying mongo aggregation/map-reduce
+//  - For Projections (non-functions) it does nothing, that will be done later during projection
 func (m *SqlToMgo) WalkAggs(cur expr.Node) (q bson.M, _ error) {
 	switch curNode := cur.(type) {
 	// case *expr.NumberNode:

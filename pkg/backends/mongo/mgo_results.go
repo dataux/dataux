@@ -26,6 +26,7 @@ type ResultReader struct {
 	*exec.TaskBase
 	finalized bool
 	cursor    int
+	limit     int
 	Docs      []u.JsonHelper
 	Vals      [][]driver.Value
 	Total     int
@@ -41,11 +42,12 @@ type ResultReaderNext struct {
 	*ResultReader
 }
 
-func NewResultReader(req *SqlToMgo, q *mgo.Query) *ResultReader {
+func NewResultReader(req *SqlToMgo, q *mgo.Query, limit int) *ResultReader {
 	m := &ResultReader{}
 	m.TaskBase = exec.NewTaskBase("mgo-resultreader")
 	m.query = q
 	m.sql = req
+	m.limit = limit
 	return m
 }
 
@@ -69,6 +71,12 @@ func (m *ResultReader) Run(context *expr.Context) error {
 
 	sql := m.sql.sel
 
+	//cols := m.sql.sel.Columns
+	cols := m.sql.sp.Proj.Columns
+	colNames := make(map[string]int, len(cols))
+	for i, col := range cols {
+		colNames[col.As] = i
+	}
 	m.Vals = make([][]driver.Value, 0)
 
 	if sql.CountStar() {
@@ -81,15 +89,18 @@ func (m *ResultReader) Run(context *expr.Context) error {
 		}
 		vals[0] = ct
 		m.Vals = append(m.Vals, vals)
+		u.Infof("was a select count(*) query %d", ct)
+		msg := datasource.NewSqlDriverMessageMap(uint64(1), vals, colNames)
+		//u.Infof("In source Scanner iter %#v", msg)
+		outCh <- msg
+
 		return nil
 	}
 
-	//cols := m.sql.sel.Columns
-	cols := m.sql.sp.Proj.Columns
-	colNames := make(map[string]int, len(cols))
-	for i, col := range cols {
-		colNames[col.As] = i
+	if m.limit != 0 {
+		m.query = m.query.Limit(m.limit)
 	}
+
 	if len(cols) == 0 {
 		u.Errorf("WTF?  no cols? %v", cols)
 	}

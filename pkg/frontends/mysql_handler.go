@@ -158,9 +158,10 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 
 	// Ensure it parses, right now we can't handle multiple statement (ie with semi-colons separating)
 	// sql = strings.TrimRight(sql, ";")
-	req := expr.NewContextConn(m.schema.Name, sql)
-	req.Session = m.sess
-	job, err := backends.BuildSqlJob(m.svr, req)
+	ctx := plan.NewContext(sql)
+	ctx.Session = m.sess
+	ctx.Schema = m.schema
+	job, err := backends.BuildSqlJob(ctx)
 	if err != nil {
 		//u.Debugf("error? %v", err)
 		sql = strings.ToLower(sql)

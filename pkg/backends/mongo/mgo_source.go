@@ -92,6 +92,7 @@ func (m *MongoDataSource) Close() error {
 func (m *MongoDataSource) DataSource() datasource.DataSource { return m }
 func (m *MongoDataSource) Tables() []string                  { return m.schema.Tables() }
 func (m *MongoDataSource) Table(table string) (*datasource.Table, error) {
+	u.LogTracef(u.WARN, "why")
 	return m.loadTableSchema(table)
 }
 
@@ -165,7 +166,7 @@ func (m *MongoDataSource) connect() error {
 		m.sess.Close()
 	}
 
-	u.Infof("old session %p -> new session %p", m.sess, sess)
+	//u.Infof("old session %p -> new session %p", m.sess, sess)
 	m.sess = sess
 
 	db := sess.DB(m.schema.Name)
@@ -184,7 +185,7 @@ func (m *MongoDataSource) loadDatabases() error {
 	}
 	sort.Strings(dbs)
 	m.databases = dbs
-	u.Debugf("found database names: %v", m.databases)
+	//u.Debugf("found database names: %v", m.databases)
 	found := false
 	for _, db := range dbs {
 		if strings.ToLower(db) == strings.ToLower(m.schema.Name) {
@@ -210,7 +211,7 @@ func (m *MongoDataSource) loadTableNames() error {
 	for _, tableName := range tables {
 		m.schema.AddTableName(tableName)
 	}
-	u.Debugf("found tables: %v", tables)
+	//u.Debugf("found tables: %v", tables)
 	return nil
 }
 
@@ -231,6 +232,7 @@ func (m *MongoDataSource) loadTableSchema(table string) (*datasource.Table, erro
 	tbl := datasource.NewTable(table, m.schema)
 	coll := m.sess.DB(m.db).C(table)
 	colNames := make([]string, 0)
+	errs := make(map[string]string)
 
 	var sampleRows []map[string]interface{}
 	if err := coll.Find(nil).Limit(30).All(&sampleRows); err != nil {
@@ -308,23 +310,28 @@ func (m *MongoDataSource) loadTableSchema(table string) (*datasource.Table, erro
 					tbl.AddField(datasource.NewField(colName, value.StringsType, 24, "[]string"))
 					tbl.AddValues([]driver.Value{colName, "[]string", "NO", "", "", "[]string"})
 				default:
-					u.Infof("SEMI IMPLEMENTED:   found []interface{}: %v='%v'  %T %v", colName, val, val, typ.String())
+					u.Infof("SEMI IMPLEMENTED:   found []interface{}: col:%s T:%T type:%v", colName, val, typ.String())
 					tbl.AddField(datasource.NewField(colName, value.SliceValueType, 24, "[]value"))
 					tbl.AddValues([]driver.Value{colName, "[]value", "NO", "", "", "[]value"})
 				}
 			case nil:
 				// ??
-				u.Warnf("could not infer from nil: colName  %v ", colName)
+				//u.Warnf("could not infer from nil: colName  %v ", colName)
+				errs[colName] = fmt.Sprintf("could not infer column type for %q because nil", colName)
 				continue
 			default:
-				u.Warnf("not recognized type: v=%v T:%T", colName, iVal)
+				errs[colName] = fmt.Sprintf("not recognized type: v=%v T:%T", colName, iVal)
 				continue
 			}
 
 			colNames = append(colNames, colName)
 		}
 	}
-
+	if len(errs) > 0 {
+		for _, errmsg := range errs {
+			u.Warnf(errmsg)
+		}
+	}
 	// buildMongoFields(s, tbl, jh, "", 0)
 	tbl.SetColumns(colNames)
 	m.schema.AddTable(tbl)
