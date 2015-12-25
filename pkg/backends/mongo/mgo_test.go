@@ -11,7 +11,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"gopkg.in/mgo.v2"
 
-	"github.com/dataux/dataux/pkg/frontends/testmysql"
+	"github.com/dataux/dataux/pkg/frontends/mysqlfe/testmysql"
 	"github.com/dataux/dataux/pkg/testutil"
 )
 
@@ -164,10 +164,11 @@ func TestSchemaQueries(t *testing.T) {
 }
 
 func TestShowTables(t *testing.T) {
+
+	found := false
 	data := struct {
 		Table string `db:"Table"`
 	}{}
-	found := false
 	validateQuerySpec(t, QuerySpec{
 		Sql:         "show tables;",
 		ExpectRowCt: -1,
@@ -179,6 +180,26 @@ func TestShowTables(t *testing.T) {
 			}
 		},
 		RowData: &data,
+	})
+	assert.Tf(t, found, "Must have found article table with show")
+
+	data2 := struct {
+		Table  string `db:"Table"`
+		Create string `db:"Create Table"`
+	}{}
+	found = false
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "SHOW CREATE TABLE `article`;",
+		ExpectRowCt: -1,
+		ValidateRowData: func() {
+			u.Infof("\n%v", data2)
+			assert.Tf(t, data2.Table != "", "%v", data2)
+			if data2.Table == "article" {
+				found = true
+			}
+			assert.Tf(t, len(data2.Create) > 10, "has create statement")
+		},
+		RowData: &data2,
 	})
 	assert.Tf(t, found, "Must have found article table with show")
 }

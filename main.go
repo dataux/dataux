@@ -14,10 +14,10 @@ import (
 	_ "github.com/dataux/dataux/pkg/backends/mongo"
 
 	u "github.com/araddon/gou"
-	"github.com/dataux/dataux/pkg/frontends"
+	"github.com/dataux/dataux/pkg/frontends/mysqlfe"
 	"github.com/dataux/dataux/pkg/models"
 	"github.com/dataux/dataux/pkg/proxy"
-	mysqlproxy "github.com/dataux/dataux/vendor/mixer/proxy"
+	mysqlproxy "github.com/dataux/dataux/vendored/mixer/proxy"
 )
 
 var (
@@ -56,7 +56,7 @@ func main() {
 	svrCtx.Init()
 
 	// TODO:   these should be started by server through registry, imports
-	mysqlHandler, err := frontends.NewMySqlHandler(svrCtx)
+	mysqlHandler, err := mysqlfe.NewMySqlHandler(svrCtx)
 	if err != nil {
 		u.Errorf("Could not create handlers: %v", err)
 		os.Exit(1)

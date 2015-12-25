@@ -2,10 +2,11 @@ package models
 
 import (
 	u "github.com/araddon/gou"
-	"github.com/araddon/qlbridge/datasource"
+
+	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 
-	"github.com/dataux/dataux/vendor/mixer/mysql"
+	"github.com/dataux/dataux/vendored/mixer/mysql"
 )
 
 var (
@@ -65,7 +66,7 @@ func ShowVariables(s *datasource.Schema, name string, val driver.Value) (*membtr
 }
 */
 
-func TableToMysqlResultset(tbl *datasource.Table) *mysql.Resultset {
+func TableToMysqlResultset(tbl *schema.Table) *mysql.Resultset {
 	rs := new(mysql.Resultset)
 	rs.Fields = mysql.DescribeHeaders
 	rs.FieldNames = mysql.DescribeFieldNames
@@ -85,7 +86,7 @@ func (m *Table) AddMySqlField(fld *mysql.Field) {
 }
 */
 
-func FieldToMysql(f *datasource.Field, s *datasource.SourceSchema) *mysql.Field {
+func FieldToMysql(f *schema.Field, s *schema.SourceSchema) *mysql.Field {
 	switch f.Type {
 	case value.StringType:
 		return mysql.NewField(f.Name, s.Name, s.Name, f.Length, mysql.MYSQL_TYPE_STRING)

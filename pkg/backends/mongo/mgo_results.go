@@ -11,7 +11,6 @@ import (
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
-	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
 )
 
@@ -44,7 +43,7 @@ type ResultReaderNext struct {
 
 func NewResultReader(req *SqlToMgo, q *mgo.Query, limit int) *ResultReader {
 	m := &ResultReader{}
-	m.TaskBase = exec.NewTaskBase("mgo-resultreader")
+	m.TaskBase = exec.NewTaskBase(req.Ctx, "mgo-resultreader")
 	m.query = q
 	m.sql = req
 	m.limit = limit
@@ -55,7 +54,7 @@ func (m *ResultReader) Close() error {
 	return nil
 }
 
-func (m *ResultReader) Run(context *expr.Context) error {
+func (m *ResultReader) Run() error {
 	sigChan := m.SigChan()
 	outCh := m.MessageOut()
 	//defer context.Recover()

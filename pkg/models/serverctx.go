@@ -5,12 +5,14 @@ import (
 	"strings"
 
 	u "github.com/araddon/gou"
+
 	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/schema"
 )
 
 type ServerCtx struct {
 	Config  *Config
-	schemas map[string]*datasource.Schema
+	schemas map[string]*schema.Schema
 	RtConf  *datasource.RuntimeSchema
 }
 
@@ -32,17 +34,17 @@ func (m *ServerCtx) Init() error {
 	return nil
 }
 
-func (m *ServerCtx) Table(schema, tableName string) (*datasource.Table, error) {
-	s, ok := m.schemas[schema]
+func (m *ServerCtx) Table(schemaName, tableName string) (*schema.Table, error) {
+	s, ok := m.schemas[schemaName]
 	if ok {
 		return s.Table(tableName)
 	}
-	return nil, fmt.Errorf("That schema %q not found", schema)
+	return nil, fmt.Errorf("That schema %q not found", schemaName)
 }
 
 func (m *ServerCtx) loadConfig() error {
 
-	m.schemas = make(map[string]*datasource.Schema)
+	m.schemas = make(map[string]*schema.Schema)
 
 	for _, schemaConf := range m.Config.Schemas {
 
@@ -51,13 +53,13 @@ func (m *ServerCtx) loadConfig() error {
 			panic(fmt.Sprintf("duplicate schema '%s'", schemaConf.Name))
 		}
 
-		schema := datasource.NewSchema(schemaConf.Name)
-		m.schemas[schemaConf.Name] = schema
+		sch := schema.NewSchema(schemaConf.Name)
+		m.schemas[schemaConf.Name] = sch
 
 		// find the Source config for eached named db/source
 		for _, sourceName := range schemaConf.Sources {
 
-			var sourceConf *datasource.SourceConfig
+			var sourceConf *schema.SourceConfig
 			// we must find a source conf by name
 			for _, sc := range m.Config.Sources {
 				//u.Debugf("sc: %s %#v", sourceName, sc)
@@ -72,9 +74,9 @@ func (m *ServerCtx) loadConfig() error {
 			}
 			sourceConf.Init()
 
-			sourceSchema := datasource.NewSourceSchema(sourceName, sourceConf.SourceType)
+			sourceSchema := schema.NewSourceSchema(sourceName, sourceConf.SourceType)
 			sourceSchema.Conf = sourceConf
-			sourceSchema.Schema = schema
+			sourceSchema.Schema = sch
 			//u.Infof("found sourceName: %q schema.Name=%q", sourceName, sourceSchema.Name)
 
 			for _, nc := range m.Config.Nodes {
@@ -93,13 +95,12 @@ func (m *ServerCtx) loadConfig() error {
 			}
 			ds := sourceFunc(sourceSchema, m.Config)
 			sourceSchema.DS = ds
-			sourceSchema.DSFeatures = datasource.NewFeaturedSource(ds)
 
 			// TODO:   Periodically refresh this as sources are dynamic tables
 			for _, tableName := range ds.Tables() {
-				m.loadSourceSchema(strings.ToLower(tableName), schema, sourceSchema)
+				m.loadSourceSchema(strings.ToLower(tableName), sch, sourceSchema)
 			}
-			schema.SourceSchemas[sourceName] = sourceSchema
+			sch.SourceSchemas[sourceName] = sourceSchema
 		}
 
 	}
@@ -107,7 +108,7 @@ func (m *ServerCtx) loadConfig() error {
 	return nil
 }
 
-func (m *ServerCtx) loadSourceSchema(tableName string, schema *datasource.Schema, source *datasource.SourceSchema) {
+func (m *ServerCtx) loadSourceSchema(tableName string, schema *schema.Schema, source *schema.SourceSchema) {
 	tableLoad := true
 	if len(source.Conf.TablesToLoad) > 0 {
 		tableLoad = false
@@ -123,7 +124,7 @@ func (m *ServerCtx) loadSourceSchema(tableName string, schema *datasource.Schema
 	}
 }
 
-func (m *ServerCtx) Schema(db string) *datasource.Schema {
+func (m *ServerCtx) Schema(db string) *schema.Schema {
 	s := m.schemas[db]
 	return s
 }

@@ -8,13 +8,14 @@ import (
 	u "github.com/araddon/gou"
 
 	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/models"
 )
 
 var (
 	// implement interfaces
-	_ datasource.DataSource = (*ElasticsearchDataSource)(nil)
+	_ schema.DataSource = (*ElasticsearchDataSource)(nil)
 )
 
 const (
@@ -27,13 +28,13 @@ func init() {
 }
 
 type ElasticsearchDataSource struct {
-	schema *datasource.SourceSchema
+	schema *schema.SourceSchema
 	conf   *models.Config
 }
 
-func NewElasticsearchDataSource(schema *datasource.SourceSchema, conf *models.Config) models.DataSource {
+func NewElasticsearchDataSource(sch *schema.SourceSchema, conf *models.Config) models.DataSource {
 	es := ElasticsearchDataSource{}
-	es.schema = schema
+	es.schema = sch
 	es.conf = conf
 	// Register our datasource.Datasources in registry
 	es.Init()
@@ -59,7 +60,7 @@ func (m *ElasticsearchDataSource) Init() error {
 	return nil
 }
 
-func (m *ElasticsearchDataSource) Open(schemaName string) (datasource.SourceConn, error) {
+func (m *ElasticsearchDataSource) Open(schemaName string) (schema.SourceConn, error) {
 	//u.Debugf("Open(%v)", schemaName)
 	tbl, err := m.schema.Table(schemaName)
 	if err != nil {
@@ -76,7 +77,7 @@ func (m *ElasticsearchDataSource) Open(schemaName string) (datasource.SourceConn
 
 func (m *ElasticsearchDataSource) Close() error { return nil }
 
-func (m *ElasticsearchDataSource) DataSource() datasource.DataSource {
+func (m *ElasticsearchDataSource) DataSource() schema.DataSource {
 	return m
 }
 
@@ -84,7 +85,7 @@ func (m *ElasticsearchDataSource) Tables() []string {
 	return m.schema.Tables()
 }
 
-func (m *ElasticsearchDataSource) Table(table string) (*datasource.Table, error) {
+func (m *ElasticsearchDataSource) Table(table string) (*schema.Table, error) {
 	u.Debugf("get table for %s", table)
 	return m.loadTableSchema(table)
 }
@@ -137,7 +138,7 @@ func (m *ElasticsearchDataSource) loadTableNames() error {
 	return nil
 }
 
-func (m *ElasticsearchDataSource) loadTableSchema(table string) (*datasource.Table, error) {
+func (m *ElasticsearchDataSource) loadTableSchema(table string) (*schema.Table, error) {
 
 	if m.schema == nil {
 		return nil, fmt.Errorf("no schema in use")
@@ -148,7 +149,7 @@ func (m *ElasticsearchDataSource) loadTableSchema(table string) (*datasource.Tab
 		u.Errorf("missing address: %#v", m.schema)
 		return nil, fmt.Errorf("Could not find Elasticsearch Host Address: %v", table)
 	}
-	tbl := datasource.NewTable(table, m.schema)
+	tbl := schema.NewTable(table, m.schema)
 
 	indexUrl := fmt.Sprintf("%s/%s/_mapping", host, tbl.Name)
 	respJh, err := u.JsonHelperHttp("GET", indexUrl, nil)
@@ -185,9 +186,9 @@ func (m *ElasticsearchDataSource) loadTableSchema(table string) (*datasource.Tab
 	//u.Debugf("resp: %v", jh)
 	jh = jh.Helper("properties")
 
-	tbl.AddField(datasource.NewField("_id", value.StringType, 24, "AUTOGEN"))
-	tbl.AddField(datasource.NewField("type", value.StringType, 24, "tbd"))
-	tbl.AddField(datasource.NewField("_score", value.NumberType, 24, "Created per Search By Elasticsearch"))
+	tbl.AddField(schema.NewField("_id", value.StringType, 24, "AUTOGEN"))
+	tbl.AddField(schema.NewField("type", value.StringType, 24, "tbd"))
+	tbl.AddField(schema.NewField("_score", value.NumberType, 24, "Created per Search By Elasticsearch"))
 
 	tbl.AddValues([]driver.Value{"_id", "string", "NO", "PRI", "AUTOGEN", ""})
 	tbl.AddValues([]driver.Value{"type", "string", "NO", "", nil, "tbd"})
@@ -200,44 +201,44 @@ func (m *ElasticsearchDataSource) loadTableSchema(table string) (*datasource.Tab
 	return tbl, nil
 }
 
-func buildEsFields(s *datasource.SourceSchema, tbl *datasource.Table, jh u.JsonHelper, prefix string, depth int) {
+func buildEsFields(s *schema.SourceSchema, tbl *schema.Table, jh u.JsonHelper, prefix string, depth int) {
 	for field, _ := range jh {
 
 		if h := jh.Helper(field); len(h) > 0 {
 			jb, _ := json.Marshal(h)
 			//jb, _ := json.MarshalIndent(h, " ", " ")
 			fieldName := prefix + field
-			var fld *datasource.Field
+			var fld *schema.Field
 			//u.Infof("%v %v", fieldName, h)
 			switch esType := h.String("type"); esType {
 			case "boolean":
 				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
 				//fld = mysql.NewField(fieldName, s.Db, s.Db, 1, mysql.MYSQL_TYPE_TINY)
-				fld = datasource.NewField(fieldName, value.BoolType, 1, string(jb))
+				fld = schema.NewField(fieldName, value.BoolType, 1, string(jb))
 			case "string":
 				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
 				//fld = mysql.NewField(fieldName, s.Db, s.Db, 512, mysql.MYSQL_TYPE_STRING)
-				fld = datasource.NewField(fieldName, value.StringType, 512, string(jb))
+				fld = schema.NewField(fieldName, value.StringType, 512, string(jb))
 			case "date":
 				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
 				//fld = mysql.NewField(fieldName, s.Db, s.Db, 32, mysql.MYSQL_TYPE_DATETIME)
-				fld = datasource.NewField(fieldName, value.TimeType, 4, string(jb))
+				fld = schema.NewField(fieldName, value.TimeType, 4, string(jb))
 			case "int", "long", "integer":
 				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
 				//fld = mysql.NewField(fieldName, s.Db, s.Db, 64, mysql.MYSQL_TYPE_LONG)
-				fld = datasource.NewField(fieldName, value.IntType, 8, string(jb))
+				fld = schema.NewField(fieldName, value.IntType, 8, string(jb))
 			case "double", "float":
 				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
 				//fld = mysql.NewField(fieldName, s.Db, s.Db, 64, mysql.MYSQL_TYPE_LONG)
-				fld = datasource.NewField(fieldName, value.NumberType, 8, string(jb))
+				fld = schema.NewField(fieldName, value.NumberType, 8, string(jb))
 			case "nested", "object":
 				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
 				//fld = mysql.NewField(fieldName, s.Db, s.Db, 2000, mysql.MYSQL_TYPE_BLOB)
-				fld = datasource.NewField(fieldName, value.StringType, 2000, string(jb))
+				fld = schema.NewField(fieldName, value.StringType, 2000, string(jb))
 			default:
 				tbl.AddValues([]driver.Value{fieldName, "object", "YES", "", nil, `{"type":"object"}`})
 				//fld = mysql.NewField(fieldName, s.Db, s.Db, 2000, mysql.MYSQL_TYPE_BLOB)
-				fld = datasource.NewField(fieldName, value.StringType, 2000, `{"type":"object"}`)
+				fld = schema.NewField(fieldName, value.StringType, 2000, `{"type":"object"}`)
 				props := h.Helper("properties")
 				if len(props) > 0 {
 					buildEsFields(s, tbl, props, fieldName+".", depth+1)

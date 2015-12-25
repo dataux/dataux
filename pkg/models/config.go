@@ -4,8 +4,9 @@ import (
 	"io/ioutil"
 
 	u "github.com/araddon/gou"
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/lytics/confl"
+
+	"github.com/araddon/qlbridge/schema"
 )
 
 var (
@@ -40,12 +41,12 @@ func LoadConfig(conf string) (*Config, error) {
 //   3) Virtual Schemas
 //   4) list of server/nodes for Sources
 type Config struct {
-	SupressRecover bool                       `json:"supress_recover"` // do we recover?
-	LogLevel       string                     `json:"log_level"`       // [debug,info,error,]
-	Frontends      []*ListenerConfig          `json:"frontends"`       // tcp listener configs
-	Sources        []*datasource.SourceConfig `json:"sources"`         // backend servers/sources (es, mysql etc)
-	Schemas        []*datasource.SchemaConfig `json:"schemas"`         // Schemas, each backend has 1 schema
-	Nodes          []*datasource.NodeConfig   `json:"nodes"`           // list of nodes that host sources
+	SupressRecover bool                   `json:"supress_recover"` // do we recover?
+	LogLevel       string                 `json:"log_level"`       // [debug,info,error,]
+	Frontends      []*ListenerConfig      `json:"frontends"`       // tcp listener configs
+	Sources        []*schema.SourceConfig `json:"sources"`         // backend servers/sources (es, mysql etc)
+	Schemas        []*schema.SchemaConfig `json:"schemas"`         // Schemas, each backend has 1 schema
+	Nodes          []*schema.NodeConfig   `json:"nodes"`           // list of nodes that host sources
 	Rules          *RulesConfig
 }
 

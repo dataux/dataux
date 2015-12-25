@@ -1,8 +1,8 @@
 package models
 
 import (
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/expr"
+	"github.com/araddon/qlbridge/schema"
 )
 
 // a DataUx Request contains the request/command
@@ -10,7 +10,7 @@ import (
 type Request struct {
 	Raw     []byte // raw full byte statement
 	Db      string // Db name parsed from statement
-	Schema  *datasource.Schema
+	Schema  *schema.Schema
 	Session expr.ContextReader
 }
 
@@ -18,7 +18,7 @@ type Request struct {
 // Examples of handlers are mysql, mongo, etc
 type Handler interface {
 	// Get and Set this db/schema for this persistent handler
-	SchemaUse(db string) *datasource.Schema
+	SchemaUse(db string) *schema.Schema
 	Handle(writer ResultWriter, req *Request) error
 	Close() error
 }

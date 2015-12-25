@@ -10,11 +10,11 @@ import (
 
 	u "github.com/araddon/gou"
 
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 	"github.com/araddon/qlbridge/vm"
 )
@@ -33,11 +33,12 @@ var (
 //   Map sql queries into Mongo bson Requests
 type SqlToMgo struct {
 	*exec.TaskBase
+	ctx            *plan.Context
 	resp           *ResultReader
 	sp             *plan.SourcePlan
-	tbl            *datasource.Table
+	tbl            *schema.Table
 	sel            *expr.SqlSelect
-	schema         *datasource.SourceSchema
+	schema         *schema.SourceSchema
 	sess           *mgo.Session
 	filter         bson.M
 	aggs           bson.M
@@ -51,12 +52,11 @@ type SqlToMgo struct {
 	//hasprojection  bool
 }
 
-func NewSqlToMgo(table *datasource.Table, sess *mgo.Session) *SqlToMgo {
+func NewSqlToMgo(table *schema.Table, sess *mgo.Session) *SqlToMgo {
 	return &SqlToMgo{
-		tbl:      table,
-		schema:   table.SourceSchema,
-		sess:     sess,
-		TaskBase: exec.NewTaskBase("SqlToMgo"),
+		tbl:    table,
+		schema: table.SourceSchema,
+		sess:   sess,
 	}
 }
 
@@ -66,6 +66,7 @@ func (m *SqlToMgo) Columns() []string {
 
 func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.VisitStatus, error) {
 
+	m.TaskBase = exec.NewTaskBase(sp.Ctx, "SqlToMgo")
 	var err error
 	m.sp = sp
 	req := sp.Source

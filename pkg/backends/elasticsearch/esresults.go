@@ -6,9 +6,11 @@ import (
 	"fmt"
 
 	u "github.com/araddon/gou"
+
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
+	//"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 )
 
@@ -44,7 +46,7 @@ type ResultReaderNext struct {
 
 func NewResultReader(req *SqlToEs) *ResultReader {
 	m := &ResultReader{}
-	m.TaskBase = exec.NewTaskBase("es-resultreader")
+	m.TaskBase = exec.NewTaskBase(req.ctx, "es-resultreader")
 	m.Req = req
 	return m
 }
@@ -117,7 +119,7 @@ func (m *ResultReader) Columns() []string {
 //  Normally, finalize is responsible for ensuring schema, setu
 //   but in the case of elasticsearch, since it is a non-streaming
 //   response, we build out values in advance
-func (m *ResultReader) Run(context *expr.Context) error {
+func (m *ResultReader) Run() error {
 
 	sigChan := m.SigChan()
 	outCh := m.MessageOut()

@@ -8,10 +8,10 @@ import (
 
 	u "github.com/araddon/gou"
 
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 	"github.com/araddon/qlbridge/vm"
 )
@@ -29,9 +29,10 @@ type esMap map[string]interface{}
 //   Map sql queries into Elasticsearch Json Requests
 type SqlToEs struct {
 	resp           *ResultReader
-	tbl            *datasource.Table
+	tbl            *schema.Table
 	sel            *expr.SqlSelect
-	schema         *datasource.SourceSchema
+	schema         *schema.SourceSchema
+	ctx            *plan.Context
 	filter         esMap
 	aggs           esMap
 	groupby        esMap
@@ -42,7 +43,7 @@ type SqlToEs struct {
 	projections    map[string]string
 }
 
-func NewSqlToEs(table *datasource.Table) *SqlToEs {
+func NewSqlToEs(table *schema.Table) *SqlToEs {
 	return &SqlToEs{
 		tbl:         table,
 		schema:      table.SourceSchema,
@@ -56,7 +57,7 @@ func (m *SqlToEs) Host() string {
 	//u.Warnf("TODO:  replace hardcoded es host")
 	return chooseBackend(m.schema)
 }
-func chooseBackend(schema *datasource.SourceSchema) string {
+func chooseBackend(schema *schema.SourceSchema) string {
 	for _, node := range schema.Nodes {
 		// TODO:  implement real balancer
 		return node.Address

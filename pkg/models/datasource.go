@@ -6,7 +6,7 @@ import (
 
 	u "github.com/araddon/gou"
 
-	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/schema"
 )
 
 var (
@@ -18,10 +18,10 @@ var (
 
 // A backend data source provider that also provides schema
 type DataSource interface {
-	datasource.DataSource
+	schema.DataSource
 }
 
-type DataSourceCreator func(*datasource.SourceSchema, *Config) DataSource
+type DataSourceCreator func(*schema.SourceSchema, *Config) DataSource
 
 func DataSourceRegister(sourceType string, fn DataSourceCreator) {
 	sourceMu.Lock()

@@ -8,18 +8,20 @@ import (
 	"sync"
 	"time"
 
+	u "github.com/araddon/gou"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
-	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 	"github.com/dataux/dataux/pkg/models"
 )
 
 var (
 	// implement interfaces
-	_ datasource.DataSource = (*MongoDataSource)(nil)
+	_ schema.DataSource = (*MongoDataSource)(nil)
 )
 
 const (
@@ -33,17 +35,19 @@ func init() {
 
 // Mongo Data Source implements qlbridge DataSource interfaces
 //  to a backend mongo server
+//  - shared across all sessions/connections
 type MongoDataSource struct {
 	db        string
 	databases []string
 	conf      *models.Config
-	schema    *datasource.SourceSchema
+	schema    *schema.SourceSchema
+	ctx       *plan.Context
 	mu        sync.Mutex
 	sess      *mgo.Session
 	closed    bool
 }
 
-func NewMongoDataSource(schema *datasource.SourceSchema, conf *models.Config) models.DataSource {
+func NewMongoDataSource(schema *schema.SourceSchema, conf *models.Config) models.DataSource {
 	m := MongoDataSource{}
 	m.schema = schema
 	m.conf = conf
@@ -89,14 +93,14 @@ func (m *MongoDataSource) Close() error {
 	return nil
 }
 
-func (m *MongoDataSource) DataSource() datasource.DataSource { return m }
-func (m *MongoDataSource) Tables() []string                  { return m.schema.Tables() }
-func (m *MongoDataSource) Table(table string) (*datasource.Table, error) {
-	u.LogTracef(u.WARN, "why")
+func (m *MongoDataSource) DataSource() schema.DataSource { return m }
+func (m *MongoDataSource) Tables() []string              { return m.schema.Tables() }
+func (m *MongoDataSource) Table(table string) (*schema.Table, error) {
+	//u.LogTracef(u.WARN, "who calling me?")
 	return m.loadTableSchema(table)
 }
 
-func (m *MongoDataSource) Open(collectionName string) (datasource.SourceConn, error) {
+func (m *MongoDataSource) Open(collectionName string) (schema.SourceConn, error) {
 	//u.Debugf("Open(%v)", collectionName)
 	tbl, err := m.schema.Table(collectionName)
 	if err != nil {
@@ -126,7 +130,7 @@ func (m *MongoDataSource) loadSchema() error {
 	return nil
 }
 
-func chooseBackend(source string, schema *datasource.SourceSchema) string {
+func chooseBackend(source string, schema *schema.SourceSchema) string {
 	for _, node := range schema.Nodes {
 		u.Infof("check node:%q =? %+v", source, node)
 		if node.Source == source {
@@ -215,7 +219,7 @@ func (m *MongoDataSource) loadTableNames() error {
 	return nil
 }
 
-func (m *MongoDataSource) loadTableSchema(table string) (*datasource.Table, error) {
+func (m *MongoDataSource) loadTableSchema(table string) (*schema.Table, error) {
 
 	if m.schema == nil {
 		return nil, fmt.Errorf("no schema in use")
@@ -229,7 +233,7 @@ func (m *MongoDataSource) loadTableSchema(table string) (*datasource.Table, erro
 				- use new structure for Observations
 			- shared pkg for data-inspection, data builder
 	*/
-	tbl := datasource.NewTable(table, m.schema)
+	tbl := schema.NewTable(table, m.schema)
 	coll := m.sess.DB(m.db).C(table)
 	colNames := make([]string, 0)
 	errs := make(map[string]string)
@@ -252,48 +256,48 @@ func (m *MongoDataSource) loadTableSchema(table string) (*datasource.Table, erro
 			switch val := iVal.(type) {
 			case bson.ObjectId:
 				//u.Debugf("found bson.ObjectId: %v='%v'", colName, val)
-				tbl.AddField(datasource.NewField(colName, value.StringType, 24, "bson.ObjectID AUTOGEN"))
-				tbl.AddValues([]driver.Value{colName, "string", "NO", "PRI", "AUTOGEN", ""})
+				tbl.AddField(schema.NewField(colName, value.StringType, 24, "bson.ObjectID AUTOGEN"))
+				tbl.AddValues([]driver.Value{colName, "char(24)", "NO", "PRI", "AUTOGEN", ""})
 			case bson.M:
 				//u.Debugf("found bson.M: %v='%v'", colName, val)
-				tbl.AddField(datasource.NewField(colName, value.MapValueType, 24, "bson.M"))
-				tbl.AddValues([]driver.Value{colName, "object", "NO", "", "", "Nested Map Type"})
+				tbl.AddField(schema.NewField(colName, value.MapValueType, 24, "bson.M"))
+				tbl.AddValues([]driver.Value{colName, "text", "NO", "", "", "Nested Map Type, json object"})
 			case map[string]interface{}:
 				//u.Debugf("found map[string]interface{}: %v='%v'", colName, val)
-				tbl.AddField(datasource.NewField(colName, value.MapValueType, 24, "map[string]interface{}"))
-				tbl.AddValues([]driver.Value{colName, "object", "NO", "", "", "Nested Map Type"})
+				tbl.AddField(schema.NewField(colName, value.MapValueType, 24, "map[string]interface{}"))
+				tbl.AddValues([]driver.Value{colName, "text", "NO", "", "", "Nested Map Type, json object"})
 			case int:
 				//u.Debugf("found int: %v='%v'", colName, val)
-				tbl.AddField(datasource.NewField(colName, value.IntType, 32, "int"))
-				tbl.AddValues([]driver.Value{colName, "int", "NO", "", "", "int"})
+				tbl.AddField(schema.NewField(colName, value.IntType, 32, "int"))
+				tbl.AddValues([]driver.Value{colName, "int(8)", "NO", "", "", "int"})
 			case int64:
 				//u.Debugf("found int64: %v='%v'", colName, val)
-				tbl.AddField(datasource.NewField(colName, value.IntType, 32, "long"))
-				tbl.AddValues([]driver.Value{colName, "long", "NO", "", "", "long"})
+				tbl.AddField(schema.NewField(colName, value.IntType, 64, "long"))
+				tbl.AddValues([]driver.Value{colName, "bigint", "NO", "", "", "long"})
 			case float64:
 				//u.Debugf("found float64: %v='%v'", colName, val)
-				tbl.AddField(datasource.NewField(colName, value.NumberType, 32, "float64"))
-				tbl.AddValues([]driver.Value{colName, "float64", "NO", "", "", "float64"})
+				tbl.AddField(schema.NewField(colName, value.NumberType, 32, "float64"))
+				tbl.AddValues([]driver.Value{colName, "float", "NO", "", "", "float64"})
 			case string:
 				//u.Debugf("found string: %v='%v'", colName, val)
-				tbl.AddField(datasource.NewField(colName, value.StringType, 32, "string"))
-				tbl.AddValues([]driver.Value{colName, "string", "NO", "", "", "string"})
+				tbl.AddField(schema.NewField(colName, value.StringType, 32, "string"))
+				tbl.AddValues([]driver.Value{colName, "varchar(255)", "NO", "", "", "string"})
 			case bool:
 				//u.Debugf("found string: %v='%v'", colName, val)
-				tbl.AddField(datasource.NewField(colName, value.BoolType, 1, "bool"))
+				tbl.AddField(schema.NewField(colName, value.BoolType, 1, "bool"))
 				tbl.AddValues([]driver.Value{colName, "bool", "NO", "", "", "bool"})
 			case time.Time:
 				//u.Debugf("found time.Time: %v='%v'", colName, val)
-				tbl.AddField(datasource.NewField(colName, value.TimeType, 32, "datetime"))
+				tbl.AddField(schema.NewField(colName, value.TimeType, 32, "datetime"))
 				tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
 			case *time.Time:
 				//u.Debugf("found time.Time: %v='%v'", colName, val)
-				tbl.AddField(datasource.NewField(colName, value.TimeType, 32, "datetime"))
+				tbl.AddField(schema.NewField(colName, value.TimeType, 32, "datetime"))
 				tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
 			case []uint8:
 				// This is most likely binary data, json.RawMessage, or []bytes
 				//u.Debugf("found []uint8: %v='%v'", colName, val)
-				tbl.AddField(datasource.NewField(colName, value.ByteSliceType, 24, "[]byte"))
+				tbl.AddField(schema.NewField(colName, value.ByteSliceType, 24, "[]byte"))
 				tbl.AddValues([]driver.Value{colName, "binary", "NO", "", "", "Binary data:  []byte"})
 			case []string:
 				u.Warnf("NOT IMPLEMENTED:  found []string %v='%v'", colName, val)
@@ -307,12 +311,14 @@ func (m *MongoDataSource) loadTableSchema(table string) (*datasource.Table, erro
 				}
 				switch typ {
 				case value.StringType:
-					tbl.AddField(datasource.NewField(colName, value.StringsType, 24, "[]string"))
-					tbl.AddValues([]driver.Value{colName, "[]string", "NO", "", "", "[]string"})
+					tbl.AddField(schema.NewField(colName, value.StringsType, 24, "[]string"))
+					//tbl.AddValues([]driver.Value{colName, "[]string", "NO", "", "", "[]string"})
+					tbl.AddValues([]driver.Value{colName, "text", "NO", "", "", "json []string"})
 				default:
 					u.Infof("SEMI IMPLEMENTED:   found []interface{}: col:%s T:%T type:%v", colName, val, typ.String())
-					tbl.AddField(datasource.NewField(colName, value.SliceValueType, 24, "[]value"))
-					tbl.AddValues([]driver.Value{colName, "[]value", "NO", "", "", "[]value"})
+					tbl.AddField(schema.NewField(colName, value.SliceValueType, 24, "[]value"))
+					//tbl.AddValues([]driver.Value{colName, "[]value", "NO", "", "", "json []value"})
+					tbl.AddValues([]driver.Value{colName, "text", "NO", "", "", "json []value"})
 				}
 			case nil:
 				// ??

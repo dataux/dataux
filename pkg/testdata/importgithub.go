@@ -101,8 +101,8 @@ func LoadGithubToEs(host string, year, month, daysToImport, hoursToImport int) {
 	}()
 
 	//http://data.githubarchive.org/2015-01-01-15.json.g
-	for day := 2; day <= daysToImport; day++ {
-		for hr := 7; hr < hoursToImport; hr++ {
+	for day := 1; day <= daysToImport; day++ {
+		for hr := 0; hr < hoursToImport; hr++ {
 			downUrl := fmt.Sprintf("http://data.githubarchive.org/%d-%02d-%02d-%d.json.gz", year, month, day, hr)
 
 			u.Info("Starting Download ", downUrl)
@@ -149,7 +149,13 @@ func LoadGithubToEs(host string, year, month, daysToImport, hoursToImport int) {
 					// create a Document ID that is consistent across imports
 					id := fmt.Sprintf("%x", md5.Sum(line))
 					//indexer.Index("github", ge.Type, id, "", &ge.Created, line)
-					err = indexer.Index("github_"+ge.Type(), "event", id, "", &ge.Created, line, true)
+					switch ge.Type() {
+					case "push":
+						jh := u.NewJsonHelper(line)
+						delete(jh, "payload") // elasticsearch 2.1 hates that payload.shas alternates string/bool
+						line, _ = json.Marshal(&jh)
+					}
+					err = indexer.Index("github_"+ge.Type(), "event", id, "", &ge.Created, line, false)
 					if err != nil {
 						u.Errorf("error? %v", err)
 					}
