@@ -47,6 +47,7 @@ type SqlToMgo struct {
 	sort           []bson.M
 	hasMultiValue  bool // Multi-Value vs Single-Value aggs
 	hasSingleValue bool // single value agg
+	needsPolyFill  bool // do we request that features be polyfilled?
 	//cols           []string
 	//proj           *expr.Projection
 	//hasprojection  bool
@@ -70,7 +71,7 @@ func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.Visit
 	var err error
 	m.sp = sp
 	req := sp.Source
-	u.Infof("mongo.VisitSubSelect %v final:%v", req.String(), sp.Final)
+	//u.Infof("mongo.VisitSubSelect %v final:%v", req.String(), sp.Final)
 
 	m.sel = req
 
@@ -134,15 +135,18 @@ func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.Visit
 		}
 	}
 
-	filterBy, _ := json.Marshal(m.filter)
+	//filterBy, _ := json.Marshal(m.filter)
 	//u.Infof("tbl %#v", m.tbl.Columns(), m.tbl)
 	//u.Infof("filter: %#v", m.filter)
-	u.Debugf("db=%v  tbl=%v filter=%v sort=%v limit=%v skip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
+	//u.Debugf("db=%v  tbl=%v filter=%v sort=%v limit=%v skip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
 	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter)
 
 	resultReader := NewResultReader(m, query, limit)
 	m.resp = resultReader
 	//resultReader.Finalize()
+	if m.needsPolyFill {
+		return resultReader, expr.VisitContinue, nil
+	}
 	return resultReader, expr.VisitFinal, nil
 }
 
@@ -540,14 +544,18 @@ func (m *SqlToMgo) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {
 	case "max", "min", "avg", "sum", "cardinality":
 		m.hasSingleValue = true
 		if len(node.Args) != 1 {
-			return nil, fmt.Errorf("Invalid func")
+			u.Warnf("not able to run as native mongo query, running polyfill: %s", node.String())
+			//return nil, fmt.Errorf("Invalid func")
 		}
 		val, ok := eval(node.Args[0])
 		if !ok {
-			u.Errorf("Must be valid: %v", node.String())
+			u.Warnf("Could not run node as mongo: %v", node.String())
+			m.needsPolyFill = true
+		} else {
+			// "min_price" : { "min" : { "field" : "price" } }
+			q = bson.M{funcName: bson.M{"field": val.ToString()}}
 		}
-		// "min_price" : { "min" : { "field" : "price" } }
-		q = bson.M{funcName: bson.M{"field": val.ToString()}}
+		return q, nil
 	case "terms":
 		m.hasMultiValue = true
 		// "products" : { "terms" : {"field" : "product", "size" : 5 }}
@@ -573,7 +581,7 @@ func (m *SqlToMgo) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {
 
 	case "count":
 		m.hasSingleValue = true
-		u.Warnf("how do we want to use count(*)?  ?")
+		//u.Warnf("how do we want to use count(*)?  ?")
 		val, ok := eval(node.Args[0])
 		if !ok {
 			u.Errorf("Must be valid: %v", node.String())
@@ -603,7 +611,7 @@ func eval(cur expr.Node) (value.Value, bool) {
 	case *expr.StringNode:
 		return value.NewStringValue(curNode.Text), true
 	default:
-		u.Errorf("unrecognized T:%T  %v", cur, cur)
+		//u.Errorf("unrecognized T:%T  %v", cur, cur)
 	}
 	return value.NilValueVal, false
 }

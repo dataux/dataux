@@ -97,6 +97,7 @@ func (m *ServerCtx) loadConfig() error {
 			sourceSchema.DS = ds
 
 			// TODO:   Periodically refresh this as sources are dynamic tables
+			u.Infof("tables to load? %#v", sourceSchema.Conf)
 			for _, tableName := range ds.Tables() {
 				m.loadSourceSchema(strings.ToLower(tableName), sch, sourceSchema)
 			}

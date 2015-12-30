@@ -3,6 +3,7 @@ package mongo_test
 import (
 	"database/sql"
 	"flag"
+	"fmt"
 	"testing"
 
 	u "github.com/araddon/gou"
@@ -203,47 +204,129 @@ func TestShowTables(t *testing.T) {
 	})
 	assert.Tf(t, found, "Must have found article table with show")
 }
-
-func TestDescribeTable(t *testing.T) {
+func TestShowColumns(t *testing.T) {
+	//[]string{"Field", "Type", "Collation", "Null", "Key", "Default", "Extra", "Privileges", "Comment"}
 	data := struct {
-		Field   string `db:"Field"`
-		Type    string `db:"Type"`
-		Null    string `db:"Null"`
-		Key     string `db:"Key"`
-		Default string `db:"Default"`
-		Extra   string `db:"Extra"`
+		Field      string         `db:"Field"`
+		Type       string         `db:"Type"`
+		Collation  sql.NullString `db:"Collation"`
+		Null       string         `db:"Null"`
+		Key        sql.NullString `db:"Key"`
+		Default    interface{}    `db:"Default"`
+		Extra      sql.NullString `db:"Extra"`
+		Privileges sql.NullString `db:"Privileges"`
+		Comment    sql.NullString `db:"Comment"`
 	}{}
 	describedCt := 0
 	validateQuerySpec(t, QuerySpec{
-		Sql:         "describe article;",
+		Sql:         fmt.Sprintf("show full columns from `article` from `%s` LIKE '%%'", testutil.DbName),
 		ExpectRowCt: 12,
 		ValidateRowData: func() {
-			u.Infof("%#v", data)
+			//u.Infof("%#v", data)
 			assert.Tf(t, data.Field != "", "%v", data)
 			switch data.Field {
 			case "embedded":
-				assert.Tf(t, data.Type == "object", "%#v", data)
+				assert.Tf(t, data.Type == "text", "%#v", data)
 				describedCt++
 			case "author":
-				assert.T(t, data.Type == "string")
+				assert.T(t, data.Type == "varchar(255)")
 				describedCt++
 			case "created":
 				assert.T(t, data.Type == "datetime")
 				describedCt++
 			case "category":
-				assert.T(t, data.Type == "[]string")
+				assert.T(t, data.Type == "text")
 				describedCt++
 			case "body":
-				assert.T(t, data.Type == "binary")
+				assert.T(t, data.Type == "text")
 				describedCt++
 			case "deleted":
-				assert.T(t, data.Type == "bool")
+				assert.T(t, data.Type == "boolean", "type?", data.Type)
 				describedCt++
 			}
 		},
 		RowData: &data,
 	})
 	assert.Tf(t, describedCt == 6, "Should have found/described 6 but was %v", describedCt)
+}
+
+func TestDescribeTable(t *testing.T) {
+	data := struct {
+		Field   string         `db:"Field"`
+		Type    string         `db:"Type"`
+		Null    string         `db:"Null"`
+		Key     sql.NullString `db:"Key"`
+		Default interface{}    `db:"Default"`
+		Extra   sql.NullString `db:"Extra"`
+	}{}
+	describedCt := 0
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "describe article;",
+		ExpectRowCt: 12,
+		ValidateRowData: func() {
+			//u.Infof("%#v", data)
+			assert.Tf(t, data.Field != "", "%v", data)
+			switch data.Field {
+			case "embedded":
+				assert.Tf(t, data.Type == "text", "%#v", data)
+				describedCt++
+			case "author":
+				assert.T(t, data.Type == "varchar(255)")
+				describedCt++
+			case "created":
+				assert.T(t, data.Type == "datetime")
+				describedCt++
+			case "category":
+				assert.T(t, data.Type == "text")
+				describedCt++
+			case "body":
+				assert.T(t, data.Type == "text")
+				describedCt++
+			case "deleted":
+				assert.T(t, data.Type == "boolean", "type?", data.Type)
+				describedCt++
+			}
+		},
+		RowData: &data,
+	})
+	assert.Tf(t, describedCt == 6, "Should have found/described 6 but was %v", describedCt)
+}
+func TestSelectCountStar(t *testing.T) {
+	data := struct {
+		Count int `db:"count(*)"`
+	}{}
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "select count(*) from article",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			u.Infof("%#v", data.Count)
+			//assert.Tf(t, data.Count == 4, "Not count right?? %v", data)
+		},
+		RowData: &data,
+	})
+}
+func TestSelectAggAvg(t *testing.T) {
+	data := struct {
+		Avg float64 `db:"title_avg"`
+	}{}
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "select AVG(CHAR_LENGTH(CAST(`title` AS CHAR))) as title_avg from article",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			u.Infof("%#v", data.Avg)
+			assert.Tf(t, data.Avg == 8.25, "Not avg right?? %v", data)
+		},
+		RowData: &data,
+	})
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "select AVG(CHAR_LENGTH(CAST(`article.title` AS CHAR))) as title_avg from article",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			u.Infof("%#v", data.Avg)
+			assert.Tf(t, data.Avg == 8.25, "Not avg right?? %v", data)
+		},
+		RowData: &data,
+	})
 }
 
 func TestSimpleRowSelect(t *testing.T) {

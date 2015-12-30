@@ -1,7 +1,6 @@
 package mongo
 
 import (
-	"database/sql/driver"
 	"fmt"
 	"sort"
 	"strings"
@@ -212,6 +211,7 @@ func (m *MongoDataSource) loadTableNames() error {
 	if err != nil {
 		return err
 	}
+
 	for _, tableName := range tables {
 		m.schema.AddTableName(tableName)
 	}
@@ -253,52 +253,54 @@ func (m *MongoDataSource) loadTableSchema(table string) (*schema.Table, error) {
 				continue
 			}
 
+			//[]string{"Field", "Type", "Collation", "Null", "Key", "Default", "Extra", "Privileges", "Comment"}
+			//NewField(name string, valType value.ValueType, size int, nulls bool, defaultVal driver.Value, key, collation, description  string)
 			switch val := iVal.(type) {
 			case bson.ObjectId:
 				//u.Debugf("found bson.ObjectId: %v='%v'", colName, val)
-				tbl.AddField(schema.NewField(colName, value.StringType, 24, "bson.ObjectID AUTOGEN"))
-				tbl.AddValues([]driver.Value{colName, "char(24)", "NO", "PRI", "AUTOGEN", ""})
+				tbl.AddField(schema.NewField(colName, value.StringType, 16, schema.NoNulls, nil, "PRI", "", "bson.ObjectID AUTOGEN"))
+				//tbl.DescribeColumn([]driver.Value{colName, "char(24)", "NO", "PRI", "AUTOGEN", ""})
 			case bson.M:
 				//u.Debugf("found bson.M: %v='%v'", colName, val)
-				tbl.AddField(schema.NewField(colName, value.MapValueType, 24, "bson.M"))
-				tbl.AddValues([]driver.Value{colName, "text", "NO", "", "", "Nested Map Type, json object"})
+				tbl.AddField(schema.NewFieldBase(colName, value.MapValueType, 24, "bson.M"))
+				//tbl.DescribeColumn([]driver.Value{colName, "text", "NO", "", "", "Nested Map Type, json object"})
 			case map[string]interface{}:
 				//u.Debugf("found map[string]interface{}: %v='%v'", colName, val)
-				tbl.AddField(schema.NewField(colName, value.MapValueType, 24, "map[string]interface{}"))
-				tbl.AddValues([]driver.Value{colName, "text", "NO", "", "", "Nested Map Type, json object"})
+				tbl.AddField(schema.NewFieldBase(colName, value.MapValueType, 24, "map[string]interface{}"))
+				//tbl.DescribeColumn([]driver.Value{colName, "text", "NO", "", "", "Nested Map Type, json object"})
 			case int:
 				//u.Debugf("found int: %v='%v'", colName, val)
-				tbl.AddField(schema.NewField(colName, value.IntType, 32, "int"))
-				tbl.AddValues([]driver.Value{colName, "int(8)", "NO", "", "", "int"})
+				tbl.AddField(schema.NewFieldBase(colName, value.IntType, 32, "int"))
+				//tbl.DescribeColumn([]driver.Value{colName, "int(8)", "NO", "", "", "int"})
 			case int64:
 				//u.Debugf("found int64: %v='%v'", colName, val)
-				tbl.AddField(schema.NewField(colName, value.IntType, 64, "long"))
-				tbl.AddValues([]driver.Value{colName, "bigint", "NO", "", "", "long"})
+				tbl.AddField(schema.NewFieldBase(colName, value.IntType, 64, "long"))
+				//tbl.DescribeColumn([]driver.Value{colName, "bigint", "NO", "", "", "long"})
 			case float64:
 				//u.Debugf("found float64: %v='%v'", colName, val)
-				tbl.AddField(schema.NewField(colName, value.NumberType, 32, "float64"))
-				tbl.AddValues([]driver.Value{colName, "float", "NO", "", "", "float64"})
+				tbl.AddField(schema.NewFieldBase(colName, value.NumberType, 32, "float64"))
+				//tbl.DescribeColumn([]driver.Value{colName, "float", "NO", "", "", "float64"})
 			case string:
 				//u.Debugf("found string: %v='%v'", colName, val)
-				tbl.AddField(schema.NewField(colName, value.StringType, 32, "string"))
-				tbl.AddValues([]driver.Value{colName, "varchar(255)", "NO", "", "", "string"})
+				tbl.AddField(schema.NewFieldBase(colName, value.StringType, 255, "string"))
+				//tbl.DescribeColumn([]driver.Value{colName, "varchar(255)", "NO", "", "", "string"})
 			case bool:
 				//u.Debugf("found string: %v='%v'", colName, val)
-				tbl.AddField(schema.NewField(colName, value.BoolType, 1, "bool"))
-				tbl.AddValues([]driver.Value{colName, "bool", "NO", "", "", "bool"})
+				tbl.AddField(schema.NewFieldBase(colName, value.BoolType, 1, "bool"))
+				//tbl.DescribeColumn([]driver.Value{colName, "bool", "NO", "", "", "bool"})
 			case time.Time:
 				//u.Debugf("found time.Time: %v='%v'", colName, val)
-				tbl.AddField(schema.NewField(colName, value.TimeType, 32, "datetime"))
-				tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
+				tbl.AddField(schema.NewFieldBase(colName, value.TimeType, 32, "datetime"))
+				//tbl.DescribeColumn([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
 			case *time.Time:
 				//u.Debugf("found time.Time: %v='%v'", colName, val)
-				tbl.AddField(schema.NewField(colName, value.TimeType, 32, "datetime"))
-				tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
+				tbl.AddField(schema.NewFieldBase(colName, value.TimeType, 32, "datetime"))
+				//tbl.DescribeColumn([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
 			case []uint8:
 				// This is most likely binary data, json.RawMessage, or []bytes
 				//u.Debugf("found []uint8: %v='%v'", colName, val)
-				tbl.AddField(schema.NewField(colName, value.ByteSliceType, 24, "[]byte"))
-				tbl.AddValues([]driver.Value{colName, "binary", "NO", "", "", "Binary data:  []byte"})
+				tbl.AddField(schema.NewFieldBase(colName, value.ByteSliceType, 1000, "[]byte"))
+				//tbl.DescribeColumn([]driver.Value{colName, "binary", "NO", "", "", "Binary data:  []byte"})
 			case []string:
 				u.Warnf("NOT IMPLEMENTED:  found []string %v='%v'", colName, val)
 			case []interface{}:
@@ -311,14 +313,14 @@ func (m *MongoDataSource) loadTableSchema(table string) (*schema.Table, error) {
 				}
 				switch typ {
 				case value.StringType:
-					tbl.AddField(schema.NewField(colName, value.StringsType, 24, "[]string"))
+					tbl.AddField(schema.NewFieldBase(colName, value.StringsType, 1000, "[]string"))
 					//tbl.AddValues([]driver.Value{colName, "[]string", "NO", "", "", "[]string"})
-					tbl.AddValues([]driver.Value{colName, "text", "NO", "", "", "json []string"})
+					//tbl.DescribeColumn([]driver.Value{colName, "text", "NO", "", "", "json []string"})
 				default:
-					u.Infof("SEMI IMPLEMENTED:   found []interface{}: col:%s T:%T type:%v", colName, val, typ.String())
-					tbl.AddField(schema.NewField(colName, value.SliceValueType, 24, "[]value"))
+					//u.Debugf("SEMI IMPLEMENTED:   found []interface{}: col:%s T:%T type:%v", colName, val, typ.String())
+					tbl.AddField(schema.NewFieldBase(colName, value.SliceValueType, 1000, "[]value"))
 					//tbl.AddValues([]driver.Value{colName, "[]value", "NO", "", "", "json []value"})
-					tbl.AddValues([]driver.Value{colName, "text", "NO", "", "", "json []value"})
+					//tbl.DescribeColumn([]driver.Value{colName, "text", "NO", "", "", "json []value"})
 				}
 			case nil:
 				// ??

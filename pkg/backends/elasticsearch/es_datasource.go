@@ -1,7 +1,6 @@
 package elasticsearch
 
 import (
-	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 
@@ -186,13 +185,9 @@ func (m *ElasticsearchDataSource) loadTableSchema(table string) (*schema.Table, 
 	//u.Debugf("resp: %v", jh)
 	jh = jh.Helper("properties")
 
-	tbl.AddField(schema.NewField("_id", value.StringType, 24, "AUTOGEN"))
-	tbl.AddField(schema.NewField("type", value.StringType, 24, "tbd"))
-	tbl.AddField(schema.NewField("_score", value.NumberType, 24, "Created per Search By Elasticsearch"))
-
-	tbl.AddValues([]driver.Value{"_id", "string", "NO", "PRI", "AUTOGEN", ""})
-	tbl.AddValues([]driver.Value{"type", "string", "NO", "", nil, "tbd"})
-	tbl.AddValues([]driver.Value{"_score", "float", "NO", "", nil, "Created per search"})
+	tbl.AddField(schema.NewField("_id", value.StringType, 24, schema.NoNulls, nil, "PRI", "", "AUTOGEN"))
+	tbl.AddField(schema.NewFieldBase("type", value.StringType, 24, "tbd"))
+	tbl.AddField(schema.NewFieldBase("_score", value.NumberType, 24, "Created per Search By Elasticsearch"))
 
 	buildEsFields(m.schema, tbl, jh, "", 0)
 
@@ -212,33 +207,19 @@ func buildEsFields(s *schema.SourceSchema, tbl *schema.Table, jh u.JsonHelper, p
 			//u.Infof("%v %v", fieldName, h)
 			switch esType := h.String("type"); esType {
 			case "boolean":
-				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
-				//fld = mysql.NewField(fieldName, s.Db, s.Db, 1, mysql.MYSQL_TYPE_TINY)
-				fld = schema.NewField(fieldName, value.BoolType, 1, string(jb))
+				fld = schema.NewFieldBase(fieldName, value.BoolType, 1, string(jb))
 			case "string":
-				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
-				//fld = mysql.NewField(fieldName, s.Db, s.Db, 512, mysql.MYSQL_TYPE_STRING)
-				fld = schema.NewField(fieldName, value.StringType, 512, string(jb))
+				fld = schema.NewFieldBase(fieldName, value.StringType, 512, string(jb))
 			case "date":
-				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
-				//fld = mysql.NewField(fieldName, s.Db, s.Db, 32, mysql.MYSQL_TYPE_DATETIME)
-				fld = schema.NewField(fieldName, value.TimeType, 4, string(jb))
+				fld = schema.NewFieldBase(fieldName, value.TimeType, 32, string(jb))
 			case "int", "long", "integer":
-				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
-				//fld = mysql.NewField(fieldName, s.Db, s.Db, 64, mysql.MYSQL_TYPE_LONG)
-				fld = schema.NewField(fieldName, value.IntType, 8, string(jb))
+				fld = schema.NewFieldBase(fieldName, value.IntType, 46, string(jb))
 			case "double", "float":
-				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
-				//fld = mysql.NewField(fieldName, s.Db, s.Db, 64, mysql.MYSQL_TYPE_LONG)
-				fld = schema.NewField(fieldName, value.NumberType, 8, string(jb))
+				fld = schema.NewFieldBase(fieldName, value.NumberType, 64, string(jb))
 			case "nested", "object":
-				tbl.AddValues([]driver.Value{fieldName, esType, "YES", "", nil, jb})
-				//fld = mysql.NewField(fieldName, s.Db, s.Db, 2000, mysql.MYSQL_TYPE_BLOB)
-				fld = schema.NewField(fieldName, value.StringType, 2000, string(jb))
+				fld = schema.NewFieldBase(fieldName, value.StringType, 2000, string(jb))
 			default:
-				tbl.AddValues([]driver.Value{fieldName, "object", "YES", "", nil, `{"type":"object"}`})
-				//fld = mysql.NewField(fieldName, s.Db, s.Db, 2000, mysql.MYSQL_TYPE_BLOB)
-				fld = schema.NewField(fieldName, value.StringType, 2000, `{"type":"object"}`)
+				fld = schema.NewFieldBase(fieldName, value.StringType, 2000, `{"type":"object"}`)
 				props := h.Helper("properties")
 				if len(props) > 0 {
 					buildEsFields(s, tbl, props, fieldName+".", depth+1)

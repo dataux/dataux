@@ -3,6 +3,7 @@ package mongo
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"gopkg.in/mgo.v2"
@@ -61,7 +62,7 @@ func (m *ResultReader) Run() error {
 	defer func() {
 		close(outCh) // closing output channels is the signal to stop
 		//m.TaskBase.Close()
-		u.Debugf("nice, finalize ResultReader out: %p  row ct %v", outCh, len(m.Vals))
+		//u.Debugf("nice, finalize ResultReader out: %p  row ct %v", outCh, len(m.Vals))
 	}()
 
 	m.finalized = true
@@ -73,22 +74,36 @@ func (m *ResultReader) Run() error {
 	//cols := m.sql.sel.Columns
 	cols := m.sql.sp.Proj.Columns
 	colNames := make(map[string]int, len(cols))
-	for i, col := range cols {
-		colNames[col.As] = i
+	if m.sql.needsPolyFill {
+		// since we are asking for poly-fill, the col names
+		// are not projected
+		for i, col := range cols {
+			colNames[col.Col.SourceField] = i
+			//u.Debugf("%d col: %s %#v", i, col.As, col)
+		}
+	} else {
+		for i, col := range cols {
+			colNames[col.As] = i
+			//u.Debugf("%d col: %s %#v", i, col.As, col)
+		}
 	}
+
 	m.Vals = make([][]driver.Value, 0)
 
 	if sql.CountStar() {
 		// Count *
+		//u.Infof("count * colnames? %v", colNames)
+		//u.Debugf("ctx projection? %#v", m.Ctx.Projection.Proj)
 		vals := make([]driver.Value, 1)
 		ct, err := m.query.Count()
 		if err != nil {
 			u.Errorf("could not get count: %v", err)
 			return err
 		}
-		vals[0] = ct
+		// Wtf, sometime i want to strangle mysql
+		vals[0] = fmt.Sprintf("%d", ct)
 		m.Vals = append(m.Vals, vals)
-		u.Infof("was a select count(*) query %d", ct)
+		//u.Infof("was a select count(*) query %d", ct)
 		msg := datasource.NewSqlDriverMessageMap(uint64(1), vals, colNames)
 		//u.Infof("In source Scanner iter %#v", msg)
 		outCh <- msg
@@ -114,6 +129,7 @@ func (m *ResultReader) Run() error {
 		//u.Debugf("col? %v", bm)
 		vals := make([]driver.Value, len(cols))
 		for i, col := range cols {
+			//u.Debugf("col source:%s   %s", col.Col.SourceField, col.Col)
 			if val, ok := bm[col.Col.SourceField]; ok {
 				switch vt := val.(type) {
 				case bson.ObjectId:
@@ -127,6 +143,7 @@ func (m *ResultReader) Run() error {
 						vals[i] = by
 					}
 				default:
+					//u.Warnf("? %v %T", col, vt)
 					vals[i] = vt
 				}
 

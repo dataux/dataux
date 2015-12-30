@@ -27,6 +27,7 @@ func NewMySqlGlobalVars() *datasource.ContextSimple {
 	ctx := datasource.NewContextSimple()
 
 	ctx.Data["@@session.auto_increment_increment"] = value.NewIntValue(1)
+	ctx.Data["@@session.tx_read_only"] = value.NewIntValue(1)
 	//ctx.Data["@@session.auto_increment_increment"] = value.NewBoolValue(true)
 	ctx.Data["@@character_set_client"] = value.NewStringValue("utf8")
 	ctx.Data["@@character_set_connection"] = value.NewStringValue("utf8")

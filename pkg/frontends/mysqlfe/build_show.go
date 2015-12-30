@@ -28,9 +28,9 @@ func (m *MySqlJob) VisitShow(stmt *expr.SqlShow) (expr.Task, expr.VisitStatus, e
 	case stmt.Create && strings.ToLower(stmt.CreateWhat) == "table":
 		// SHOW CREATE TABLE
 
-		_, tableName, _ := expr.LeftRight(stmt.Identity)
-		tableLower := strings.ToLower(tableName)
-		tbl, _ := m.Ctx.Schema.Table(tableLower)
+		// _, tableName, _ := expr.LeftRight(stmt.Identity)
+		// tableLower := strings.ToLower(tableName)
+		tbl, _ := m.Ctx.Schema.Table(stmt.Identity)
 		if tbl == nil {
 			u.Warnf("no table? %q", stmt.Identity)
 			return nil, expr.VisitError, fmt.Errorf("No table found for %q", stmt.Identity)
@@ -41,7 +41,7 @@ func (m *MySqlJob) VisitShow(stmt *expr.SqlShow) (expr.Task, expr.VisitStatus, e
 			return nil, expr.VisitError, err
 		}
 		rows := make([][]driver.Value, 1)
-		rows[0] = []driver.Value{tableName, createStmt}
+		rows[0] = []driver.Value{tbl.Name, createStmt}
 		source := membtree.NewStaticDataSource("tables", 0, rows, []string{"Table", "Create Table"})
 		proj := expr.NewProjection()
 		proj.AddColumnShort("Table", value.StringType)

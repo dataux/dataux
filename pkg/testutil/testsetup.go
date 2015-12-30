@@ -3,6 +3,7 @@ package testutil
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -25,6 +26,10 @@ var (
 
 	Articles = make([]*Article, 0)
 	Users    = make([]*User, 0)
+)
+
+const (
+	DbName = "datauxtest"
 )
 
 func init() {
@@ -112,7 +117,7 @@ func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
 	testmysql.RunTestServer(t)
 
 	// This is a connection to RunTestServer, which starts on port 13307
-	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/datauxtest?parseTime=true")
+	dbx, err := sqlx.Connect("mysql", fmt.Sprintf("root@tcp(127.0.0.1:13307)/%s?parseTime=true", DbName))
 	assert.Tf(t, err == nil, "%v", err)
 	defer dbx.Close()
 	//u.Debugf("%v", testSpec.Sql)

@@ -195,7 +195,8 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		job.RootTask.Add(resultWriter)
 	case *expr.SqlShow, *expr.SqlDescribe:
 		//u.Debugf("adding mysql result writer: projection: %p  %#v", job.Ctx.Projection, job.Ctx.Projection)
-		resultWriter := NewMySqlResultWriter(writer, job.Ctx)
+		//u.Debugf("roottask? %#v", job.RootTask)
+		resultWriter := NewMySqlSchemaWriter(writer, job.Ctx)
 		job.RootTask.Add(resultWriter)
 	case *expr.SqlInsert, *expr.SqlUpsert, *expr.SqlUpdate, *expr.SqlDelete:
 		//u.Debugf("adding mysql result writer: %#v", job.Projection)

@@ -5,6 +5,7 @@ import (
 	"net"
 	"runtime"
 	"strings"
+	"sync/atomic"
 
 	u "github.com/araddon/gou"
 	"github.com/dataux/dataux/pkg/models"
@@ -55,7 +56,7 @@ func NewMysqlListener(feConf *models.ListenerConfig, conf *models.Config) (*Mysq
 type MysqlListener struct {
 	cfg         *models.Config
 	feconf      *models.ListenerConfig
-	connCt      int
+	connCt      int32 // current connection count
 	addr        string
 	user        string
 	password    string
@@ -95,7 +96,6 @@ func (m *MysqlListener) Close() error {
 func (m *MysqlListener) OnConn(c net.Conn) {
 
 	conn := newConn(m, c)
-	u.Debugf("new conn id=%d p:%p", m.connCt, conn)
 
 	defer func() {
 		if !m.cfg.SupressRecover {
@@ -106,7 +106,7 @@ func (m *MysqlListener) OnConn(c net.Conn) {
 				u.Errorf("onConn panic %v: %v\n%s", c.RemoteAddr().String(), err, buf)
 			}
 		}
-		m.connCt--
+		atomic.AddInt32(&m.connCt, -1)
 		conn.Close()
 	}()
 
@@ -116,7 +116,8 @@ func (m *MysqlListener) OnConn(c net.Conn) {
 		c.Close()
 		return
 	}
-	m.connCt++
+	atomic.AddInt32(&m.connCt, 1)
+	u.Debugf("new conn id=%d conns active:%d  p:%p", conn.connectionId, m.connCt, conn)
 	// Blocking
 	conn.Run()
 }
