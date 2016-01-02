@@ -20,14 +20,7 @@ func NewProducerState() *ProducerState {
 	return &ProducerState{SentMessages: 0, Duration: 0}
 }
 
-func NewProducerActor(def *grid2.ActorDef, conf *Conf) grid2.Actor {
-	return &ProducerActor{
-		def:  def,
-		conf: conf,
-		flow: Flow(def.Settings["flow"]),
-	}
-}
-
+// Our producer
 type ProducerActor struct {
 	def      *grid2.ActorDef
 	conf     *Conf
@@ -39,6 +32,14 @@ type ProducerActor struct {
 	finished condition.Join
 	state    *ProducerState
 	chaos    *Chaos
+}
+
+func NewProducerActor(def *grid2.ActorDef, conf *Conf) grid2.Actor {
+	return &ProducerActor{
+		def:  def,
+		conf: conf,
+		flow: Flow(def.Settings["flow"]),
+	}
 }
 
 func (a *ProducerActor) ID() string {
@@ -62,6 +63,8 @@ func (a *ProducerActor) Act(g grid2.Grid, exit <-chan bool) bool {
 	a.chaos = NewChaos(a.ID())
 	defer a.chaos.Stop()
 
+	// Now, we are going to define all of the State's, transitions
+	// for the StateMachine lifecycle of this actor
 	d := dfa.New()
 	d.SetStartState(Starting)
 	d.SetTerminalStates(Exiting, Terminating)
@@ -88,6 +91,7 @@ func (a *ProducerActor) Act(g grid2.Grid, exit <-chan bool) bool {
 	d.SetTransition(Finishing, Failure, Exiting, a.Exiting)
 	d.SetTransition(Finishing, Exit, Exiting, a.Exiting)
 
+	// This call is blocking
 	final, err := d.Run(a.Starting)
 	//u.Warnf("%s producer final: %s", a, final.String())
 	if err != nil {
@@ -99,37 +103,50 @@ func (a *ProducerActor) Act(g grid2.Grid, exit <-chan bool) bool {
 	return false
 }
 
+// Starting is the process of getting everything setup and waiting
+//  for other actors in this workflow to be started as well before we run.
 func (a *ProducerActor) Starting() dfa.Letter {
+
+	u.Debugf("%s starting", a)
+
+	// Create a hearbeat ticket to see if we are still alive
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	time.Sleep(3 * time.Second)
+	//time.Sleep(3 * time.Second)
 
+	// Create a join condition to see that
+	//  other actors are joining in this workflow
 	j := condition.NewJoin(a.grid.Etcd(), 2*time.Minute, a.grid.Name(), a.flow.Name(), "started", a.ID())
 	if err := j.Rejoin(); err != nil {
 		return Failure
 	}
 	a.started = j
 
+	// For starting we want to ensure that appropriate number of
+	//  other producer/consumers have joined this rendezvous
 	w := condition.NewCountWatch(a.grid.Etcd(), a.grid.Name(), a.flow.Name(), "started")
 	defer w.Stop()
+	started := w.WatchUntil(a.conf.NrConsumers + a.conf.NrProducers + 1)
 
+	// For finish, we watch until the Leader has finished
 	f := condition.NewNameWatch(a.grid.Etcd(), a.grid.Name(), a.flow.Name(), "finished")
 	defer f.Stop()
-
-	started := w.WatchUntil(a.conf.NrConsumers + a.conf.NrProducers + 1)
 	finished := f.WatchUntil(a.flow.NewContextualName("leader"))
+
 	for {
 		select {
 		case <-a.exit:
 			return Exit
 		case <-a.chaos.C:
+			// Simulate a failure
 			return Failure
 		case <-ticker.C:
 			if err := a.started.Alive(); err != nil {
 				return Failure
 			}
 		case <-started:
+			u.Debugf("%s starting complete", a)
 			return EverybodyStarted
 		case <-finished:
 			return EverybodyFinished
@@ -138,6 +155,9 @@ func (a *ProducerActor) Starting() dfa.Letter {
 }
 
 func (a *ProducerActor) Finishing() dfa.Letter {
+
+	u.Debugf("%s finishing", a)
+
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -176,6 +196,9 @@ func (a *ProducerActor) Finishing() dfa.Letter {
 }
 
 func (a *ProducerActor) Running() dfa.Letter {
+
+	u.Debugf("%s running", a)
+
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -194,6 +217,7 @@ func (a *ProducerActor) Running() dfa.Letter {
 	data := NewDataMaker(a.conf.MsgSize, a.conf.MsgCount-a.state.SentMessages)
 	defer data.Stop()
 
+	// Our ring will help us
 	r := ring.New(a.flow.NewContextualName("consumer"), a.conf.NrConsumers)
 	start := time.Now()
 	for {
@@ -237,7 +261,12 @@ func (a *ProducerActor) Running() dfa.Letter {
 					return Failure
 				}
 			}
-			if err := a.tx.SendBuffered(r.ByInt(a.state.SentMessages), &DataMsg{Producer: a.ID(), Data: d}); err != nil {
+
+			// We create a partitionId (ie, which consumer gets it) randomly
+			//  - choosing how to partition is important for certain types of tasks
+			partitionId := r.ByInt(a.state.SentMessages)
+
+			if err := a.tx.SendBuffered(partitionId, &DataMsg{Producer: a.ID(), Data: d}); err != nil {
 				if _, err := s.Store(a.state); err != nil {
 					u.Warnf("%v: failed to save state: %v", a, err)
 				}

@@ -104,7 +104,7 @@ func (a *ConsumerActor) Starting() dfa.Letter {
 	defer ticker.Stop()
 
 	// Why are we sleeping, what are we waiting for?
-	time.Sleep(3 * time.Second)
+	//time.Sleep(3 * time.Second)
 
 	j := condition.NewJoin(a.grid.Etcd(), 2*time.Minute, a.grid.Name(), a.flow.Name(), "started", a.ID())
 	if err := j.Rejoin(); err != nil {
@@ -177,11 +177,14 @@ func (a *ConsumerActor) Finishing() dfa.Letter {
 }
 
 func (a *ConsumerActor) Running() dfa.Letter {
+
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	w := condition.NewNameWatch(a.grid.Etcd(), a.grid.Name(), a.flow.Name(), "finished")
 	defer w.Stop()
+
+	u.Debugf("%s running", a)
 
 	n := 0
 	finished := w.WatchUntil(ring.New(a.flow.NewContextualName("producer"), a.conf.NrProducers))

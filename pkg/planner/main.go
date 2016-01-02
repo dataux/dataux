@@ -35,6 +35,7 @@ var (
 type server struct {
 	conf    *Conf
 	g       grid2.Grid
+	gm      grid2.Grid
 	started bool
 	taskId  int
 }
@@ -55,7 +56,7 @@ func (s *server) runFlow() interface{} {
 	for _, def := range rp.ActorDefs() {
 		def.DefineType("producer")
 		def.Define("flow", flow.Name())
-		err := s.g.StartActor(def)
+		err := s.gm.StartActor(def)
 		if err != nil {
 			u.Errorf("error: failed to start: %v, due to: %v", def, err)
 			os.Exit(1)
@@ -66,7 +67,7 @@ func (s *server) runFlow() interface{} {
 	for _, def := range rc.ActorDefs() {
 		def.DefineType("consumer")
 		def.Define("flow", flow.Name())
-		err := s.g.StartActor(def)
+		err := s.gm.StartActor(def)
 		if err != nil {
 			u.Errorf("error: failed to start: %v, due to: %v", def, err)
 			os.Exit(1)
@@ -76,7 +77,7 @@ func (s *server) runFlow() interface{} {
 	ldr := grid2.NewActorDef(flow.NewContextualName("leader"))
 	ldr.DefineType("leader")
 	ldr.Define("flow", flow.Name())
-	err = s.g.StartActor(ldr)
+	err = s.gm.StartActor(ldr)
 	if err != nil {
 		u.Errorf("error: failed to start: %v, due to: %v", "leader", err)
 		os.Exit(1)
@@ -113,7 +114,6 @@ func (s *server) taskHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			fmt.Fprintf(w, `{"status":"failure","message":"no restult"}`)
 		}
-
 	} else {
 		fmt.Fprintf(w, `{"status":"failure","message":"not started yet"}`)
 	}
@@ -126,9 +126,18 @@ func (s *server) Run() {
 		u.Errorf("error: failed to make actor maker: %v", err)
 	}
 
+	// We are going to start a "Grid Master" for starting tasks
+	// but it won't do any work
+	s.gm = grid2.NewGridDetails(s.conf.GridName, s.conf.Hostname+"Master", s.conf.EtcdServers, s.conf.NatsServers, &nilMaker{})
+	exit, err := s.gm.Start()
+	if err != nil {
+		u.Errorf("error: failed to start grid master: %v", err)
+		os.Exit(1)
+	}
+
 	s.g = grid2.NewGridDetails(s.conf.GridName, s.conf.Hostname, s.conf.EtcdServers, s.conf.NatsServers, m)
 
-	exit, err := s.g.Start()
+	exit, err = s.g.Start()
 	if err != nil {
 		u.Errorf("error: failed to start grid: %v", err)
 		os.Exit(1)

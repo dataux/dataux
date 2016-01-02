@@ -6,6 +6,11 @@ import (
 	"github.com/lytics/grid/grid2"
 )
 
+var (
+	_ grid2.ActorMaker = (*maker)(nil)
+	_ grid2.ActorMaker = (*nilMaker)(nil)
+)
+
 type maker struct {
 	conf *Conf
 }
@@ -31,4 +36,11 @@ func (m *maker) MakeActor(def *grid2.ActorDef) (grid2.Actor, error) {
 	default:
 		return nil, fmt.Errorf("type does not map to any type of actor: %v", def.Type)
 	}
+}
+
+type nilMaker struct {
+}
+
+func (m *nilMaker) MakeActor(def *grid2.ActorDef) (grid2.Actor, error) {
+	return nil, fmt.Errorf("NilMaker does not run actors it is lazy: %v", def.Type)
 }

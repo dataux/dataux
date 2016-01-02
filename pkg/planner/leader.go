@@ -88,7 +88,7 @@ func (a *LeaderActor) Starting() dfa.Letter {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	time.Sleep(3 * time.Second)
+	//time.Sleep(3 * time.Second)
 
 	j := condition.NewJoin(a.grid.Etcd(), 2*time.Minute, a.grid.Name(), a.flow.Name(), "started", a.ID())
 	if err := j.Rejoin(); err != nil {
@@ -214,6 +214,12 @@ func (a *LeaderActor) Running() dfa.Letter {
 			u.Errorf("%v: error: %v", a, err)
 			return Failure
 		case m := <-a.rx.Msgs():
+
+			// Like any actor we can recieve normal messages
+			// in this situation we have actors report back metrics to us
+			// for this sample, we have some count of messages in state, but normally
+			// you would have progress (kafkaId's, offsetids, status) in state
+			// and metrics here
 
 			switch m := m.(type) {
 			case ResultMsg:
