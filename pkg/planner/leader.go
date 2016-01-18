@@ -1,4 +1,4 @@
-package main
+package planner
 
 import (
 	"strings"
@@ -43,7 +43,7 @@ func (a *LeaderActor) String() string {
 func (a *LeaderActor) Act(g grid2.Grid, exit <-chan bool) bool {
 	rx, err := grid2.NewReceiver(g.Nats(), a.ID(), 4, 0)
 	if err != nil {
-		u.Fatalf("%v: error: %v", a.ID(), err)
+		u.Errorf("%v: error: %v", a.ID(), err)
 	}
 	defer rx.Close()
 
@@ -75,7 +75,7 @@ func (a *LeaderActor) Act(g grid2.Grid, exit <-chan bool) bool {
 
 	final, err := d.Run(a.Starting)
 	if err != nil {
-		u.Fatalf("%v: error: %v", a, err)
+		u.Errorf("%v: error: %v", a, err)
 	}
 	u.Warnf("%s leader final: %v", a, final.String())
 	if final == Terminating {

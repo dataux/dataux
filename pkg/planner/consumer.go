@@ -1,4 +1,4 @@
-package main
+package planner
 
 import (
 	"time"
@@ -45,13 +45,15 @@ func (a *ConsumerActor) String() string {
 func (a *ConsumerActor) Act(g grid2.Grid, exit <-chan bool) bool {
 	tx, err := grid2.NewSender(g.Nats(), 100)
 	if err != nil {
-		u.Fatalf("%v: error: %v", a.ID(), err)
+		u.Errorf("%v: error: %v", a.ID(), err)
+		return false
 	}
 	defer tx.Close()
 
 	rx, err := grid2.NewReceiver(g.Nats(), a.ID(), 4, 0)
 	if err != nil {
-		u.Fatalf("%v: error: %v", a.ID(), err)
+		u.Errorf("%v: error: %v", a.ID(), err)
+		return false
 	}
 	defer rx.Close()
 
@@ -91,7 +93,8 @@ func (a *ConsumerActor) Act(g grid2.Grid, exit <-chan bool) bool {
 	final, err := d.Run(a.Starting)
 	//u.Warnf("%s consumer final: %s", a, final.String())
 	if err != nil {
-		u.Fatalf("%v: error: %v", a, err)
+		u.Errorf("%v: error: %v", a, err)
+		return false
 	}
 	if final == Terminating {
 		return true

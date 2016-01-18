@@ -1,46 +1,31 @@
-package main
+package planner
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
-	"runtime"
-	"strings"
 	"syscall"
 	"time"
 
 	u "github.com/araddon/gou"
+
 	"github.com/lytics/grid/grid2"
 	"github.com/lytics/grid/grid2/condition"
 	"github.com/lytics/grid/grid2/ring"
-	"github.com/lytics/metafora"
 )
 
-var (
-	etcdconnect = flag.String("etcd", "http://127.0.0.1:2379", "comma separated list of etcd urls to servers")
-	natsconnect = flag.String("nats", "nats://127.0.0.1:4222", "comma separated list of nats urls to servers")
-	producers   = flag.Int("producers", 3, "number of producers")
-	consumers   = flag.Int("consumers", 2, "number of consumers")
-	nodes       = flag.Int("nodes", 1, "number of nodes in the grid")
-	nodeName    = flag.String("nodename", "", "name of host, override localhost for multi-nodes on same machine")
-	msgsize     = flag.Int("msgsize", 1000, "minimum message size, actual size will be in the range [min,2*min]")
-	msgcount    = flag.Int("msgcount", 100000, "number of messages each producer should send")
-)
-
-type server struct {
-	conf    *Conf
+type Server struct {
+	Conf    *Conf
 	g       grid2.Grid
 	gm      grid2.Grid
 	started bool
 	taskId  int
 }
 
-func (s *server) runFlow() interface{} {
+func (s *Server) runFlow() interface{} {
 	var err error
 	flow := NewFlow(s.taskId)
 	s.taskId++
@@ -52,7 +37,7 @@ func (s *server) runFlow() interface{} {
 	f := condition.NewNameWatch(s.g.Etcd(), s.g.Name(), flow.Name(), "finished")
 	finished := f.WatchUntil(flow.NewContextualName("leader"))
 
-	rp := ring.New(flow.NewContextualName("producer"), s.conf.NrProducers)
+	rp := ring.New(flow.NewContextualName("producer"), s.Conf.NrProducers)
 	for _, def := range rp.ActorDefs() {
 		def.DefineType("producer")
 		def.Define("flow", flow.Name())
@@ -63,7 +48,7 @@ func (s *server) runFlow() interface{} {
 		}
 	}
 
-	rc := ring.New(flow.NewContextualName("consumer"), s.conf.NrConsumers)
+	rc := ring.New(flow.NewContextualName("consumer"), s.Conf.NrConsumers)
 	for _, def := range rc.ActorDefs() {
 		def.DefineType("consumer")
 		def.Define("flow", flow.Name())
@@ -104,7 +89,7 @@ func (s *server) runFlow() interface{} {
 	return nil
 }
 
-func (s *server) taskHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) TaskHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if s.started {
 		state := s.runFlow()
@@ -119,23 +104,23 @@ func (s *server) taskHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) Run() {
+func (s *Server) Run() {
 
-	m, err := newActorMaker(s.conf)
+	m, err := newActorMaker(s.Conf)
 	if err != nil {
 		u.Errorf("error: failed to make actor maker: %v", err)
 	}
 
 	// We are going to start a "Grid Master" for starting tasks
 	// but it won't do any work
-	s.gm = grid2.NewGridDetails(s.conf.GridName, s.conf.Hostname+"Master", s.conf.EtcdServers, s.conf.NatsServers, &nilMaker{})
+	s.gm = grid2.NewGridDetails(s.Conf.GridName, s.Conf.Hostname+"Master", s.Conf.EtcdServers, s.Conf.NatsServers, &nilMaker{})
 	exit, err := s.gm.Start()
 	if err != nil {
 		u.Errorf("error: failed to start grid master: %v", err)
 		os.Exit(1)
 	}
 
-	s.g = grid2.NewGridDetails(s.conf.GridName, s.conf.Hostname, s.conf.EtcdServers, s.conf.NatsServers, m)
+	s.g = grid2.NewGridDetails(s.Conf.GridName, s.Conf.Hostname, s.Conf.EtcdServers, s.Conf.NatsServers, m)
 
 	exit, err = s.g.Start()
 	if err != nil {
@@ -143,7 +128,7 @@ func (s *server) Run() {
 		os.Exit(1)
 	}
 
-	j := condition.NewJoin(s.g.Etcd(), 30*time.Second, s.g.Name(), "hosts", s.conf.Hostname)
+	j := condition.NewJoin(s.g.Etcd(), 30*time.Second, s.g.Name(), "hosts", s.Conf.Hostname)
 	err = j.Join()
 	if err != nil {
 		u.Errorf("error: failed to regester: %v", err)
@@ -170,8 +155,8 @@ func (s *server) Run() {
 	w := condition.NewCountWatch(s.g.Etcd(), s.g.Name(), "hosts")
 	defer w.Stop()
 
-	u.Debugf("waiting for %d nodes to join", *nodes)
-	started := w.WatchUntil(*nodes)
+	u.Debugf("waiting for %d nodes to join", s.Conf.NodeCt)
+	started := w.WatchUntil(s.Conf.NodeCt)
 	select {
 	case <-exit:
 		u.Debug("Shutting down, grid exited")
@@ -197,50 +182,6 @@ func (s *server) Run() {
 
 	<-exit
 	u.Info("shutdown complete")
-}
-func main() {
-	runtime.GOMAXPROCS(runtime.NumCPU())
-
-	flag.Parse()
-
-	u.SetLogger(log.New(os.Stderr, "", log.Ltime|log.Lmicroseconds|log.Lshortfile), "debug")
-	u.SetColorOutput()
-	metafora.SetLogger(u.GetLogger()) // Configure metafora's logger
-	metafora.SetLogLevel(metafora.LogLevelWarn)
-	u.DiscardStandardLogger() // Discard non-sanctioned spammers
-
-	etcdservers := strings.Split(*etcdconnect, ",")
-	natsservers := strings.Split(*natsconnect, ",")
-
-	hostname, err := os.Hostname()
-	if err != nil {
-		u.Errorf("error: failed to discover hostname: %v", err)
-		os.Exit(1)
-	}
-	if *nodeName != "" {
-		hostname = *nodeName
-	}
-
-	conf := &Conf{
-		GridName:    "dataux",
-		Hostname:    hostname,
-		MsgSize:     *msgsize,
-		MsgCount:    *msgcount,
-		NrProducers: *producers,
-		NrConsumers: *consumers,
-		EtcdServers: etcdservers,
-		NatsServers: natsservers,
-	}
-
-	s := &server{conf: conf}
-
-	http.HandleFunc("/task", s.taskHandler)
-
-	go func() {
-		u.Warn(http.ListenAndServe("localhost:6060", nil))
-	}()
-
-	s.Run() // blocking
 }
 
 type Flow string

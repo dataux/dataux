@@ -9,6 +9,7 @@ import (
 
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 
@@ -189,33 +190,17 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	job.Ctx.Session = m.sess
 
 	switch stmt := job.Ctx.Stmt.(type) {
-	case *expr.SqlSelect:
-		//u.Debugf("adding mysql result writer: projection: %p  %#v", job.Ctx.Projection, job.Ctx.Projection)
+	case *rel.SqlSelect:
 		resultWriter := NewMySqlResultWriter(writer, job.Ctx)
 		job.RootTask.Add(resultWriter)
-	case *expr.SqlShow, *expr.SqlDescribe:
-		//u.Debugf("adding mysql result writer: projection: %p  %#v", job.Ctx.Projection, job.Ctx.Projection)
-		//u.Debugf("roottask? %#v", job.RootTask)
+	case *rel.SqlShow, *rel.SqlDescribe:
 		resultWriter := NewMySqlSchemaWriter(writer, job.Ctx)
 		job.RootTask.Add(resultWriter)
-	case *expr.SqlInsert, *expr.SqlUpsert, *expr.SqlUpdate, *expr.SqlDelete:
-		//u.Debugf("adding mysql result writer: %#v", job.Projection)
+	case *rel.SqlInsert, *rel.SqlUpsert, *rel.SqlUpdate, *rel.SqlDelete:
 		resultWriter := NewMySqlExecResultWriter(writer, job.Ctx)
 		job.RootTask.Add(resultWriter)
-	// case *sqlparser.Delete:
-	// 	return m.handleExec(stmt, sql, nil)
-	// case *sqlparser.Replace:
-	// 	return m.handleExec(stmt, sql, nil)
-	case *expr.SqlCommand:
+	case *rel.SqlCommand:
 		return m.conn.WriteOK(nil)
-	// case *sqlparser.Begin:
-	// 	return m.handleBegin()
-	//case *sqlparser.Commit:
-	// 	return m.handleCommit()
-	// case *sqlparser.Rollback:
-	// 	return m.handleRollback()
-	// case *sqlparser.Admin:
-	// 	return m.handleAdmin(stmt)
 	default:
 		u.Warnf("sql not supported?  %v  %T", stmt, stmt)
 		return fmt.Errorf("statement type %T not supported", stmt)

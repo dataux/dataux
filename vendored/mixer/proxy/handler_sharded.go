@@ -13,8 +13,9 @@ import (
 	"sync/atomic"
 
 	u "github.com/araddon/gou"
-	"github.com/araddon/qlbridge/expr"
+
 	"github.com/araddon/qlbridge/expr/builtins"
+	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 
@@ -153,14 +154,14 @@ func (m *HandlerSharded) chooseCommand(writer models.ResultWriter, req *models.R
 	return nil
 }
 
-func (m *HandlerSharded) createSqlVm(sql string) (sqlVm expr.SqlStatement, err error) {
+func (m *HandlerSharded) createSqlVm(sql string) (sqlVm rel.SqlStatement, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			err = fmt.Errorf("could not parse query %s error %v", sql, e)
 			u.Error(err)
 		}
 	}()
-	sqlVm, err = expr.ParseSqlVm(sql)
+	sqlVm, err = rel.ParseSqlVm(sql)
 	if err != nil {
 		u.Errorf("could not parse sql vm %v", err)
 	} else {
@@ -189,11 +190,11 @@ func (m *HandlerSharded) handleQuery(sql string) (err error) {
 	sqlVm, err := m.createSqlVm(sql)
 	if sqlVm != nil {
 		switch v := sqlVm.(type) {
-		case *expr.SqlDescribe:
+		case *rel.SqlDescribe:
 			u.Warnf("describe not supported?  %v  %T", v, sqlVm)
 			//return fmt.Errorf("Describe not supported yet")
 			return m.handleDescribe(sql, v)
-		case *expr.SqlShow:
+		case *rel.SqlShow:
 			u.Warnf("show not supported?  %v  %T", v, sqlVm)
 			//return m.handleShow(sql, v)
 			//return fmt.Errorf("Show not supported yet")
@@ -472,7 +473,7 @@ func (m *HandlerSharded) handleShowTables(sql string, stmt *sqlparser.Show) (*my
 	return BuildSimpleShowResultset(values, fmt.Sprintf("Tables_in_%s", s.Name))
 }
 
-func (m *HandlerSharded) handleDescribe(sql string, req *expr.SqlDescribe) error {
+func (m *HandlerSharded) handleDescribe(sql string, req *rel.SqlDescribe) error {
 	s := m.schema
 	if s == nil {
 		return mysql.NewDefaultError(mysql.ER_NO_DB_ERROR)

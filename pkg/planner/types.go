@@ -1,4 +1,4 @@
-package main
+package planner
 
 import (
 	"encoding/gob"
@@ -36,6 +36,7 @@ func init() {
 }
 
 type Conf struct {
+	NodeCt      int
 	GridName    string
 	Hostname    string
 	MsgSize     int

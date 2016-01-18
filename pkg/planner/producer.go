@@ -1,4 +1,4 @@
-package main
+package planner
 
 import (
 	"time"
@@ -53,7 +53,7 @@ func (a *ProducerActor) String() string {
 func (a *ProducerActor) Act(g grid2.Grid, exit <-chan bool) bool {
 	tx, err := grid2.NewSender(g.Nats(), 100)
 	if err != nil {
-		u.Fatalf("%v: error: %v", a.ID(), err)
+		u.Errorf("%v: error: %v", a.ID(), err)
 	}
 	defer tx.Close()
 
@@ -95,7 +95,7 @@ func (a *ProducerActor) Act(g grid2.Grid, exit <-chan bool) bool {
 	final, err := d.Run(a.Starting)
 	//u.Warnf("%s producer final: %s", a, final.String())
 	if err != nil {
-		u.Fatalf("%v: error: %v", a, err)
+		u.Errorf("%v: error: %v", a, err)
 	}
 	if final == Terminating {
 		return true

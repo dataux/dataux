@@ -8,7 +8,7 @@ import (
 
 	u "github.com/araddon/gou"
 
-	"github.com/araddon/qlbridge/expr"
+	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 )
@@ -46,7 +46,7 @@ func typeToMysql(f *schema.Field) string {
 	}
 	return "text"
 }
-func fieldDescribe(proj *expr.Projection, f *schema.Field) []driver.Value {
+func fieldDescribe(proj *rel.Projection, f *schema.Field) []driver.Value {
 
 	null := "YES"
 	if f.NoNulls {

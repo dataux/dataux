@@ -1,4 +1,4 @@
-package main
+package planner
 
 import (
 	"math/rand"

@@ -14,6 +14,7 @@ import (
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 	"github.com/araddon/qlbridge/vm"
@@ -37,7 +38,7 @@ type SqlToMgo struct {
 	resp           *ResultReader
 	sp             *plan.SourcePlan
 	tbl            *schema.Table
-	sel            *expr.SqlSelect
+	sel            *rel.SqlSelect
 	schema         *schema.SourceSchema
 	sess           *mgo.Session
 	filter         bson.M
@@ -65,7 +66,7 @@ func (m *SqlToMgo) Columns() []string {
 	return m.tbl.Columns()
 }
 
-func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.VisitStatus, error) {
+func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (rel.Task, rel.VisitStatus, error) {
 
 	m.TaskBase = exec.NewTaskBase(sp.Ctx, "SqlToMgo")
 	var err error
@@ -88,7 +89,7 @@ func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.Visit
 		_, err = m.WalkNode(req.Where.Expr, &m.filter)
 		if err != nil {
 			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.String(), err)
-			return nil, expr.VisitError, err
+			return nil, rel.VisitError, err
 		}
 	}
 
@@ -96,14 +97,14 @@ func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.Visit
 	err = m.WalkSelectList()
 	if err != nil {
 		u.Warnf("Could Not evaluate Columns/Aggs %s %v", req.Columns.String(), err)
-		return nil, expr.VisitError, err
+		return nil, rel.VisitError, err
 	}
 
 	if len(req.GroupBy) > 0 {
 		err = m.WalkGroupBy()
 		if err != nil {
 			u.Warnf("Could Not evaluate GroupBys %s %v", req.GroupBy.String(), err)
-			return nil, expr.VisitError, err
+			return nil, rel.VisitError, err
 		}
 	}
 
@@ -135,9 +136,9 @@ func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.Visit
 		}
 	}
 
-	//filterBy, _ := json.Marshal(m.filter)
+	filterBy, _ := json.Marshal(m.filter)
 	//u.Infof("tbl %#v", m.tbl.Columns(), m.tbl)
-	//u.Infof("filter: %#v", m.filter)
+	u.Infof("filter: %#v  \n%s", m.filter, filterBy)
 	//u.Debugf("db=%v  tbl=%v filter=%v sort=%v limit=%v skip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
 	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter)
 
@@ -145,9 +146,9 @@ func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (expr.Task, expr.Visit
 	m.resp = resultReader
 	//resultReader.Finalize()
 	if m.needsPolyFill {
-		return resultReader, expr.VisitContinue, nil
+		return resultReader, rel.VisitContinue, nil
 	}
-	return resultReader, expr.VisitFinal, nil
+	return resultReader, rel.VisitFinal, nil
 }
 
 // Aggregations from the <select_list>
@@ -272,10 +273,11 @@ func (m *SqlToMgo) WalkAggs(cur expr.Node) (q bson.M, _ error) {
 	return q, nil
 }
 
-// Walk() an expression, and its AND/OR/() logic to create an appropriately
-//  nested bson document for mongo queries
+// Walk() an expression, and its logic to create an appropriately
+//  nested bson document for mongo queries if possible.
 //
-//  TODO:  think we need to separate Value Nodes from those that return types?
+// - if can't express logic we need to allow qlbridge to poly-fill
+//
 func (m *SqlToMgo) WalkNode(cur expr.Node, q *bson.M) (value.Value, error) {
 	//u.Debugf("WalkNode: %#v", cur)
 	switch curNode := cur.(type) {
@@ -302,8 +304,8 @@ func (m *SqlToMgo) WalkNode(cur expr.Node, q *bson.M) (value.Value, error) {
 		u.Warnf("we are trying to project?   %v", curNode.String())
 		*q = bson.M{"terms": bson.M{"field": curNode.String()}}
 		return value.NewStringValue(curNode.String()), nil
-	case *expr.MultiArgNode:
-		return m.walkMultiFilter(curNode, q)
+	case *expr.ArrayNode:
+		return m.walkArrayNode(curNode, q)
 	default:
 		u.Errorf("unrecognized T:%T  %v", cur, cur)
 		panic("Unrecognized node type")
@@ -314,6 +316,10 @@ func (m *SqlToMgo) WalkNode(cur expr.Node, q *bson.M) (value.Value, error) {
 	return nil, nil
 }
 
+// Tri Nodes expressions:
+//
+//		<expression> [NOT] BETWEEN <expression> AND <expression>
+//
 func (m *SqlToMgo) walkFilterTri(node *expr.TriNode, q *bson.M) (value.Value, error) {
 
 	//u.Infof("args: %#v", node.Args)
@@ -339,33 +345,24 @@ func (m *SqlToMgo) walkFilterTri(node *expr.TriNode, q *bson.M) (value.Value, er
 	return nil, fmt.Errorf("not implemented")
 }
 
-// Mutli Arg expressions:
+// Array Nodes expressions:
 //
 //		year IN (1990,1992)  =>
 //
-func (m *SqlToMgo) walkMultiFilter(node *expr.MultiArgNode, q *bson.M) (value.Value, error) {
+func (m *SqlToMgo) walkArrayNode(node *expr.ArrayNode, q *bson.M) (value.Value, error) {
 
-	// First argument must be field name in this context
-	fldName := node.Args[0].String()
-	//u.Debugf("walkMulti: %v", node.String())
-	switch node.Operator.T {
-	case lex.TokenIN:
-		//q = bson.M{"range": bson.M{arg1val.ToString(): bson.M{"gte": arg2val.ToString(), "lte": arg3val.ToString()}}}
-		terms := make([]interface{}, len(node.Args)-1)
-		*q = bson.M{fldName: bson.M{"$in": terms}}
-		for i := 1; i < len(node.Args); i++ {
-			// Do we eval here?
-			v, ok := vm.Eval(nil, node.Args[i])
-			if ok {
-				u.Debugf("in? %T %v value=%v", v, v, v.Value())
-				terms[i-1] = v.Value()
-			} else {
-				u.Warnf("could not evaluate arg: %v", node.Args[i])
-			}
+	//q = bson.M{"range": bson.M{arg1val.ToString(): bson.M{"gte": arg2val.ToString(), "lte": arg3val.ToString()}}}
+	terms := make([]interface{}, 0, len(node.Args))
+	*q = bson.M{"$in": terms}
+	for _, arg := range node.Args {
+		// Do we eval here?
+		v, ok := vm.Eval(nil, arg)
+		if ok {
+			u.Debugf("in? %T %v value=%v", v, v, v.Value())
+			terms = append(terms, v.Value())
+		} else {
+			u.Warnf("could not evaluate arg: %v", arg)
 		}
-	default:
-		u.Warnf("not implemented %v", node.String())
-		return nil, fmt.Errorf("Not implemented: %v", node.String())
 	}
 	if q != nil {
 		u.Debug(string(u.JsonHelper(*q).PrettyJson()))
@@ -445,7 +442,7 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 		startsPct := strings.Index(rhs, "%") == 0
 		endsPct := strings.LastIndex(rhs, "%") == len(rhs)-1
 		rhs = strings.Replace(rhs, "%", "", -1)
-		u.Infof("LIKE:  %v  startsPCt?%v  endsPct?%v", rhs, startsPct, endsPct)
+		//u.Infof("LIKE:  %v  startsPCt?%v  endsPct?%v", rhs, startsPct, endsPct)
 		// TODO:   this isn't working.   Not sure why
 		if startsPct && endsPct {
 			// user_id like "%bc%"
@@ -457,6 +454,14 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 			*q = bson.M{lhval.ToString(): bson.RegEx{fmt.Sprintf(`^%s`, rhs), "i"}}
 		} else {
 			*q = bson.M{lhval.ToString(): bson.RegEx{fmt.Sprintf(`%s`, rhs), "i"}}
+		}
+
+	case lex.TokenIN:
+		switch vt := rhval.(type) {
+		case value.SliceValue:
+			*q = bson.M{lhval.ToString(): bson.M{"$in": vt.Values()}}
+		default:
+			u.Warnf("not implemented type %#v", rhval)
 		}
 
 	default:
@@ -486,9 +491,9 @@ func (m *SqlToMgo) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, 
 		if len(node.Args) != 1 {
 			return nil, fmt.Errorf("Invalid func")
 		}
-		switch node.Args[0].NodeType() {
-		case expr.IdentityNodeType:
-			fieldName = node.Args[0].String()
+		switch nt := node.Args[0].(type) {
+		case *expr.IdentityNode:
+			fieldName = nt.String()
 		default:
 			val, ok := eval(node.Args[0])
 			if !ok {

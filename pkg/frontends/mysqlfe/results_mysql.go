@@ -7,8 +7,8 @@ import (
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
-	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 
@@ -24,7 +24,7 @@ var (
 type MySqlResultWriter struct {
 	writer       models.ResultWriter
 	schema       *schema.Schema
-	proj         *expr.Projection
+	proj         *rel.Projection
 	Rs           *mysql.Resultset
 	ctx          *plan.Context
 	wroteHeaders bool
@@ -74,7 +74,7 @@ func (m *MySqlResultWriter) Close() error {
 }
 func schemaWrite(m *MySqlResultWriter) exec.MessageHandler {
 
-	return func(_ *plan.Context, msg datasource.Message) bool {
+	return func(_ *plan.Context, msg schema.Message) bool {
 
 		//u.Debugf("in schemaWrite:  %#v", msg)
 		if !m.wroteHeaders {
@@ -124,7 +124,7 @@ func schemaWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 
-	return func(_ *plan.Context, msg datasource.Message) bool {
+	return func(_ *plan.Context, msg schema.Message) bool {
 
 		//u.Debugf("in resultWrite:  %#v", msg)
 		if !m.wroteHeaders {
@@ -285,7 +285,7 @@ func (m *MySqlExecResultWriter) Finalize() error {
 	return nil
 }
 func nilWriter(m *MySqlExecResultWriter) exec.MessageHandler {
-	return func(_ *plan.Context, msg datasource.Message) bool {
+	return func(_ *plan.Context, msg schema.Message) bool {
 		u.Debugf("in nilWriter:  %#v", msg)
 		return false
 	}

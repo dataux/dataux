@@ -11,6 +11,19 @@ backends.
 specialized needs seems to be the norm and this is an attempt to translate back into a
 cohesive data model.
 
+SQL -> Mongo
+----------------------------------
+
+Mongo | SQL Query  
+----- | -------
+`show collections`                     | `show tables;`
+na, -- runtime inspection                  | `describe mytable;`
+`db.accounts.find({},{created:{"$gte":"1/1/2016"}}).count();`          | `select count(*) from accounts WHERE created > "1/1/2016";`
+ | `select min(year), max(year), avg(year), sum(year) from table WHERE exists(a);`
+          | `select * from table WHERE year IN (2015,2014,2013);`
+       | `select * from table WHERE year BETWEEN 2012 AND 2014`
+
+
 SQL -> Elasticsearch Api
 ----------------------------------
 
@@ -18,7 +31,7 @@ ES API | SQL Query
 ----- | -------
 Aliases                 | `show tables;`
 Mapping                 | `describe mytable;`
-hits.total              | `select count(*) from table WHERE exists(a);`
+hits.total  for filter  | `select count(*) from table WHERE exists(a);`
 aggs min, max, avg, sum | `select min(year), max(year), avg(year), sum(year) from table WHERE exists(a);`
 filter:   terms         | `select * from table WHERE year IN (2015,2014,2013);`
 filter: gte, range      | `select * from table WHERE year BETWEEN 2012 AND 2014`
@@ -45,8 +58,7 @@ Name | Scaling | Ease Of Access (sql, etc) | Comments
 ---- | ------- | ----------------------------- | ---------
 ***[Couchbase N1QL](https://github.com/couchbaselabs/query)***          | Y | Y | sql interface to couchbase k/v (and full-text-index)
 ***[prestodb](http://prestodb.io/)***                                   |   | Y | not really a proxy more of query front end
-***[GitQL](https://github.com/cloudson/gitql)***                        |   | Y | SQL to http api 
-***[cratedb](https://crate.io/docs/current/sql/index.html)***           | Y | Y | all-in-one db, not a proxy, sql to es
+***[cratedb](https://crate.io/)***                                      | Y | Y | all-in-one db, not a proxy, sql to es
 ***[Vitess](https://github.com/youtube/vitess)***                       | Y |   | for scaling (sharding), very mature
 ***[twemproxy](https://github.com/twitter/twemproxy)***                 | Y |   | for scaling memcache
 ***[codis](https://github.com/wandoulabs/codis)***                      | Y |   | for scaling redis
@@ -60,23 +72,21 @@ For db's the primary reader/writer is fine but secondary readers
 such as investigating ad-hoc issues means we might be accessing 
 and learning many different query languages.  
 
-This is a tool to facilitate non-primary ad-hoc investigation 
-of elasticsearch, redis, csv, etc via a proxy.   
-Used small bits of a forked [mixer](https://github.com/siddontang/mixer), the mysql connection pieces.
+Credit to [mixer](https://github.com/siddontang/mixer), derived mysql connection pieces from it (which was forked from vitess).
 
 Roadmap(ish)
 ------------------------------
 * ***Elasticsearch***  Make elasticsearch more accessible through SQL
-* ***Elasticsearch BQL*** Extend SQL with search specfiic syntax
-* Mongo, Redis, CSV, Json-FlatFiles, Kafka Backends
+* ***Mongo*** Extend SQL with search specfiic syntax
+* [ ] **Backends**: Redis, CSV, Json-FlatFiles, Kafka
 * Cross-DB Join
 * Event-Bus for Writes
 
 Inspiration/Other works
 --------------------------
-* https://github.com/linkedin/databus
-* [ql.io](http://ql.io/), [yql](https://developer.yahoo.com/yql/)
-* [dockersql](https://github.com/crosbymichael/dockersql), [q -python](http://harelba.github.io/q/), [textql](https://github.com/dinedal/textql)
+* https://github.com/linkedin/databus, 
+* [ql.io](http://www.ebaytechblog.com/2011/11/30/announcing-ql-io/), [yql](https://developer.yahoo.com/yql/)
+* [dockersql](https://github.com/crosbymichael/dockersql), [q -python](http://harelba.github.io/q/), [textql](https://github.com/dinedal/textql), [GitQL](https://github.com/cloudson/gitql)
 
 
 > In Internet architectures, data systems are typically categorized
