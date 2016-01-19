@@ -2,7 +2,7 @@ package router
 
 import (
 	"fmt"
-	"github.com/dataux/dataux/pkg/models"
+	"github.com/dataux/dataux/models"
 	"regexp"
 	"strconv"
 	"strings"

@@ -10,13 +10,13 @@ import (
 	"syscall"
 
 	// Backend Registrations Side-Effect imports
-	_ "github.com/dataux/dataux/pkg/backends/elasticsearch"
-	_ "github.com/dataux/dataux/pkg/backends/mongo"
+	_ "github.com/dataux/dataux/backends/elasticsearch"
+	_ "github.com/dataux/dataux/backends/mongo"
 
 	u "github.com/araddon/gou"
-	"github.com/dataux/dataux/pkg/frontends/mysqlfe"
-	"github.com/dataux/dataux/pkg/models"
-	"github.com/dataux/dataux/pkg/proxy"
+	"github.com/dataux/dataux/frontends/mysqlfe"
+	"github.com/dataux/dataux/models"
+	"github.com/dataux/dataux/proxy"
 	mysqlproxy "github.com/dataux/dataux/vendored/mixer/proxy"
 )
 

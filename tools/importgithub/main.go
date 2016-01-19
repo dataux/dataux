@@ -4,7 +4,7 @@ import (
 	"flag"
 
 	u "github.com/araddon/gou"
-	"github.com/dataux/dataux/pkg/testdata"
+	"github.com/dataux/dataux/testdata"
 )
 
 /*

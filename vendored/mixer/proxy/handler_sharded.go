@@ -19,7 +19,7 @@ import (
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 
-	"github.com/dataux/dataux/pkg/models"
+	"github.com/dataux/dataux/models"
 	"github.com/dataux/dataux/vendored/mixer/client"
 	"github.com/dataux/dataux/vendored/mixer/mysql"
 	"github.com/dataux/dataux/vendored/mixer/router"

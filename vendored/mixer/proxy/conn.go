@@ -14,7 +14,7 @@ import (
 	u "github.com/araddon/gou"
 
 	"github.com/araddon/qlbridge/schema"
-	"github.com/dataux/dataux/pkg/models"
+	"github.com/dataux/dataux/models"
 	"github.com/dataux/dataux/vendored/mixer/client"
 	"github.com/dataux/dataux/vendored/mixer/hack"
 	"github.com/dataux/dataux/vendored/mixer/mysql"

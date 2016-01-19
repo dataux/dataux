@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	u "github.com/araddon/gou"
-	"github.com/dataux/dataux/pkg/models"
+	"github.com/dataux/dataux/models"
 	"github.com/dataux/dataux/vendored/mixer/hack"
 	"github.com/dataux/dataux/vendored/mixer/mysql"
 )

@@ -8,7 +8,7 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
-	"github.com/dataux/dataux/pkg/models"
+	"github.com/dataux/dataux/models"
 	"github.com/dataux/dataux/vendored/mixer/client"
 )
 

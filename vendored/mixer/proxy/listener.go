@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 
 	u "github.com/araddon/gou"
-	"github.com/dataux/dataux/pkg/models"
+	"github.com/dataux/dataux/models"
 )
 
 var (
