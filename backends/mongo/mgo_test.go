@@ -572,7 +572,7 @@ func TestSelectWhereIn(t *testing.T) {
 		Sql:         `select title, count, deleted, updated from article WHERE category IN ("news");`,
 		ExpectRowCt: 2,
 		ValidateRowData: func() {
-			u.Debugf("Updated: %v", data.Updated.Time)
+			//u.Debugf("Updated: %v", data.Updated.Time)
 			assert.Tf(t, data.Title != "", "%v", data)
 		},
 		RowData: &data,
@@ -611,7 +611,7 @@ func TestSelectWhereBetween(t *testing.T) {
 		Sql:         `select title, count, author from article where count BETWEEN 5 AND 25;`,
 		ExpectRowCt: 2,
 		ValidateRowData: func() {
-			u.Debugf("%#v", data)
+			//u.Debugf("%#v", data)
 			switch data.Title {
 			case "article1":
 				assert.Tf(t, data.Count == 22, "%v", data)

@@ -49,9 +49,6 @@ type SqlToMgo struct {
 	hasMultiValue  bool // Multi-Value vs Single-Value aggs
 	hasSingleValue bool // single value agg
 	needsPolyFill  bool // do we request that features be polyfilled?
-	//cols           []string
-	//proj           *expr.Projection
-	//hasprojection  bool
 }
 
 func NewSqlToMgo(table *schema.Table, sess *mgo.Session) *SqlToMgo {
@@ -170,10 +167,9 @@ func (m *SqlToMgo) WalkSelectList() error {
 			// case *expr.TriNode: // Between
 			// 	return m.walkTri(curNode)
 			// case *expr.UnaryNode:
-			// 	//return m.walkUnary(curNode)
-			// 	u.Warnf("not implemented: %#v", curNode)
+			// 	return m.walkUnary(curNode)
 			case *expr.FuncNode:
-				// All Func Nodes are Aggregates
+				// All Func Nodes are Aggregates?
 				esm, err := m.WalkAggs(curNode)
 				if err == nil && len(esm) > 0 {
 					m.aggs[col.As] = esm
@@ -183,8 +179,8 @@ func (m *SqlToMgo) WalkSelectList() error {
 				}
 				//u.Debugf("esm: %v:%v", col.As, esm)
 				//u.Debugf(curNode.String())
-			// case *expr.MultiArgNode:
-			// 	return m.walkMulti(curNode)
+			// case *expr.ArrayNode:
+			// 	return m.walkArrayNode(curNode)
 			// case *expr.IdentityNode:
 			// 	return nil, value.NewStringValue(curNode.Text), nil
 			// case *expr.StringNode:
@@ -257,8 +253,8 @@ func (m *SqlToMgo) WalkAggs(cur expr.Node) (q bson.M, _ error) {
 	// 	u.Warnf("not implemented: %#v", curNode)
 	case *expr.FuncNode:
 		return m.walkAggFunc(curNode)
-	// case *expr.MultiArgNode:
-	// 	return m.walkMulti(curNode)
+	// case *expr.ArrayNode:
+	// 	return m.walkArrayNode(curNode)
 	// case *expr.IdentityNode:
 	// 	return nil, value.NewStringValue(curNode.Text), nil
 	// case *expr.StringNode:
@@ -371,13 +367,14 @@ func (m *SqlToMgo) walkArrayNode(node *expr.ArrayNode, q *bson.M) (value.Value, 
 	return nil, fmt.Errorf("Uknown Error")
 }
 
-// Simple Binary Node
+// Binary Node:   operations for >, >=, <, <=, =, !=, AND, OR, Like, IN
 //
-//	x = y             =>   {field: {"$eq": value}}
+//	x = y             =>   db.users.find({field: {"$eq": value}})
 //  x != y            =>   db.inventory.find( { qty: { $ne: 20 } } )
 //
 //  x like "list%"    =>   db.users.find( { user_id: /^list/ } )
 //  x like "%list%"   =>   db.users.find( { user_id: /bc/ } )
+//  x IN [a,b,c]      =>   db.users.find( { user_id: {"$in":[a,b,c] } } )
 //
 func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Value, error) {
 
