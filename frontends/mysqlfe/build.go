@@ -36,6 +36,7 @@ func BuildMySqlob(ctx *plan.Context) (*MySqlJob, error) {
 	// We are going to swap out a new distributed planner
 	b.TaskMaker = planner.TaskRunnersMaker
 	job := &MySqlJob{JobBuilder: &b}
+	b.Visitor = job
 
 	task, err := exec.BuildSqlJobVisitor(job, ctx)
 	taskRunner, ok := task.(exec.TaskRunner)
