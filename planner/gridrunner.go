@@ -1,0 +1,73 @@
+package planner
+
+import (
+	"fmt"
+	"os"
+	"runtime"
+	"strings"
+	"sync"
+	"time"
+
+	u "github.com/araddon/gou"
+
+	"github.com/lytics/metafora"
+
+	"github.com/dataux/dataux/planner/gridrunner"
+)
+
+var (
+	loggingOnce sync.Once
+	GridConf    = &gridrunner.Conf{
+		GridName:    "dataux",
+		MsgSize:     1000,
+		MsgCount:    100000,
+		NrConsumers: 2,
+		EtcdServers: strings.Split("http://127.0.0.1:2379", ","),
+		NatsServers: strings.Split("nats://127.0.0.1:4222", ","),
+	}
+)
+
+func init() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+}
+
+func setupLogging() {
+	metafora.SetLogger(u.GetLogger()) // Configure metafora's logger
+	metafora.SetLogLevel(metafora.LogLevelWarn)
+	u.DiscardStandardLogger() // Discard non-sanctioned spammers
+}
+
+func RunWorkerNodes(nodeCt int) {
+
+	loggingOnce.Do(setupLogging)
+
+	for i := 0; i < nodeCt; i++ {
+		go func(nodeId int) {
+			s := serverStart(nodeCt, NodeName(uint64(nodeId)))
+			s.RunWorker() // blocking
+		}(i)
+	}
+	time.Sleep(time.Millisecond * 50)
+}
+
+func NewServerGrid(nodeCt int) *gridrunner.Server {
+	serverId, _ := gridrunner.NextId()
+	return serverStart(nodeCt, NodeName(serverId))
+}
+
+func serverStart(nodeCt int, nodeName string) *gridrunner.Server {
+	conf := GridConf.Clone()
+	conf.NodeCt = nodeCt
+	conf.NrProducers = nodeCt
+	conf.Hostname = nodeName
+	s := &gridrunner.Server{Conf: conf}
+	return s
+}
+
+func NodeName(id uint64) string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		u.Errorf("error: failed to discover hostname: %v", err)
+	}
+	return fmt.Sprintf("%s-%d", hostname, id)
+}

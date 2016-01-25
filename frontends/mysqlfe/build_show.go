@@ -54,11 +54,13 @@ func (m *MySqlJob) VisitShow(stmt *rel.SqlShow) (rel.Task, rel.VisitStatus, erro
 		// return exec.NewSequential(m.Ctx, "show-tables", tasks), rel.VisitContinue, nil
 
 		u.Debugf("%p has sqlJob? %+v", m, m)
-		planner := m.TaskMaker(m.Ctx)
-		sourceTask := exec.NewSource(m.Ctx, nil, source)
-		planner.Add(sourceTask)
-		return planner.Sequential("show-create-table"), rel.VisitContinue, nil
+		tasks := m.TaskMaker.Sequential("show-create-table")
+
+		sourcePlan := plan.NewSourceStaticPlan(m.Ctx)
+		sourceTask := exec.NewSource(sourcePlan, source)
+		tasks.Add(sourceTask)
+		return tasks, rel.VisitContinue, nil
 
 	}
-	return m.JobBuilder.VisitShow(stmt)
+	return m.SqlJob.VisitShow(stmt)
 }

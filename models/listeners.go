@@ -16,12 +16,10 @@ var (
 // A listener is a protocol specific, and transport specific
 //  reader of requests which will be routed to a handler
 type Listener interface {
-	// Blocking runner
 	Run(handle ConnectionHandle, stop chan bool) error
 	Close() error
 }
 
-//type func(*models.Config) (models.Listener, error)
 type ListenerInit func(*ListenerConfig, *Config) (Listener, error)
 
 func ListenerRegister(name string, fn ListenerInit, connHandle ConnectionHandle) {

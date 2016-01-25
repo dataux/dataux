@@ -31,7 +31,6 @@ type ProducerActor struct {
 	started  condition.Join
 	finished condition.Join
 	state    *ProducerState
-	chaos    *Chaos
 }
 
 func NewProducerActor(def *grid2.ActorDef, conf *Conf) grid2.Actor {
@@ -60,8 +59,6 @@ func (a *ProducerActor) Act(g grid2.Grid, exit <-chan bool) bool {
 	a.tx = tx
 	a.grid = g
 	a.exit = exit
-	a.chaos = NewChaos(a.ID())
-	defer a.chaos.Stop()
 
 	// Now, we are going to define all of the State's, transitions
 	// for the StateMachine lifecycle of this actor
@@ -138,9 +135,6 @@ func (a *ProducerActor) Starting() dfa.Letter {
 		select {
 		case <-a.exit:
 			return Exit
-		case <-a.chaos.C:
-			// Simulate a failure
-			return Failure
 		case <-ticker.C:
 			if err := a.started.Alive(); err != nil {
 				return Failure
@@ -175,8 +169,6 @@ func (a *ProducerActor) Finishing() dfa.Letter {
 		select {
 		case <-a.exit:
 			return Exit
-		case <-a.chaos.C:
-			return Failure
 		case <-ticker.C:
 			if err := a.started.Alive(); err != nil {
 				return Failure
@@ -227,11 +219,6 @@ func (a *ProducerActor) Running() dfa.Letter {
 				u.Warnf("%v: failed to save state: %v", a, err)
 			}
 			return Exit
-		case <-a.chaos.C:
-			if _, err := s.Store(a.state); err != nil {
-				u.Warnf("%v: failed to save state: %v", a, err)
-			}
-			return Failure
 		case <-ticker.C:
 			if err := a.started.Alive(); err != nil {
 				return Failure
@@ -286,8 +273,6 @@ func (a *ProducerActor) Resending() dfa.Letter {
 		select {
 		case <-a.exit:
 			return Exit
-		case <-a.chaos.C:
-			return Failure
 		case <-ticker.C:
 			if err := a.started.Alive(); err != nil {
 				u.Warnf("%v: failed to report 'started' liveness, but ignoring to flush send buffers", a)

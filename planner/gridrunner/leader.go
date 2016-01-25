@@ -29,7 +29,6 @@ type LeaderActor struct {
 	started  condition.Join
 	finished condition.Join
 	state    *LeaderState
-	chaos    *Chaos
 }
 
 func (a *LeaderActor) ID() string {
@@ -50,8 +49,6 @@ func (a *LeaderActor) Act(g grid2.Grid, exit <-chan bool) bool {
 	a.rx = rx
 	a.grid = g
 	a.exit = exit
-	a.chaos = NewChaos(a.ID())
-	defer a.chaos.Stop()
 
 	d := dfa.New()
 	d.SetStartState(Starting)
@@ -108,8 +105,6 @@ func (a *LeaderActor) Starting() dfa.Letter {
 		select {
 		case <-a.exit:
 			return Exit
-		case <-a.chaos.C:
-			return Failure
 		case <-ticker.C:
 			if err := a.started.Alive(); err != nil {
 				return Failure
@@ -141,8 +136,6 @@ func (a *LeaderActor) Finishing() dfa.Letter {
 		select {
 		case <-a.exit:
 			return Exit
-		case <-a.chaos.C:
-			return Failure
 		case <-ticker.C:
 			if err := a.started.Alive(); err != nil {
 				return Failure
@@ -188,12 +181,6 @@ func (a *LeaderActor) Running() dfa.Letter {
 			}
 			u.Warnf("%s finished store", a)
 			return Exit
-		case <-a.chaos.C:
-			if _, err := s.Store(a.state); err != nil {
-				u.Warnf("%v: failed to save state: %v", a, err)
-			}
-			u.Warnf("%s finished store", a)
-			return Failure
 		case <-ticker.C:
 			if err := a.started.Alive(); err != nil {
 				u.Warnf("leader not alive?: %v", err)

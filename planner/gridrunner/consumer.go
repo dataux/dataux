@@ -31,7 +31,6 @@ type ConsumerActor struct {
 	started  condition.Join
 	finished condition.Join
 	state    *ConsumerState
-	chaos    *Chaos
 }
 
 func (a *ConsumerActor) ID() string {
@@ -61,8 +60,6 @@ func (a *ConsumerActor) Act(g grid2.Grid, exit <-chan bool) bool {
 	a.rx = rx
 	a.grid = g
 	a.exit = exit
-	a.chaos = NewChaos(a.ID())
-	defer a.chaos.Stop()
 
 	d := dfa.New()
 	d.SetStartState(Starting)
@@ -127,8 +124,6 @@ func (a *ConsumerActor) Starting() dfa.Letter {
 		select {
 		case <-a.exit:
 			return Exit
-		case <-a.chaos.C:
-			return Failure
 		case <-ticker.C:
 			if err := a.started.Alive(); err != nil {
 				return Failure
@@ -159,8 +154,6 @@ func (a *ConsumerActor) Finishing() dfa.Letter {
 		select {
 		case <-a.exit:
 			return Exit
-		case <-a.chaos.C:
-			return Failure
 		case <-ticker.C:
 			if err := a.started.Alive(); err != nil {
 				return Failure
@@ -195,8 +188,6 @@ func (a *ConsumerActor) Running() dfa.Letter {
 		select {
 		case <-a.exit:
 			return Exit
-		case <-a.chaos.C:
-			return Failure
 		case <-ticker.C:
 			if err := a.started.Alive(); err != nil {
 				return Failure
@@ -235,8 +226,6 @@ func (a *ConsumerActor) Resending() dfa.Letter {
 		select {
 		case <-a.exit:
 			return Exit
-		case <-a.chaos.C:
-			return Failure
 		case <-ticker.C:
 			if err := a.started.Alive(); err != nil {
 				u.Errorf("%v: failed to report 'started' liveness, but ignoring to flush send buffers", a)

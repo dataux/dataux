@@ -8,12 +8,16 @@ import (
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/schema"
+
+	"github.com/dataux/dataux/planner"
+	"github.com/dataux/dataux/planner/gridrunner"
 )
 
 type ServerCtx struct {
 	Config  *Config
 	schemas map[string]*schema.Schema
 	RtConf  *datasource.RuntimeSchema
+	Grid    *gridrunner.Server
 }
 
 func NewServerCtx(conf *Config) *ServerCtx {
@@ -31,6 +35,8 @@ func (m *ServerCtx) Init() error {
 	if err := m.loadConfig(); err != nil {
 		return err
 	}
+	m.Grid = planner.NewServerGrid(2)
+	go m.Grid.RunMaster()
 	return nil
 }
 

@@ -1,34 +1,51 @@
 package gridrunner
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	u "github.com/araddon/gou"
+	"github.com/sony/sonyflake"
 
 	"github.com/lytics/grid/grid2"
 	"github.com/lytics/grid/grid2/condition"
 	"github.com/lytics/grid/grid2/ring"
+
+	"github.com/araddon/qlbridge/plan"
 )
 
-type Server struct {
-	Conf    *Conf
-	g       grid2.Grid
-	gm      grid2.Grid
-	started bool
-	taskId  int
+var sf *sonyflake.Sonyflake
+
+func init() {
+	var st sonyflake.Settings
+	st.StartTime = time.Now()
+	sf = sonyflake.NewSonyflake(st)
 }
 
-func (s *Server) runFlow() interface{} {
+func NextId() (uint64, error) {
+	return sf.NextID()
+}
+
+type Server struct {
+	Conf       *Conf
+	g          grid2.Grid
+	started    bool
+	lastTaskId uint64
+}
+
+func (s *Server) SubmitTask(sp *plan.SourcePlan) interface{} {
+
 	var err error
-	flow := NewFlow(s.taskId)
-	s.taskId++
+	taskId, err := sf.NextID()
+	if err != nil {
+		u.Errorf("Wat, no taskid? err=%v", err)
+		return nil
+	}
+
+	flow := NewFlow(taskId)
 
 	u.Debugf("%s starting job ", flow)
 
@@ -41,7 +58,7 @@ func (s *Server) runFlow() interface{} {
 	for _, def := range rp.ActorDefs() {
 		def.DefineType("producer")
 		def.Define("flow", flow.Name())
-		err := s.gm.StartActor(def)
+		err := s.g.StartActor(def)
 		if err != nil {
 			u.Errorf("error: failed to start: %v, due to: %v", def, err)
 			os.Exit(1)
@@ -52,7 +69,7 @@ func (s *Server) runFlow() interface{} {
 	for _, def := range rc.ActorDefs() {
 		def.DefineType("consumer")
 		def.Define("flow", flow.Name())
-		err := s.gm.StartActor(def)
+		err := s.g.StartActor(def)
 		if err != nil {
 			u.Errorf("error: failed to start: %v, due to: %v", def, err)
 			os.Exit(1)
@@ -62,7 +79,7 @@ func (s *Server) runFlow() interface{} {
 	ldr := grid2.NewActorDef(flow.NewContextualName("leader"))
 	ldr.DefineType("leader")
 	ldr.Define("flow", flow.Name())
-	err = s.gm.StartActor(ldr)
+	err = s.g.StartActor(ldr)
 	if err != nil {
 		u.Errorf("error: failed to start: %v, due to: %v", "leader", err)
 		os.Exit(1)
@@ -88,44 +105,28 @@ func (s *Server) runFlow() interface{} {
 	}
 	return nil
 }
-
-func (s *Server) TaskHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	if s.started {
-		state := s.runFlow()
-		if state != nil {
-			by, _ := json.Marshal(map[string]interface{}{"status": "success", "state": state})
-			fmt.Fprintf(w, string(by))
-		} else {
-			fmt.Fprintf(w, `{"status":"failure","message":"no restult"}`)
-		}
-	} else {
-		fmt.Fprintf(w, `{"status":"failure","message":"not started yet"}`)
-	}
-}
-
-func (s *Server) Run() {
-
+func (s *Server) RunWorker() error {
 	m, err := newActorMaker(s.Conf)
 	if err != nil {
 		u.Errorf("error: failed to make actor maker: %v", err)
+		return err
 	}
+	return s.runMaker(m)
+}
+func (s *Server) RunMaster() error {
+	u.Infof("start grid master")
+	return s.runMaker(&nilMaker{})
+}
+func (s *Server) runMaker(actorMaker grid2.ActorMaker) error {
 
-	// We are going to start a "Grid Master" for starting tasks
-	// but it won't do any work
-	s.gm = grid2.NewGridDetails(s.Conf.GridName, s.Conf.Hostname+"Master", s.Conf.EtcdServers, s.Conf.NatsServers, &nilMaker{})
-	exit, err := s.gm.Start()
-	if err != nil {
-		u.Errorf("error: failed to start grid master: %v", err)
-		os.Exit(1)
-	}
+	// We are going to start a "Grid Master" which is only used for making requests
+	// to etcd to start tasks
+	s.g = grid2.NewGridDetails(s.Conf.GridName, s.Conf.Hostname, s.Conf.EtcdServers, s.Conf.NatsServers, actorMaker)
 
-	s.g = grid2.NewGridDetails(s.Conf.GridName, s.Conf.Hostname, s.Conf.EtcdServers, s.Conf.NatsServers, m)
-
-	exit, err = s.g.Start()
+	exit, err := s.g.Start()
 	if err != nil {
 		u.Errorf("error: failed to start grid: %v", err)
-		os.Exit(1)
+		return fmt.Errorf("error starting grid master %v", err)
 	}
 
 	j := condition.NewJoin(s.g.Etcd(), 30*time.Second, s.g.Name(), "hosts", s.Conf.Hostname)
@@ -160,7 +161,7 @@ func (s *Server) Run() {
 	select {
 	case <-exit:
 		u.Debug("Shutting down, grid exited")
-		return
+		return nil
 	case <-w.WatchError():
 		u.Errorf("error: failed to watch other hosts join: %v", err)
 		os.Exit(1)
@@ -182,11 +183,12 @@ func (s *Server) Run() {
 
 	<-exit
 	u.Info("shutdown complete")
+	return nil
 }
 
 type Flow string
 
-func NewFlow(nr int) Flow {
+func NewFlow(nr uint64) Flow {
 	return Flow(fmt.Sprintf("flow-%v", nr))
 }
 

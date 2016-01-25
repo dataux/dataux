@@ -7,9 +7,11 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
+	"github.com/lytics/sereno/embeddedetcd"
 
 	"github.com/dataux/dataux/frontends/mysqlfe"
 	"github.com/dataux/dataux/models"
+	"github.com/dataux/dataux/planner"
 	"github.com/dataux/dataux/vendored/mixer/client"
 	mysqlproxy "github.com/dataux/dataux/vendored/mixer/proxy"
 )
@@ -21,6 +23,8 @@ var (
 	testDBOnce     sync.Once
 	testDB         *client.DB
 	Conf           *models.Config
+	EtcdCluster    *embeddedetcd.EtcdCluster
+	ServerCtx      *models.ServerCtx
 )
 
 func init() {
@@ -109,10 +113,18 @@ func NewTestServer(t *testing.T) *TestListenerWraper {
 
 		assert.Tf(t, Conf != nil, "must load config without err: %v", Conf)
 
-		svr := models.NewServerCtx(Conf)
-		svr.Init()
+		EtcdCluster = embeddedetcd.TestClusterOf1()
+		EtcdCluster.Launch()
+		etcdServers := EtcdCluster.HTTPMembers()[0].ClientURLs
+		u.Infof("etcdServers: %#v", etcdServers)
+		Conf.Etcd = etcdServers
 
-		handler, err := mysqlfe.NewMySqlHandler(svr)
+		planner.GridConf.EtcdServers = etcdServers
+
+		ServerCtx = models.NewServerCtx(Conf)
+		ServerCtx.Init()
+
+		handler, err := mysqlfe.NewMySqlHandler(ServerCtx)
 		assert.Tf(t, err == nil, "must create es handler without err: %v", err)
 
 		// Load our Frontend Listener's

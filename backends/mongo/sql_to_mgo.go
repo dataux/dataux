@@ -68,7 +68,7 @@ func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (rel.Task, rel.VisitSt
 	m.TaskBase = exec.NewTaskBase(sp.Ctx, "SqlToMgo")
 	var err error
 	m.sp = sp
-	req := sp.Source
+	req := sp.From.Source
 	//u.Infof("mongo.VisitSubSelect %v final:%v", req.String(), sp.Final)
 
 	m.sel = req

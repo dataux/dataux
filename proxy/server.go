@@ -83,7 +83,9 @@ func (m *Server) Run() {
 	}
 
 	// block forever
+	u.Debug("\n", banner())
 	<-m.stop
+
 	// after shutdown, ensure they are all closed
 	for _, frontend := range m.frontends {
 		if err := frontend.Close(); err != nil {

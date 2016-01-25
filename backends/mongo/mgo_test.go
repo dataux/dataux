@@ -13,6 +13,7 @@ import (
 	"gopkg.in/mgo.v2"
 
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
+	"github.com/dataux/dataux/planner"
 	"github.com/dataux/dataux/testutil"
 )
 
@@ -37,6 +38,14 @@ func loadTestData() {
 	}
 	for _, user := range testutil.Users {
 		userColl.Insert(user)
+	}
+}
+
+func RunDistributedNodes(t *testing.T) func() {
+	testmysql.RunTestServer(t)
+	planner.RunWorkerNodes(2)
+	return func() {
+
 	}
 }
 
@@ -122,7 +131,7 @@ func TestInvalidQuery(t *testing.T) {
 	assert.T(t, err == nil)
 	// It is parsing the SQL on server side (proxy)
 	//  not in client, so hence that is what this is testing, making sure
-	//  proxy responds gracefully
+	//  proxy responds gracefully with an error
 	rows, err := db.Query("select `stuff`, NOTAKEYWORD github_fork NOTWHERE `description` LIKE \"database\";")
 	assert.Tf(t, err != nil, "%v", err)
 	assert.Tf(t, rows == nil, "must not get rows")
@@ -305,6 +314,27 @@ func TestSelectCountStar(t *testing.T) {
 		RowData: &data,
 	})
 }
+
+func TestSelectDistributed(t *testing.T) {
+	data := struct {
+		Avg float64 `db:"title_avg"`
+	}{}
+
+	cleanup := RunDistributedNodes(t)
+	defer cleanup()
+
+	// We are going to use the WITH distributed=true to force distribution
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "select AVG(CHAR_LENGTH(CAST(`title` AS CHAR))) as title_avg from article WITH distributed=true, node_ct=2",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			u.Infof("%#v", data.Avg)
+			assert.Tf(t, data.Avg == 8.25, "Not avg right?? %v", data)
+		},
+		RowData: &data,
+	})
+}
+
 func TestSelectAggAvg(t *testing.T) {
 	data := struct {
 		Avg float64 `db:"title_avg"`

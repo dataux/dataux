@@ -40,9 +40,12 @@ func LoadConfig(conf string) (*Config, error) {
 //   2) Sources (types of backends such as elasticsearch, mysql, mongo, ...)
 //   3) Virtual Schemas
 //   4) list of server/nodes for Sources
+//   5) nats,etcd coordinators
 type Config struct {
 	SupressRecover bool                   `json:"supress_recover"` // do we recover?
 	LogLevel       string                 `json:"log_level"`       // [debug,info,error,]
+	Etcd           []string               `json:"etcd"`            // list of etcd servers http://127.0.0.1:2379,http://127.0.0.1:2380
+	Nats           []string               `json:"nats"`            // list of nats servers http://127.0.0.1:4222,http://127.0.0.1:4223
 	Frontends      []*ListenerConfig      `json:"frontends"`       // tcp listener configs
 	Sources        []*schema.SourceConfig `json:"sources"`         // backend servers/sources (es, mysql etc)
 	Schemas        []*schema.SchemaConfig `json:"schemas"`         // Schemas, each backend has 1 schema

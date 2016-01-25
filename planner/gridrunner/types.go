@@ -2,12 +2,8 @@ package gridrunner
 
 import (
 	"encoding/gob"
-	"time"
-
-	u "github.com/araddon/gou"
 
 	"github.com/lytics/dfa"
-	"github.com/lytics/grid/grid2"
 )
 
 var (
@@ -47,6 +43,20 @@ type Conf struct {
 	NatsServers []string
 }
 
+func (c *Conf) Clone() *Conf {
+	return &Conf{
+		NodeCt:      c.NodeCt,
+		GridName:    c.GridName,
+		Hostname:    c.Hostname,
+		MsgSize:     c.MsgSize,
+		MsgCount:    c.MsgCount,
+		NrProducers: c.NrProducers,
+		NrConsumers: c.NrConsumers,
+		EtcdServers: c.EtcdServers,
+		NatsServers: c.NatsServers,
+	}
+}
+
 type DataMsg struct {
 	Producer string
 	Data     string
@@ -57,44 +67,4 @@ type ResultMsg struct {
 	From     string
 	Count    int
 	Duration float64
-}
-
-type Chaos struct {
-	roll chan bool
-	stop chan bool
-	C    <-chan bool
-}
-
-func NewChaos(name string) *Chaos {
-	stop := make(chan bool)
-	roll := make(chan bool, 1)
-	go func() {
-		dice := grid2.NewSeededRand()
-		delay := time.Duration(30+dice.Intn(600)) * time.Second
-		ticker := time.NewTicker(delay)
-		happen := ticker.C
-		for {
-			select {
-			case <-stop:
-				ticker.Stop()
-				return
-			case <-happen:
-				ticker.Stop()
-				delay := time.Duration(30+dice.Intn(600)) * time.Second
-				u.Debugf("%v: CHAOS", name)
-				ticker = time.NewTicker(delay)
-				happen = ticker.C
-				select {
-				case <-stop:
-					ticker.Stop()
-				case roll <- true:
-				}
-			}
-		}
-	}()
-	return &Chaos{stop: stop, roll: roll, C: roll}
-}
-
-func (c *Chaos) Stop() {
-	close(c.stop)
 }

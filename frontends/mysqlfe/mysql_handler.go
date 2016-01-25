@@ -33,25 +33,23 @@ var (
 	_ models.Handler          = (*MySqlHandler)(nil)
 )
 
-// Handle request splitting, a single connection session
-// not threadsafe, not shared
+// MySqlHandler shared across connections, used to create
+//   connection specific connections
 type MySqlHandlerShared struct {
-	svr    *models.ServerCtx
-	conf   *models.Config
-	nodes  map[string]*schema.SourceConfig // List of servers
+	svr *models.ServerCtx
+}
+
+// MySql connection handler, a single connection session
+//  not threadsafe, not shared
+type MySqlHandler struct {
+	*MySqlHandlerShared
+	sess   expr.ContextReader // session info
+	conn   *proxy.Conn        // Connection to client, inbound mysql conn
 	schema *schema.Schema
 }
 
-// Handle request splitting, a single connection session
-// not threadsafe, not shared
-type MySqlHandler struct {
-	*MySqlHandlerShared
-	sess expr.ContextReader
-	conn *proxy.Conn
-}
-
 func NewMySqlHandler(svr *models.ServerCtx) (models.ConnectionHandle, error) {
-	sharedHandler := &MySqlHandlerShared{svr: svr, conf: svr.Config}
+	sharedHandler := &MySqlHandlerShared{svr: svr}
 	err := sharedHandler.Init()
 	connHandler := &MySqlHandler{MySqlHandlerShared: sharedHandler}
 	return connHandler, err
@@ -59,7 +57,7 @@ func NewMySqlHandler(svr *models.ServerCtx) (models.ConnectionHandle, error) {
 
 func (m *MySqlHandlerShared) Init() error { return nil }
 
-// Clone this handler as each handler is a per-client/conn copy of handler
+// Open/Clone this handler as each handler is a per-client/conn copy of handler
 // - this occurs once when a new tcp-conn is established
 // - it re-uses the HandlerShard with has schema, etc on it
 func (m *MySqlHandler) Open(connI interface{}) models.Handler {
@@ -72,7 +70,7 @@ func (m *MySqlHandler) Open(connI interface{}) models.Handler {
 		handler.conn = conn
 		return &handler
 	}
-	panic("not cloneable")
+	panic(fmt.Sprintf("not proxy.Conn? %T", connI))
 }
 
 func (m *MySqlHandler) Close() error {
@@ -140,7 +138,7 @@ func (m *MySqlHandler) chooseCommand(writer models.ResultWriter, req *models.Req
 func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err error) {
 
 	//u.Debugf("handleQuery: %v", sql)
-	if !m.conf.SupressRecover {
+	if !m.svr.Config.SupressRecover {
 		//u.Debugf("running recovery? ")
 		defer func() {
 			if e := recover(); e != nil {
@@ -161,17 +159,15 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	ctx := plan.NewContext(sql)
 	ctx.Session = m.sess
 	ctx.Schema = m.schema
-	job, err := BuildMySqlob(ctx)
+	job, err := BuildMySqlob(m.svr, ctx)
+
 	if err != nil {
 		//u.Debugf("error? %v", err)
 		sql = strings.ToLower(sql)
 		switch {
-		case strings.Contains(sql, "set autocommit"):
-			return m.conn.WriteOK(nil)
-		case strings.Contains(sql, "set session transaction isolation"):
-			// SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ
-			return m.conn.WriteOK(nil)
 		case strings.HasPrefix(sql, "set "):
+			// set autocommit
+			// SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ
 			return m.conn.WriteOK(nil)
 		}
 		u.Debugf("error on parse sql statement: %v", err)
@@ -181,8 +177,9 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		// we are done, already wrote results
 		return nil
 	}
+
 	//u.Infof("job.Ctx %p   Session %p", job.Ctx, job.Ctx.Session)
-	job.Ctx.Session = m.sess
+	//job.Ctx.Session = m.sess
 
 	switch stmt := job.Ctx.Stmt.(type) {
 	case *rel.SqlSelect:
