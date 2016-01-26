@@ -21,7 +21,7 @@ var (
 // Many of the ShowMethods are MySql dialect specific so will be replaced here
 func (m *MySqlJob) VisitShow(stmt *rel.SqlShow) (rel.Task, rel.VisitStatus, error) {
 
-	u.Debugf("mysql.VisitShow create?%v  identity=%q  raw=%s", stmt.Create, stmt.Identity, stmt.Raw)
+	//u.Debugf("mysql.VisitShow create?%v  identity=%q  raw=%s", stmt.Create, stmt.Identity, stmt.Raw)
 
 	//raw := strings.ToLower(stmt.Raw)
 	switch {

@@ -3,13 +3,13 @@ package gridrunner
 import (
 	"math/rand"
 
-	"github.com/lytics/grid/grid2"
+	"github.com/lytics/grid"
 )
 
 var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 func NewDataMaker(minsize, count int) *datamaker {
-	dice := grid2.NewSeededRand()
+	dice := grid.NewSeededRand()
 	data := make([]string, 1000)
 	for i := 0; i < 1000; i++ {
 		data[i] = makedata(minsize, dice)

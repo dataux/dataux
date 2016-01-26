@@ -116,7 +116,7 @@ func NewTestServer(t *testing.T) *TestListenerWraper {
 		EtcdCluster = embeddedetcd.TestClusterOf1()
 		EtcdCluster.Launch()
 		etcdServers := EtcdCluster.HTTPMembers()[0].ClientURLs
-		u.Infof("etcdServers: %#v", etcdServers)
+		//u.Infof("etcdServers: %#v", etcdServers)
 		Conf.Etcd = etcdServers
 
 		planner.GridConf.EtcdServers = etcdServers

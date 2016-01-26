@@ -4,6 +4,7 @@ import (
 	u "github.com/araddon/gou"
 
 	"github.com/araddon/qlbridge/exec"
+	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/rel"
 
 	"github.com/dataux/dataux/planner/gridrunner"
@@ -22,6 +23,14 @@ type SqlJob struct {
 	Grid    *gridrunner.Server
 	Visitor rel.Visitor
 	runner  exec.TaskRunners
+}
+
+// Many of the ShowMethods are MySql dialect specific so will be replaced here
+func (m *SqlJob) Finalize(resultWriter plan.Task) error {
+	u.Debugf("planner.Finalize")
+	m.JobBuilder.RootTask.Add(resultWriter)
+	m.JobBuilder.Setup()
+	return nil
 }
 
 // Many of the ShowMethods are MySql dialect specific so will be replaced here

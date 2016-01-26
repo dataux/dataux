@@ -7,11 +7,11 @@ import (
 	u "github.com/araddon/gou"
 
 	"github.com/lytics/dfa"
-	"github.com/lytics/grid/grid2"
-	"github.com/lytics/grid/grid2/condition"
+	"github.com/lytics/grid"
+	"github.com/lytics/grid/condition"
 )
 
-func NewLeaderActor(def *grid2.ActorDef, conf *Conf) grid2.Actor {
+func NewLeaderActor(def *grid.ActorDef, conf *Conf) grid.Actor {
 	return &LeaderActor{
 		def:  def,
 		conf: conf,
@@ -20,11 +20,11 @@ func NewLeaderActor(def *grid2.ActorDef, conf *Conf) grid2.Actor {
 }
 
 type LeaderActor struct {
-	def      *grid2.ActorDef
+	def      *grid.ActorDef
 	conf     *Conf
 	flow     Flow
-	grid     grid2.Grid
-	rx       grid2.Receiver
+	grid     grid.Grid
+	rx       grid.Receiver
 	exit     <-chan bool
 	started  condition.Join
 	finished condition.Join
@@ -39,8 +39,8 @@ func (a *LeaderActor) String() string {
 	return a.ID()
 }
 
-func (a *LeaderActor) Act(g grid2.Grid, exit <-chan bool) bool {
-	rx, err := grid2.NewReceiver(g.Nats(), a.ID(), 4, 0)
+func (a *LeaderActor) Act(g grid.Grid, exit <-chan bool) bool {
+	rx, err := grid.NewReceiver(g.Nats(), a.ID(), 4, 0)
 	if err != nil {
 		u.Errorf("%v: error: %v", a.ID(), err)
 	}
@@ -70,10 +70,7 @@ func (a *LeaderActor) Act(g grid2.Grid, exit <-chan bool) bool {
 	d.SetTransition(Finishing, Failure, Exiting, a.Exiting)
 	d.SetTransition(Finishing, Exit, Exiting, a.Exiting)
 
-	final, err := d.Run(a.Starting)
-	if err != nil {
-		u.Errorf("%v: error: %v", a, err)
-	}
+	final, _ := d.Run(a.Starting)
 	u.Warnf("%s leader final: %v", a, final.String())
 	if final == Terminating {
 		return true

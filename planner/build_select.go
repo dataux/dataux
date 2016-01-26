@@ -27,7 +27,9 @@ func NewSourceBuilder(esb *exec.SourceBuilder, g *gridrunner.Server) *SourceBuil
 }
 
 func (m *SqlJob) VisitSelect(stmt *rel.SqlSelect) (rel.Task, rel.VisitStatus, error) {
-	u.Debugf("planner.VisitSelect ?  %s", stmt.Raw)
+	if len(stmt.From) > 0 {
+		u.Debugf("planner.VisitSelect ?  %s", stmt.Raw)
+	}
 	return m.JobBuilder.VisitSelect(stmt)
 }
 

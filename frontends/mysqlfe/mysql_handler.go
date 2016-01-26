@@ -181,16 +181,14 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	//u.Infof("job.Ctx %p   Session %p", job.Ctx, job.Ctx.Session)
 	//job.Ctx.Session = m.sess
 
+	var resultWriter plan.Task
 	switch stmt := job.Ctx.Stmt.(type) {
 	case *rel.SqlSelect:
-		resultWriter := NewMySqlResultWriter(writer, job.Ctx)
-		job.RootTask.Add(resultWriter)
+		resultWriter = NewMySqlResultWriter(writer, job.Ctx)
 	case *rel.SqlShow, *rel.SqlDescribe:
-		resultWriter := NewMySqlSchemaWriter(writer, job.Ctx)
-		job.RootTask.Add(resultWriter)
+		resultWriter = NewMySqlSchemaWriter(writer, job.Ctx)
 	case *rel.SqlInsert, *rel.SqlUpsert, *rel.SqlUpdate, *rel.SqlDelete:
-		resultWriter := NewMySqlExecResultWriter(writer, job.Ctx)
-		job.RootTask.Add(resultWriter)
+		resultWriter = NewMySqlExecResultWriter(writer, job.Ctx)
 	case *rel.SqlCommand:
 		return m.conn.WriteOK(nil)
 	default:
@@ -198,7 +196,14 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		return fmt.Errorf("statement type %T not supported", stmt)
 	}
 
-	job.Setup()
+	// Finalize allows any setup, wait for ready, etc
+	//  allows us to setup message/sink channels
+	//job.RootTask.Add(resultWriter)
+	err = job.Finalize(resultWriter)
+	if err != nil {
+		u.Errorf("error on finalize %v", err)
+		return err
+	}
 	err = job.Run()
 	if err != nil {
 		u.Errorf("error on Query.Run(): %v", err)

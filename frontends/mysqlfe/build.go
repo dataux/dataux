@@ -40,7 +40,7 @@ func BuildMySqlob(svr *models.ServerCtx, ctx *plan.Context) (*MySqlJob, error) {
 	job.Visitor = mj
 	b.Visitor = mj
 
-	u.Debugf("SqlJob:%p exec.Job:%p about to build: %#v", job, &b, mj)
+	//u.Debugf("SqlJob:%p exec.Job:%p about to build: %#v", job, &b, mj)
 	task, err := exec.BuildSqlJobVisitor(mj, ctx)
 	if err != nil {
 		return nil, err

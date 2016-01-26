@@ -10,9 +10,9 @@ import (
 	u "github.com/araddon/gou"
 	"github.com/sony/sonyflake"
 
-	"github.com/lytics/grid/grid2"
-	"github.com/lytics/grid/grid2/condition"
-	"github.com/lytics/grid/grid2/ring"
+	"github.com/lytics/grid"
+	"github.com/lytics/grid/condition"
+	"github.com/lytics/grid/ring"
 
 	"github.com/araddon/qlbridge/plan"
 )
@@ -31,7 +31,7 @@ func NextId() (uint64, error) {
 
 type Server struct {
 	Conf       *Conf
-	g          grid2.Grid
+	g          grid.Grid
 	started    bool
 	lastTaskId uint64
 }
@@ -76,7 +76,7 @@ func (s *Server) SubmitTask(sp *plan.SourcePlan) interface{} {
 		}
 	}
 
-	ldr := grid2.NewActorDef(flow.NewContextualName("leader"))
+	ldr := grid.NewActorDef(flow.NewContextualName("leader"))
 	ldr.DefineType("leader")
 	ldr.Define("flow", flow.Name())
 	err = s.g.StartActor(ldr)
@@ -117,11 +117,11 @@ func (s *Server) RunMaster() error {
 	u.Infof("start grid master")
 	return s.runMaker(&nilMaker{})
 }
-func (s *Server) runMaker(actorMaker grid2.ActorMaker) error {
+func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 
 	// We are going to start a "Grid Master" which is only used for making requests
 	// to etcd to start tasks
-	s.g = grid2.NewGridDetails(s.Conf.GridName, s.Conf.Hostname, s.Conf.EtcdServers, s.Conf.NatsServers, actorMaker)
+	s.g = grid.New(s.Conf.GridName, s.Conf.Hostname, s.Conf.EtcdServers, s.Conf.NatsServers, actorMaker)
 
 	exit, err := s.g.Start()
 	if err != nil {

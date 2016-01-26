@@ -3,12 +3,12 @@ package gridrunner
 import (
 	"fmt"
 
-	"github.com/lytics/grid/grid2"
+	"github.com/lytics/grid"
 )
 
 var (
-	_ grid2.ActorMaker = (*maker)(nil)
-	_ grid2.ActorMaker = (*nilMaker)(nil)
+	_ grid.ActorMaker = (*maker)(nil)
+	_ grid.ActorMaker = (*nilMaker)(nil)
 )
 
 type maker struct {
@@ -25,7 +25,7 @@ func newActorMaker(conf *Conf) (*maker, error) {
 	return &maker{conf: conf}, nil
 }
 
-func (m *maker) MakeActor(def *grid2.ActorDef) (grid2.Actor, error) {
+func (m *maker) MakeActor(def *grid.ActorDef) (grid.Actor, error) {
 	switch def.Type {
 	case "leader":
 		return NewLeaderActor(def, m.conf), nil
@@ -41,6 +41,6 @@ func (m *maker) MakeActor(def *grid2.ActorDef) (grid2.Actor, error) {
 type nilMaker struct {
 }
 
-func (m *nilMaker) MakeActor(def *grid2.ActorDef) (grid2.Actor, error) {
+func (m *nilMaker) MakeActor(def *grid.ActorDef) (grid.Actor, error) {
 	return nil, fmt.Errorf("NilMaker does not run actors it is lazy: %v", def.Type)
 }

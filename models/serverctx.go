@@ -54,7 +54,7 @@ func (m *ServerCtx) loadConfig() error {
 
 	for _, schemaConf := range m.Config.Schemas {
 
-		u.Debugf("parse schemas: %v", schemaConf)
+		//u.Debugf("parse schemas: %v", schemaConf)
 		if _, ok := m.schemas[schemaConf.Name]; ok {
 			panic(fmt.Sprintf("duplicate schema '%s'", schemaConf.Name))
 		}

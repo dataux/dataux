@@ -131,9 +131,9 @@ func (m *MongoDataSource) loadSchema() error {
 
 func chooseBackend(source string, schema *schema.SourceSchema) string {
 	for _, node := range schema.Nodes {
-		u.Infof("check node:%q =? %+v", source, node)
+		//u.Debugf("check node:%q =? %+v", source, node)
 		if node.Source == source {
-			u.Debugf("found node: %+v", node)
+			//u.Debugf("found node: %+v", node)
 			// TODO:  implement real balancer
 			return node.Address
 		}
@@ -145,7 +145,7 @@ func (m *MongoDataSource) connect() error {
 
 	host := chooseBackend(m.db, m.schema)
 
-	u.Infof("connecting MongoDataSource: host='%s'  conf=%#v", host, m.schema.Conf)
+	//u.Debugf("connecting MongoDataSource: host='%s'  conf=%#v", host, m.schema.Conf)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
