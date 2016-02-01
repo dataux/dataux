@@ -42,6 +42,7 @@ func (a *ConsumerActor) String() string {
 }
 
 func (a *ConsumerActor) Act(g grid.Grid, exit <-chan bool) bool {
+
 	tx, err := grid.NewSender(g.Nats(), 100)
 	if err != nil {
 		u.Errorf("%v: error: %v", a.ID(), err)
@@ -95,6 +96,7 @@ func (a *ConsumerActor) Act(g grid.Grid, exit <-chan bool) bool {
 }
 
 func (a *ConsumerActor) Starting() dfa.Letter {
+
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 

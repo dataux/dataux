@@ -12,8 +12,8 @@ import (
 
 	"github.com/lytics/grid"
 	"github.com/lytics/grid/condition"
-	"github.com/lytics/grid/ring"
 
+	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/plan"
 )
 
@@ -31,84 +31,43 @@ func NextId() (uint64, error) {
 
 type Server struct {
 	Conf       *Conf
-	g          grid.Grid
+	Grid       grid.Grid
 	started    bool
 	lastTaskId uint64
 }
 
-func (s *Server) SubmitTask(sp *plan.SourcePlan) interface{} {
-
-	var err error
-	taskId, err := sf.NextID()
-	if err != nil {
-		u.Errorf("Wat, no taskid? err=%v", err)
-		return nil
-	}
-
-	flow := NewFlow(taskId)
+func (s *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, t plan.Task, sp *plan.Select) interface{} {
 
 	u.Debugf("%s starting job ", flow)
 
-	// Attempting to find out when this task has finished
-	// and want to go read Store() for getting state?
-	f := condition.NewNameWatch(s.g.Etcd(), s.g.Name(), flow.Name(), "finished")
-	finished := f.WatchUntil(flow.NewContextualName("leader"))
-
-	rp := ring.New(flow.NewContextualName("producer"), s.Conf.NrProducers)
-	for _, def := range rp.ActorDefs() {
-		def.DefineType("producer")
-		def.Define("flow", flow.Name())
-		err := s.g.StartActor(def)
-		if err != nil {
-			u.Errorf("error: failed to start: %v, due to: %v", def, err)
-			os.Exit(1)
-		}
-	}
-
-	rc := ring.New(flow.NewContextualName("consumer"), s.Conf.NrConsumers)
-	for _, def := range rc.ActorDefs() {
-		def.DefineType("consumer")
-		def.Define("flow", flow.Name())
-		err := s.g.StartActor(def)
-		if err != nil {
-			u.Errorf("error: failed to start: %v, due to: %v", def, err)
-			os.Exit(1)
-		}
-	}
+	// TEMP HACK
+	tempTask = t        //   plan.Task
+	tempSelectPlan = sp //*plan.Select
 
 	ldr := grid.NewActorDef(flow.NewContextualName("leader"))
 	ldr.DefineType("leader")
 	ldr.Define("flow", flow.Name())
-	err = s.g.StartActor(ldr)
+	ldr.Settings["pb"] = "custom-data-protobuf"
+	err := s.Grid.StartActor(ldr)
 	if err != nil {
 		u.Errorf("error: failed to start: %v, due to: %v", "leader", err)
 		os.Exit(1)
 	}
 
-	st := condition.NewState(s.g.Etcd(), 10*time.Minute, s.g.Name(), flow.Name(), "state", ldr.ID())
-	defer st.Stop()
-
-	// can we read the reader state?
-
 	select {
-	case <-finished:
+	case <-localTask.SigChan():
 		u.Warnf("%s YAAAAAY finished", flow.String())
-		var state LeaderState
-		if _, err := st.Fetch(&state); err != nil {
-			u.Warnf("%s failed to read state: %v", flow, err)
-		} else {
-			u.Infof("%s got STATE: %#v", flow, state)
-			return state
-		}
+
 	case <-time.After(30 * time.Second):
 		u.Warnf("%s exiting bc timeout", flow)
 	}
 	return nil
 }
 func (s *Server) RunWorker() error {
+	u.Infof("starting grid worker nats: %v", s.Conf.NatsServers)
 	m, err := newActorMaker(s.Conf)
 	if err != nil {
-		u.Errorf("error: failed to make actor maker: %v", err)
+		u.Errorf("failed to make actor maker: %v", err)
 		return err
 	}
 	return s.runMaker(m)
@@ -119,20 +78,21 @@ func (s *Server) RunMaster() error {
 }
 func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 
-	// We are going to start a "Grid Master" which is only used for making requests
-	// to etcd to start tasks
-	s.g = grid.New(s.Conf.GridName, s.Conf.Hostname, s.Conf.EtcdServers, s.Conf.NatsServers, actorMaker)
+	// We are going to start a "Grid" with specified maker
+	//   - nilMaker = "master" only used for submitting tasks, not performing them
+	//   - normal maker;  performs specified work units
+	s.Grid = grid.New(s.Conf.GridName, s.Conf.Hostname, s.Conf.EtcdServers, s.Conf.NatsServers, actorMaker)
 
-	exit, err := s.g.Start()
+	exit, err := s.Grid.Start()
 	if err != nil {
-		u.Errorf("error: failed to start grid: %v", err)
-		return fmt.Errorf("error starting grid master %v", err)
+		u.Errorf("failed to start grid: %v", err)
+		return fmt.Errorf("error starting grid %v", err)
 	}
 
-	j := condition.NewJoin(s.g.Etcd(), 30*time.Second, s.g.Name(), "hosts", s.Conf.Hostname)
+	j := condition.NewJoin(s.Grid.Etcd(), 30*time.Second, s.Grid.Name(), "hosts", s.Conf.Hostname)
 	err = j.Join()
 	if err != nil {
-		u.Errorf("error: failed to regester: %v", err)
+		u.Errorf("failed to register grid node: %v", err)
 		os.Exit(1)
 	}
 	defer j.Exit()
@@ -146,14 +106,14 @@ func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 			case <-ticker.C:
 				err := j.Alive()
 				if err != nil {
-					u.Errorf("error: failed to report liveness: %v", err)
+					u.Errorf("failed to report liveness: %v", err)
 					os.Exit(1)
 				}
 			}
 		}
 	}()
 
-	w := condition.NewCountWatch(s.g.Etcd(), s.g.Name(), "hosts")
+	w := condition.NewCountWatch(s.Grid.Etcd(), s.Grid.Name(), "hosts")
 	defer w.Stop()
 
 	u.Debugf("waiting for %d nodes to join", s.Conf.NodeCt)
@@ -163,7 +123,7 @@ func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 		u.Debug("Shutting down, grid exited")
 		return nil
 	case <-w.WatchError():
-		u.Errorf("error: failed to watch other hosts join: %v", err)
+		u.Errorf("failed to watch other hosts join: %v", err)
 		os.Exit(1)
 	case <-started:
 		s.started = true
@@ -176,7 +136,7 @@ func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 		select {
 		case <-sig:
 			u.Debug("shutting down")
-			s.g.Stop()
+			s.Grid.Stop()
 		case <-exit:
 		}
 	}()
@@ -189,7 +149,7 @@ func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 type Flow string
 
 func NewFlow(nr uint64) Flow {
-	return Flow(fmt.Sprintf("flow-%v", nr))
+	return Flow(fmt.Sprintf("sql-%v", nr))
 }
 
 func (f Flow) NewContextualName(name string) string {

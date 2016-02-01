@@ -36,7 +36,7 @@ type SqlToMgo struct {
 	*exec.TaskBase
 	ctx            *plan.Context
 	resp           *ResultReader
-	sp             *plan.SourcePlan
+	sp             *plan.Source
 	tbl            *schema.Table
 	sel            *rel.SqlSelect
 	schema         *schema.SourceSchema
@@ -63,7 +63,7 @@ func (m *SqlToMgo) Columns() []string {
 	return m.tbl.Columns()
 }
 
-func (m *SqlToMgo) VisitSourceSelect(sp *plan.SourcePlan) (rel.Task, rel.VisitStatus, error) {
+func (m *SqlToMgo) VisitSourceSelect(sp *plan.Source) (plan.Task, rel.VisitStatus, error) {
 
 	m.TaskBase = exec.NewTaskBase(sp.Ctx, "SqlToMgo")
 	var err error

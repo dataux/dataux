@@ -13,11 +13,18 @@ import (
 	"github.com/dataux/dataux/planner/gridrunner"
 )
 
+// Server Context for the DataUX Server giving access to the shared
+//  memory objects Config, Schemas, Grid runtime
 type ServerCtx struct {
-	Config  *Config
+	// The dataux server config info on schema, backends, frontends, etc
+	Config *Config
+	// The underlying qlbridge schema holds info about the
+	//  available datasource Drivers/Adapters
+	RtConf *datasource.RuntimeSchema
+	// Grid is our real-time multi-node coordination and messaging system
+	Grid *gridrunner.Server
+
 	schemas map[string]*schema.Schema
-	RtConf  *datasource.RuntimeSchema
-	Grid    *gridrunner.Server
 }
 
 func NewServerCtx(conf *Config) *ServerCtx {
@@ -30,16 +37,20 @@ func NewServerCtx(conf *Config) *ServerCtx {
 	return &svr
 }
 
+// Load all the config info for this context and start the grid servers
 func (m *ServerCtx) Init() error {
 
 	if err := m.loadConfig(); err != nil {
 		return err
 	}
+	// how many worker nodes?
 	m.Grid = planner.NewServerGrid(2)
 	go m.Grid.RunMaster()
+
 	return nil
 }
 
+// Get
 func (m *ServerCtx) Table(schemaName, tableName string) (*schema.Table, error) {
 	s, ok := m.schemas[schemaName]
 	if ok {

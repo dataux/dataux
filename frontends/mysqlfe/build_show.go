@@ -19,8 +19,9 @@ var (
 )
 
 // Many of the ShowMethods are MySql dialect specific so will be replaced here
-func (m *MySqlJob) VisitShow(stmt *rel.SqlShow) (rel.Task, rel.VisitStatus, error) {
+func (m *MySqlJob) VisitShow(sp *plan.Show) (plan.Task, rel.VisitStatus, error) {
 
+	stmt := sp.Stmt
 	//u.Debugf("mysql.VisitShow create?%v  identity=%q  raw=%s", stmt.Create, stmt.Identity, stmt.Raw)
 
 	//raw := strings.ToLower(stmt.Raw)
@@ -62,5 +63,5 @@ func (m *MySqlJob) VisitShow(stmt *rel.SqlShow) (rel.Task, rel.VisitStatus, erro
 		return tasks, rel.VisitContinue, nil
 
 	}
-	return m.SqlJob.VisitShow(stmt)
+	return m.SqlJob.VisitShow(sp)
 }

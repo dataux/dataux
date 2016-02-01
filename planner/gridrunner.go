@@ -17,7 +17,10 @@ import (
 
 var (
 	loggingOnce sync.Once
-	GridConf    = &gridrunner.Conf{
+
+	// BuiltIn Default Conf, used for testing but real runtime swaps this out
+	//  for a real config
+	GridConf = &gridrunner.Conf{
 		GridName:    "dataux",
 		MsgSize:     1000,
 		MsgCount:    100000,
@@ -47,7 +50,7 @@ func RunWorkerNodes(nodeCt int) {
 			s.RunWorker() // blocking
 		}(i)
 	}
-	time.Sleep(time.Millisecond * 50)
+	time.Sleep(time.Millisecond * 80)
 }
 
 func NewServerGrid(nodeCt int) *gridrunner.Server {

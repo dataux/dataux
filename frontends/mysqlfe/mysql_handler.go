@@ -102,7 +102,7 @@ func (m *MySqlHandler) chooseCommand(writer models.ResultWriter, req *models.Req
 
 	// First byte of mysql is a "command" type
 	cmd := req.Raw[0]
-	req.Raw = req.Raw[1:] // take the rest which will get parsed
+	req.Raw = req.Raw[1:] // the rest is the statement which will get parsed
 
 	//u.Debugf("chooseCommand: %v:%v", cmd, mysql.CommandString(cmd))
 	switch cmd {
@@ -159,7 +159,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	ctx := plan.NewContext(sql)
 	ctx.Session = m.sess
 	ctx.Schema = m.schema
-	job, err := BuildMySqlob(m.svr, ctx)
+	job, err := BuildMySqlJob(m.svr, ctx)
 
 	if err != nil {
 		//u.Debugf("error? %v", err)
@@ -196,9 +196,10 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		return fmt.Errorf("statement type %T not supported", stmt)
 	}
 
-	// Finalize allows any setup, wait for ready, etc
-	//  allows us to setup message/sink channels
-	//job.RootTask.Add(resultWriter)
+	// job.Finalize() will:
+	//  - insert any network/distributed tasks to other worker nodes
+	//  - wait for those nodes to be ready to run
+	//  - append the result writer after those tasks
 	err = job.Finalize(resultWriter)
 	if err != nil {
 		u.Errorf("error on finalize %v", err)
@@ -209,7 +210,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		u.Errorf("error on Query.Run(): %v", err)
 	}
 	job.Close()
-	return nil
+	return err
 }
 
 func (m *MySqlHandler) writeOK(r *mysql.Result) error {

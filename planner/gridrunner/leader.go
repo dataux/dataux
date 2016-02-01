@@ -1,7 +1,7 @@
 package gridrunner
 
 import (
-	"strings"
+	"encoding/gob"
 	"time"
 
 	u "github.com/araddon/gou"
@@ -9,7 +9,23 @@ import (
 	"github.com/lytics/dfa"
 	"github.com/lytics/grid"
 	"github.com/lytics/grid/condition"
+
+	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/exec"
+	"github.com/araddon/qlbridge/plan"
 )
+
+var (
+	// TEMP HACK
+	// t plan.Task, sp *plan.Select
+	tempTask       plan.Task
+	tempSelectPlan *plan.Select
+)
+
+func init() {
+	gob.Register(datasource.SqlDriverMessageMap{})
+	//gob.Register(DataMsg{})
+}
 
 func NewLeaderActor(def *grid.ActorDef, conf *Conf) grid.Actor {
 	return &LeaderActor{
@@ -84,6 +100,8 @@ func (a *LeaderActor) Starting() dfa.Letter {
 
 	//time.Sleep(3 * time.Second)
 
+	u.Infof("starting actor %#v", a.def)
+
 	j := condition.NewJoin(a.grid.Etcd(), 2*time.Minute, a.grid.Name(), a.flow.Name(), "started", a.ID())
 	if err := j.Rejoin(); err != nil {
 		return Failure
@@ -96,7 +114,8 @@ func (a *LeaderActor) Starting() dfa.Letter {
 	f := condition.NewNameWatch(a.grid.Etcd(), a.grid.Name(), a.flow.Name(), "finished")
 	defer f.Stop()
 
-	started := w.WatchUntil(a.conf.NrConsumers + a.conf.NrProducers + 1)
+	//started := w.WatchUntil(a.conf.NrConsumers + a.conf.NrProducers + 1)
+	started := w.WatchUntil(1)
 	finished := f.WatchUntil(a.flow.NewContextualName("leader"))
 	for {
 		select {
@@ -114,12 +133,36 @@ func (a *LeaderActor) Starting() dfa.Letter {
 	}
 }
 
+func (a *LeaderActor) RunSqlDag() {
+
+	taskRunner, ok := tempTask.(exec.TaskRunner)
+	if !ok {
+		u.Errorf("Expected exec.TaskRunner but got %T", tempTask)
+		return
+	}
+	taskRunner.Setup(0)
+	err := taskRunner.Run()
+	if err != nil {
+		u.Errorf("error on Query.Run(): %v", err)
+	}
+	taskRunner.Close()
+	j := condition.NewJoin(a.grid.Etcd(), 10*time.Second, a.grid.Name(), a.flow.Name(), "sqlcomplete", a.ID())
+	u.Infof("sending sqlcomplete join message for %#v", taskRunner)
+	if err = j.Rejoin(); err != nil {
+		u.Errorf("could not join?? %v", err)
+	}
+	u.Warnf("sqlcomplete sql dag")
+}
+
 func (a *LeaderActor) Finishing() dfa.Letter {
+
+	u.Warnf("%s leader finishing", a.String())
+	return EverybodyFinished
+
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	u.Warnf("%s leader finishing", a.String())
-	j := condition.NewJoin(a.grid.Etcd(), 10*time.Minute, a.grid.Name(), a.flow.Name(), "finished", a.ID())
+	j := condition.NewJoin(a.grid.Etcd(), 10*time.Minute, a.grid.Name(), a.flow.Name(), "finished")
 	if err := j.Rejoin(); err != nil {
 		return Failure
 	}
@@ -152,7 +195,8 @@ func (a *LeaderActor) Finishing() dfa.Letter {
 }
 
 func (a *LeaderActor) Running() dfa.Letter {
-	ticker := time.NewTicker(30 * time.Second)
+
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	a.state = NewLeaderState()
@@ -166,10 +210,13 @@ func (a *LeaderActor) Running() dfa.Letter {
 	}
 	u.Infof("%v: running with state: %v, index: %v", a.ID(), a.state, s.Index())
 
-	w := condition.NewCountWatch(a.grid.Etcd(), a.grid.Name(), a.flow.Name(), "finished")
+	w := condition.NewCountWatch(a.grid.Etcd(), a.grid.Name(), a.flow.Name(), "sqlcomplete")
 	defer w.Stop()
 
-	finished := w.WatchUntil(a.conf.NrConsumers + a.conf.NrProducers)
+	// Now run the Actual worker
+	go a.RunSqlDag()
+
+	finished := w.WatchUntil(1)
 	for {
 		select {
 		case <-a.exit:
@@ -179,11 +226,12 @@ func (a *LeaderActor) Running() dfa.Letter {
 			u.Warnf("%s finished store", a)
 			return Exit
 		case <-ticker.C:
+			u.Infof("alive")
 			if err := a.started.Alive(); err != nil {
 				u.Warnf("leader not alive?: %v", err)
 				return Failure
 			}
-			u.Warnf("%s about to finish store", a)
+			u.Warnf("%s about to do ticker store", a)
 			if _, err := s.Store(a.state); err != nil {
 				u.Warnf("could not store: %v", err)
 				return Failure
@@ -204,20 +252,11 @@ func (a *LeaderActor) Running() dfa.Letter {
 			// for this sample, we have some count of messages in state, but normally
 			// you would have progress (kafkaId's, offsetids, status) in state
 			// and metrics here
+			u.Debugf("%s rx Msg:  %#v", a, m)
+			// switch m := m.(type) {
+			// case ResultMsg:
 
-			switch m := m.(type) {
-			case ResultMsg:
-				if m.Count > 5000 {
-					u.Debugf("%s rx Msg:  %#v", a, m)
-				}
-				if strings.Contains(m.From, "producer") {
-					a.state.ProducerCounts[m.Producer] = m.Count
-					a.state.ProducerDurations[m.Producer] = m.Duration
-				}
-				if strings.Contains(m.From, "consumer") {
-					a.state.ConsumerCounts[m.Producer] += m.Count
-				}
-			}
+			// }
 		}
 	}
 }

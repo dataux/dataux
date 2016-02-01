@@ -45,7 +45,7 @@ func RunDistributedNodes(t *testing.T) func() {
 	testmysql.RunTestServer(t)
 	planner.RunWorkerNodes(2)
 	return func() {
-
+		// placeholder
 	}
 }
 

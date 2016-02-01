@@ -5,7 +5,6 @@ import (
 
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/plan"
-	"github.com/araddon/qlbridge/rel"
 
 	"github.com/dataux/dataux/planner/gridrunner"
 )
@@ -32,7 +31,7 @@ func TaskRunnersMaker(ctx *plan.Context, g *gridrunner.Server) plan.TaskPlanner 
 		Grid:    g,
 	}
 }
-func (m *TaskRunners) SourceVisitorMaker(sp *plan.SourcePlan) rel.SourceVisitor {
+func (m *TaskRunners) SourceVisitorMaker(sp *plan.Source) plan.SourceVisitor {
 	esb := exec.NewSourceBuilder(sp, m)
 	sb := NewSourceBuilder(esb, m.Grid)
 	sb.SourceVisitor = sb
