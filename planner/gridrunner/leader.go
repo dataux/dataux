@@ -18,7 +18,7 @@ import (
 var (
 	// TEMP HACK
 	// t plan.Task, sp *plan.Select
-	tempTask       plan.Task
+	tempTask       exec.Task
 	tempSelectPlan *plan.Select
 )
 

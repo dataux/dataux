@@ -36,7 +36,7 @@ type Server struct {
 	lastTaskId uint64
 }
 
-func (s *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, t plan.Task, sp *plan.Select) interface{} {
+func (s *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, t exec.Task, sp *plan.Select) interface{} {
 
 	u.Debugf("%s starting job ", flow)
 

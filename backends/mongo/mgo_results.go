@@ -44,7 +44,7 @@ type ResultReaderNext struct {
 
 func NewResultReader(req *SqlToMgo, q *mgo.Query, limit int) *ResultReader {
 	m := &ResultReader{}
-	m.TaskBase = exec.NewTaskBase(req.Ctx, "mgo-resultreader")
+	m.TaskBase = exec.NewTaskBase(req.Ctx)
 	m.query = q
 	m.sql = req
 	m.limit = limit

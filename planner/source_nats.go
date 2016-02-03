@@ -30,7 +30,7 @@ type SourceNats struct {
 //
 func NewSourceNats(ctx *plan.Context, rx grid.Receiver) *SourceNats {
 	return &SourceNats{
-		TaskBase: exec.NewTaskBase(ctx, "SourceNats"),
+		TaskBase: exec.NewTaskBase(ctx),
 		rx:       rx,
 	}
 }

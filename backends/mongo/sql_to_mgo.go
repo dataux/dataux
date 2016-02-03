@@ -63,12 +63,12 @@ func (m *SqlToMgo) Columns() []string {
 	return m.tbl.Columns()
 }
 
-func (m *SqlToMgo) VisitSourceSelect(sp *plan.Source) (plan.Task, rel.VisitStatus, error) {
+func (m *SqlToMgo) WalkSourceSelect(sp *plan.Source) (plan.Task, plan.WalkStatus, error) {
 
-	m.TaskBase = exec.NewTaskBase(sp.Ctx, "SqlToMgo")
+	m.TaskBase = exec.NewTaskBase(sp.Ctx)
 	var err error
 	m.sp = sp
-	req := sp.From.Source
+	req := sp.Stmt.Source
 	//u.Infof("mongo.VisitSubSelect %v final:%v", req.String(), sp.Final)
 
 	m.sel = req
@@ -86,7 +86,7 @@ func (m *SqlToMgo) VisitSourceSelect(sp *plan.Source) (plan.Task, rel.VisitStatu
 		_, err = m.WalkNode(req.Where.Expr, &m.filter)
 		if err != nil {
 			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.String(), err)
-			return nil, rel.VisitError, err
+			return nil, plan.WalkError, err
 		}
 	}
 
@@ -94,14 +94,14 @@ func (m *SqlToMgo) VisitSourceSelect(sp *plan.Source) (plan.Task, rel.VisitStatu
 	err = m.WalkSelectList()
 	if err != nil {
 		u.Warnf("Could Not evaluate Columns/Aggs %s %v", req.Columns.String(), err)
-		return nil, rel.VisitError, err
+		return nil, plan.WalkError, err
 	}
 
 	if len(req.GroupBy) > 0 {
 		err = m.WalkGroupBy()
 		if err != nil {
 			u.Warnf("Could Not evaluate GroupBys %s %v", req.GroupBy.String(), err)
-			return nil, rel.VisitError, err
+			return nil, plan.WalkError, err
 		}
 	}
 
@@ -143,9 +143,9 @@ func (m *SqlToMgo) VisitSourceSelect(sp *plan.Source) (plan.Task, rel.VisitStatu
 	m.resp = resultReader
 	//resultReader.Finalize()
 	if m.needsPolyFill {
-		return resultReader, rel.VisitContinue, nil
+		return resultReader, plan.WalkContinue, nil
 	}
-	return resultReader, rel.VisitFinal, nil
+	return resultReader, plan.WalkFinal, nil
 }
 
 // Aggregations from the <select_list>

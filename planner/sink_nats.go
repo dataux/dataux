@@ -29,7 +29,7 @@ type SinkNats struct {
 //
 func NewSinkNats(ctx *plan.Context, destination string, tx grid.Sender) *SinkNats {
 	return &SinkNats{
-		TaskBase:    exec.NewTaskBase(ctx, "SinkNats"),
+		TaskBase:    exec.NewTaskBase(ctx),
 		tx:          tx,
 		destination: destination,
 	}
