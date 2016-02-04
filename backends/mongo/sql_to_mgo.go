@@ -27,16 +27,23 @@ var (
 
 	// Implement Datasource interface that allows Mongo
 	//  to fully implement a full select statement
-	_ plan.SourceSelectPlanner = (*SqlToMgo)(nil)
+	_ plan.SourcePlanner  = (*SqlToMgo)(nil)
+	_ exec.ExecutorSource = (*SqlToMgo)(nil)
 )
 
+/*
+	SourcePlanner interface {
+		// given our request statement, turn that into a plan.Task.
+		WalkSourceSelect(s *Source) (Task, error)
+	}
+*/
 // Sql To Mongo Request
 //   Map sql queries into Mongo bson Requests
 type SqlToMgo struct {
 	*exec.TaskBase
 	ctx            *plan.Context
 	resp           *ResultReader
-	sp             *plan.Source
+	p              *plan.Source
 	tbl            *schema.Table
 	sel            *rel.SqlSelect
 	schema         *schema.SourceSchema
@@ -63,12 +70,17 @@ func (m *SqlToMgo) Columns() []string {
 	return m.tbl.Columns()
 }
 
-func (m *SqlToMgo) WalkSourceSelect(sp *plan.Source) (plan.Task, plan.WalkStatus, error) {
+func (m *SqlToMgo) WalkSourceSelect(p *plan.Source) (plan.Task, error) {
+	m.TaskBase = exec.NewTaskBase(p.Ctx)
+	p.SourceExec = true
+	return nil, nil
+}
+func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 
-	m.TaskBase = exec.NewTaskBase(sp.Ctx)
+	m.TaskBase = exec.NewTaskBase(p.Ctx)
 	var err error
-	m.sp = sp
-	req := sp.Stmt.Source
+	m.p = p
+	req := p.Stmt.Source
 	//u.Infof("mongo.VisitSubSelect %v final:%v", req.String(), sp.Final)
 
 	m.sel = req
@@ -77,7 +89,7 @@ func (m *SqlToMgo) WalkSourceSelect(sp *plan.Source) (plan.Task, plan.WalkStatus
 	if limit == 0 {
 		limit = DefaultLimit
 	}
-	if !sp.Final {
+	if !p.Final {
 		limit = 1e10
 	}
 
@@ -86,7 +98,7 @@ func (m *SqlToMgo) WalkSourceSelect(sp *plan.Source) (plan.Task, plan.WalkStatus
 		_, err = m.WalkNode(req.Where.Expr, &m.filter)
 		if err != nil {
 			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.String(), err)
-			return nil, plan.WalkError, err
+			return nil, err
 		}
 	}
 
@@ -94,14 +106,14 @@ func (m *SqlToMgo) WalkSourceSelect(sp *plan.Source) (plan.Task, plan.WalkStatus
 	err = m.WalkSelectList()
 	if err != nil {
 		u.Warnf("Could Not evaluate Columns/Aggs %s %v", req.Columns.String(), err)
-		return nil, plan.WalkError, err
+		return nil, err
 	}
 
 	if len(req.GroupBy) > 0 {
 		err = m.WalkGroupBy()
 		if err != nil {
 			u.Warnf("Could Not evaluate GroupBys %s %v", req.GroupBy.String(), err)
-			return nil, plan.WalkError, err
+			return nil, err
 		}
 	}
 
@@ -143,9 +155,9 @@ func (m *SqlToMgo) WalkSourceSelect(sp *plan.Source) (plan.Task, plan.WalkStatus
 	m.resp = resultReader
 	//resultReader.Finalize()
 	if m.needsPolyFill {
-		return resultReader, plan.WalkContinue, nil
+		u.Warnf("need to signal poly-fill")
 	}
-	return resultReader, plan.WalkFinal, nil
+	return resultReader, nil
 }
 
 // Aggregations from the <select_list>

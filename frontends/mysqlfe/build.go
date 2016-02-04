@@ -7,7 +7,6 @@ import (
 
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/plan"
-	"github.com/araddon/qlbridge/rel"
 
 	"github.com/dataux/dataux/models"
 	"github.com/dataux/dataux/planner"
@@ -17,12 +16,12 @@ var (
 	_ = u.EMPTY
 
 	// ensure it meets visitor
-	_ plan.Visitor = (*MySqlJob)(nil)
+	_ exec.Executor = (*MySqlJob)(nil)
 )
 
 // Mysql job that wraps the dataux distributed planner with a dialect specific one
 type MySqlJob struct {
-	*planner.SqlJob
+	*planner.ExecutorGrid
 }
 
 // Create a MySql job that wraps underlying distributed planner, and qlbridge generic implementation
@@ -30,40 +29,20 @@ type MySqlJob struct {
 // - mysql `SHOW CREATE TABLE name` for example is dialect specific so needs to be replaced
 // - also wraps a distributed planner from dataux
 func BuildMySqlJob(svr *models.ServerCtx, ctx *plan.Context) (*MySqlJob, error) {
+	jobPlanner := plan.NewPlanner(ctx)
+	baseJob := exec.NewExecutor(ctx, jobPlanner)
 
-	b := exec.JobBuilder{}
-	b.Ctx = ctx
-
-	// We are going to replace qlbridge planner with a dataux distributed one
-	b.TaskMaker = planner.TaskRunnersMaker(ctx, svr.Grid)
-	job := &planner.SqlJob{JobBuilder: &b, GridServer: svr.Grid}
-	mysqlJob := &MySqlJob{SqlJob: job}
-	job.Visitor = mysqlJob
-	b.Visitor = mysqlJob
-
-	//u.Debugf("SqlJob:%p exec.Job:%p about to build: %#v", job, &b, mysqlJob)
-	task, err := exec.BuildSqlJobVisitor(mysqlJob, ctx)
+	job := &planner.ExecutorGrid{JobExecutor: baseJob}
+	job.Executor = job
+	job.Ctx = ctx
+	task, err := exec.BuildSqlJobPlanned(job.Planner, job.Executor, ctx)
 	if err != nil {
 		return nil, err
 	}
-
 	taskRunner, ok := task.(exec.TaskRunner)
 	if !ok {
-		return nil, fmt.Errorf("Expected TaskRunner type root task but was %T", task)
+		return nil, fmt.Errorf("Expected TaskRunner but was %T", task)
 	}
 	job.RootTask = taskRunner
-
-	if job.Ctx.Projection != nil {
-		return mysqlJob, nil
-	}
-
-	if sqlSelect, ok := job.Ctx.Stmt.(*rel.SqlSelect); ok {
-		job.Ctx.Projection, err = plan.NewProjectionFinal(ctx, sqlSelect)
-		//u.Debugf("load projection final job.Projection: %p", job.Projection)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return mysqlJob, nil
+	return &MySqlJob{job}, err
 }

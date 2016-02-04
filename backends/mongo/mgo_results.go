@@ -72,7 +72,7 @@ func (m *ResultReader) Run() error {
 	sql := m.sql.sel
 
 	//cols := m.sql.sel.Columns
-	cols := m.sql.sp.Proj.Columns
+	cols := m.sql.p.Proj.Columns
 	colNames := make(map[string]int, len(cols))
 	if m.sql.needsPolyFill {
 		// since we are asking for poly-fill, the col names
@@ -126,7 +126,7 @@ func (m *ResultReader) Run() error {
 		if !iter.Next(&bm) {
 			break
 		}
-		//u.Debugf("col? %v", bm)
+		u.Debugf("col? %v", bm)
 		vals := make([]driver.Value, len(cols))
 		for i, col := range cols {
 			//u.Debugf("col source:%s   %s", col.Col.SourceField, col.Col)

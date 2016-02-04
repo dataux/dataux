@@ -7,6 +7,7 @@ import (
 	u "github.com/araddon/gou"
 	"github.com/kr/pretty"
 
+	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/rel"
@@ -181,7 +182,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	//u.Infof("job.Ctx %p   Session %p", job.Ctx, job.Ctx.Session)
 	//job.Ctx.Session = m.sess
 
-	var resultWriter plan.Task
+	var resultWriter exec.Task
 	switch stmt := job.Ctx.Stmt.(type) {
 	case *rel.SqlSelect:
 		resultWriter = NewMySqlResultWriter(writer, job.Ctx)
@@ -205,7 +206,9 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		u.Errorf("error on finalize %v", err)
 		return err
 	}
+	u.Infof("about to run")
 	err = job.Run()
+	u.Infof("after run")
 	if err != nil {
 		u.Errorf("error on Query.Run(): %v", err)
 	}

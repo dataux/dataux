@@ -1,5 +1,7 @@
 package mysqlfe
 
+/*
+
 import (
 	"database/sql/driver"
 	"fmt"
@@ -19,7 +21,7 @@ var (
 )
 
 // Many of the ShowMethods are MySql dialect specific so will be replaced here
-func (m *MySqlJob) VisitShow(sp *plan.Show) (plan.Task, rel.VisitStatus, error) {
+func (m *MySqlJob) VisitShow(sp *plan.Show) (plan.Task, plan.WalkStatus, error) {
 
 	stmt := sp.Stmt
 	//u.Debugf("mysql.VisitShow create?%v  identity=%q  raw=%s", stmt.Create, stmt.Identity, stmt.Raw)
@@ -65,3 +67,4 @@ func (m *MySqlJob) VisitShow(sp *plan.Show) (plan.Task, rel.VisitStatus, error) 
 	}
 	return m.SqlJob.VisitShow(sp)
 }
+*/

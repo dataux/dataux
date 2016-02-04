@@ -117,6 +117,7 @@ func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 	defer w.Stop()
 
 	u.Debugf("waiting for %d nodes to join", s.Conf.NodeCt)
+	//u.LogTraceDf(u.WARN, 16, "")
 	started := w.WatchUntil(s.Conf.NodeCt)
 	select {
 	case <-exit:

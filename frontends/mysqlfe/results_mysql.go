@@ -42,8 +42,13 @@ type MySqlExecResultWriter struct {
 func NewMySqlResultWriter(writer models.ResultWriter, ctx *plan.Context) *MySqlResultWriter {
 
 	m := &MySqlResultWriter{writer: writer, ctx: ctx, schema: ctx.Schema}
-	m.proj = ctx.Projection.Proj
-	m.TaskBase = exec.NewTaskBase(ctx, "MySqlResultWriter")
+	if ctx.Projection != nil {
+		m.proj = ctx.Projection.Proj
+	} else {
+		u.Warnf("no projection????")
+	}
+
+	m.TaskBase = exec.NewTaskBase(ctx)
 	m.Rs = mysql.NewResultSet()
 
 	m.Handler = resultWrite(m)
@@ -54,7 +59,7 @@ func NewMySqlSchemaWriter(writer models.ResultWriter, ctx *plan.Context) *MySqlR
 
 	m := &MySqlResultWriter{writer: writer, ctx: ctx, schema: ctx.Schema}
 	m.proj = ctx.Projection.Proj
-	m.TaskBase = exec.NewTaskBase(ctx, "MySqlSchemaWriter")
+	m.TaskBase = exec.NewTaskBase(ctx)
 	m.Rs = mysql.NewResultSet()
 
 	m.Handler = schemaWrite(m)
@@ -266,7 +271,7 @@ func NewEmptyResultset(pp *plan.Projection) *mysql.Resultset {
 func NewMySqlExecResultWriter(writer models.ResultWriter, ctx *plan.Context) *MySqlExecResultWriter {
 
 	m := &MySqlExecResultWriter{writer: writer, ctx: ctx, schema: ctx.Schema}
-	m.TaskBase = exec.NewTaskBase(m.Ctx, "MySqlExecResultWriter")
+	m.TaskBase = exec.NewTaskBase(m.Ctx)
 	m.Rs = mysql.NewResult()
 	m.Handler = nilWriter(m)
 	return m
