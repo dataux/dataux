@@ -158,6 +158,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	// Ensure it parses, right now we can't handle multiple statement (ie with semi-colons separating)
 	// sql = strings.TrimRight(sql, ";")
 	ctx := plan.NewContext(sql)
+	ctx.DisableRecover = m.svr.Config.SupressRecover
 	ctx.Session = m.sess
 	ctx.Schema = m.schema
 	job, err := BuildMySqlJob(m.svr, ctx)

@@ -53,6 +53,7 @@ type SqlToMgo struct {
 	groupby        bson.M
 	innergb        bson.M // InnerMost Group By
 	sort           []bson.M
+	limit          int
 	hasMultiValue  bool // Multi-Value vs Single-Value aggs
 	hasSingleValue bool // single value agg
 	needsPolyFill  bool // do we request that features be polyfilled?
@@ -70,27 +71,35 @@ func (m *SqlToMgo) Columns() []string {
 	return m.tbl.Columns()
 }
 
-func (m *SqlToMgo) WalkSourceSelect(p *plan.Source) (plan.Task, error) {
-	m.TaskBase = exec.NewTaskBase(p.Ctx)
-	p.SourceExec = true
-	return nil, nil
-}
-func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
+func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.Task, error) {
+
+	p.Conn = m
 
 	m.TaskBase = exec.NewTaskBase(p.Ctx)
+	p.SourceExec = true
+	m.p = p
+
 	var err error
 	m.p = p
 	req := p.Stmt.Source
 	//u.Infof("mongo.VisitSubSelect %v final:%v", req.String(), sp.Final)
 
+	if p.Proj == nil {
+		u.Warnf("%p no projection?  ", p)
+		proj := plan.NewProjectionInProcess(p.Stmt.Source)
+		p.Proj = proj.Proj
+	} else {
+		u.Infof("%p has projection!!! %s sqltomgo %p", p, p.Stmt, m)
+	}
+
 	m.sel = req
 
-	limit := req.Limit
-	if limit == 0 {
-		limit = DefaultLimit
+	m.limit = req.Limit
+	if m.limit == 0 {
+		m.limit = DefaultLimit
 	}
 	if !p.Final {
-		limit = 1e10
+		m.limit = 1e10
 	}
 
 	if req.Where != nil {
@@ -145,18 +154,27 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 		}
 	}
 
+	if m.needsPolyFill {
+		u.Warnf("need to signal poly-fill")
+	}
+
+	return nil, nil
+}
+func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
+
+	// ???
+	m.TaskBase = exec.NewTaskBase(p.Ctx)
+
 	filterBy, _ := json.Marshal(m.filter)
 	//u.Infof("tbl %#v", m.tbl.Columns(), m.tbl)
 	u.Infof("filter: %#v  \n%s", m.filter, filterBy)
 	//u.Debugf("db=%v  tbl=%v filter=%v sort=%v limit=%v skip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
 	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter)
 
-	resultReader := NewResultReader(m, query, limit)
+	u.Infof("sqltomgo: %p  resultreader sourceplan: %p argsource:%p ", m, m.p, p)
+	resultReader := NewResultReader(m, query, m.limit)
 	m.resp = resultReader
-	//resultReader.Finalize()
-	if m.needsPolyFill {
-		u.Warnf("need to signal poly-fill")
-	}
+
 	return resultReader, nil
 }
 

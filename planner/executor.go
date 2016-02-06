@@ -19,12 +19,14 @@ var (
 	_ = u.EMPTY
 )
 
-func BuildSqlJob(ctx *plan.Context, Grid *gridrunner.Server) (*ExecutorGrid, error) {
+// Build a Sql Job which may be a Grid/Distributed job
+func BuildSqlJob(ctx *plan.Context, gs *gridrunner.Server) (*ExecutorGrid, error) {
 	sqlPlanner := plan.NewPlanner(ctx)
 	baseJob := exec.NewExecutor(ctx, sqlPlanner)
 
 	job := &ExecutorGrid{JobExecutor: baseJob}
 	job.Executor = job
+	job.GridServer = gs
 	job.Ctx = ctx
 	task, err := exec.BuildSqlJobPlanned(job.Planner, job.Executor, ctx)
 	if err != nil {
@@ -39,6 +41,8 @@ func BuildSqlJob(ctx *plan.Context, Grid *gridrunner.Server) (*ExecutorGrid, err
 }
 
 // Sql job that wraps the generic qlbridge job builder
+// - contains ref to the shared GridServer which has info to
+//   distribute tasks across servers
 type ExecutorGrid struct {
 	*exec.JobExecutor
 	GridServer *gridrunner.Server
@@ -46,7 +50,6 @@ type ExecutorGrid struct {
 
 // Finalize is after the Dag of Relational-algebra tasks have been assembled
 //  and just before we run them.
-//
 func (m *ExecutorGrid) Finalize(resultWriter exec.Task) error {
 	u.Debugf("planner.Finalize  %#v", m.JobExecutor.RootTask)
 
@@ -56,12 +59,7 @@ func (m *ExecutorGrid) Finalize(resultWriter exec.Task) error {
 	return nil
 }
 
-// func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
-// 	root := m.NewTask(p)
-// 	return root, m.WalkChildren(p, root)
-// }
-
-func (m *ExecutorGrid) WalkSelect2(p *plan.Select, root exec.Task) (exec.Task, error) {
+func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 	if len(p.Stmt.From) > 0 {
 		u.Debugf("ExecutorGrid.WalkSelect ?  %s", p.Stmt.Raw)
 	}
@@ -69,7 +67,13 @@ func (m *ExecutorGrid) WalkSelect2(p *plan.Select, root exec.Task) (exec.Task, e
 	if len(p.Stmt.With) > 0 && p.Stmt.With.Bool("distributed") {
 		u.Warnf("has distributed!!!!!: %#v", p.Stmt.With)
 
-		localSink := exec.NewTaskSequential(m.Ctx)
+		sqlTask, err := m.JobExecutor.WalkSelect(p)
+		if err != nil {
+			u.Errorf("Could not create select task %v", err)
+			return nil, err
+		}
+
+		localTask := exec.NewTaskSequential(m.Ctx)
 		taskUint, err := gridrunner.NextId()
 		if err != nil {
 			u.Errorf("Could not create task id %v", err)
@@ -83,24 +87,24 @@ func (m *ExecutorGrid) WalkSelect2(p *plan.Select, root exec.Task) (exec.Task, e
 			return nil, err
 		}
 		natsSource := NewSourceNats(m.Ctx, rx)
-		localSink.Add(natsSource)
+		localTask.Add(natsSource)
 
 		tx, err := grid.NewSender(m.GridServer.Grid.Nats(), 1)
 		if err != nil {
 			u.Errorf("error: %v", err)
 		}
 		natsSink := NewSinkNats(m.Ctx, flow.Name(), tx)
-		root.Add(natsSink)
+		sqlTask.Add(natsSink)
 
 		// submit task in background node
 		go func() {
-			m.GridServer.SubmitTask(localSink, flow, root, p) // task submission to worker actors
+			m.GridServer.SubmitTask(localTask, flow, sqlTask, p) // task submission to worker actors
 			// need to send signal to quit
 			ch := natsSource.MessageOut()
 			close(ch)
 		}()
-
-		return localSink, nil
+		return localTask, nil
 	}
-	return nil, nil
+
+	return m.JobExecutor.WalkSelect(p)
 }

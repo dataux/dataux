@@ -46,6 +46,7 @@ func NewResultReader(req *SqlToMgo, q *mgo.Query, limit int) *ResultReader {
 	m := &ResultReader{}
 	m.TaskBase = exec.NewTaskBase(req.Ctx)
 	m.query = q
+	u.Infof("new resultreader:  sqltomgo:%p   sourceplan:%p", req, req.p)
 	m.sql = req
 	m.limit = limit
 	return m
@@ -72,6 +73,7 @@ func (m *ResultReader) Run() error {
 	sql := m.sql.sel
 
 	//cols := m.sql.sel.Columns
+	u.Infof("%p about to blow up sqltomgo: %p", m.sql.p, m.sql)
 	cols := m.sql.p.Proj.Columns
 	colNames := make(map[string]int, len(cols))
 	if m.sql.needsPolyFill {

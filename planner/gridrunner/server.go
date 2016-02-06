@@ -36,13 +36,13 @@ type Server struct {
 	lastTaskId uint64
 }
 
-func (s *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, t exec.Task, sp *plan.Select) interface{} {
+func (s *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, t exec.Task, p *plan.Select) interface{} {
 
 	u.Debugf("%s starting job ", flow)
 
 	// TEMP HACK
-	tempTask = t        //   plan.Task
-	tempSelectPlan = sp //*plan.Select
+	tempTask = t       //   plan.Task
+	tempSelectPlan = p //*plan.Select
 
 	ldr := grid.NewActorDef(flow.NewContextualName("leader"))
 	ldr.DefineType("leader")
