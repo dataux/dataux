@@ -1,9 +1,11 @@
-package gridrunner
+package planner
 
 import (
 	"encoding/gob"
 
 	"github.com/lytics/dfa"
+
+	"github.com/araddon/qlbridge/exec"
 )
 
 var (
@@ -32,26 +34,23 @@ func init() {
 }
 
 type Conf struct {
+	JobMaker    exec.JobMaker
 	NodeCt      int
 	GridName    string
 	Hostname    string
-	MsgSize     int
-	MsgCount    int
-	NrProducers int
-	NrConsumers int
 	EtcdServers []string
 	NatsServers []string
 }
 
 func (c *Conf) Clone() *Conf {
+	if c.JobMaker == nil {
+		panic("need job maker")
+	}
 	return &Conf{
+		JobMaker:    c.JobMaker,
 		NodeCt:      c.NodeCt,
 		GridName:    c.GridName,
 		Hostname:    c.Hostname,
-		MsgSize:     c.MsgSize,
-		MsgCount:    c.MsgCount,
-		NrProducers: c.NrProducers,
-		NrConsumers: c.NrConsumers,
 		EtcdServers: c.EtcdServers,
 		NatsServers: c.NatsServers,
 	}

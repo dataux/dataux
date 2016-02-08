@@ -1,6 +1,7 @@
-package gridrunner
+package planner
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/signal"
@@ -8,11 +9,11 @@ import (
 	"time"
 
 	u "github.com/araddon/gou"
-	"github.com/sony/sonyflake"
-
 	"github.com/lytics/grid"
 	"github.com/lytics/grid/condition"
+	"github.com/sony/sonyflake"
 
+	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/plan"
 )
@@ -21,8 +22,19 @@ var sf *sonyflake.Sonyflake
 
 func init() {
 	var st sonyflake.Settings
+	// TODO, ensure we get a unique etcdid for machineid
 	st.StartTime = time.Now()
 	sf = sonyflake.NewSonyflake(st)
+	// Lets use our distributed generator
+	plan.NextId = NextIdUnsafe
+}
+
+func NextIdUnsafe() uint64 {
+	uv, err := NextId()
+	if err != nil {
+		u.Errorf("error generating nextId %v", err)
+	}
+	return uv
 }
 
 func NextId() (uint64, error) {
@@ -31,24 +43,62 @@ func NextId() (uint64, error) {
 
 type Server struct {
 	Conf       *Conf
+	schemaconf *datasource.RuntimeSchema
 	Grid       grid.Grid
 	started    bool
 	lastTaskId uint64
 }
 
-func (s *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, t exec.Task, p *plan.Select) interface{} {
+func (s *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select) error {
 
-	u.Debugf("%s starting job ", flow)
+	u.Debugf("%s starting job server.Conf? %p", flow, s.Conf)
 
-	// TEMP HACK
-	tempTask = t       //   plan.Task
-	tempSelectPlan = p //*plan.Select
+	// Going to marshal to Protobuf
+	pb, err := p.Marshal()
+	if err != nil {
+		u.Errorf("Could not protbuf marshall %v for %s", err, p.Stmt)
+		return err
+	}
+	//u.Infof("pb?  %s", pb)
+	pbs := string(pb)
+	p2, err := plan.SelectPlanFromPbBytes([]byte(pbs))
+	if err != nil {
+		u.Warnf("%v", []byte(pb))
+		os.Exit(1)
+		u.Errorf("error %v", err)
+	}
+	if !p.Equal(p2) {
+		u.Warnf("wtf")
+		os.Exit(1)
+	} else {
+		//u.Errorf("WTF?  WTF?, %v", pb)
+		//u.Infof("p2? %#v", p2.Ctx)
+	}
+
+	//p2, err := plan.SelectPlanFromPbBytes(pb)
+
+	/*
+		sqlTask, err := m.JobExecutor.WalkSelect(p)
+		if err != nil {
+			u.Errorf("Could not create select task %v", err)
+			return nil, err
+		}
+
+		tx, err := grid.NewSender(m.GridServer.Grid.Nats(), 1)
+		if err != nil {
+			u.Errorf("error: %v", err)
+		}
+		natsSink := NewSinkNats(m.Ctx, flow.Name(), tx)
+		sqlTask.Add(natsSink)
+	*/
 
 	ldr := grid.NewActorDef(flow.NewContextualName("leader"))
 	ldr.DefineType("leader")
 	ldr.Define("flow", flow.Name())
-	ldr.Settings["pb"] = "custom-data-protobuf"
-	err := s.Grid.StartActor(ldr)
+	pbsBase := base64.URLEncoding.EncodeToString(pb)
+	ldr.Settings["pb"] = pbsBase
+	//u.Debugf("pbval: %v", ldr.Settings["pb"])
+	err = s.Grid.StartActor(ldr)
 	if err != nil {
 		u.Errorf("error: failed to start: %v, due to: %v", "leader", err)
 		os.Exit(1)
@@ -64,7 +114,7 @@ func (s *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, t exec.Task, p
 	return nil
 }
 func (s *Server) RunWorker() error {
-	u.Infof("starting grid worker nats: %v", s.Conf.NatsServers)
+	//u.Infof("starting grid worker nats: %v", s.Conf.NatsServers)
 	m, err := newActorMaker(s.Conf)
 	if err != nil {
 		u.Errorf("failed to make actor maker: %v", err)
@@ -73,7 +123,7 @@ func (s *Server) RunWorker() error {
 	return s.runMaker(m)
 }
 func (s *Server) RunMaster() error {
-	u.Infof("start grid master")
+	//u.Infof("start grid master")
 	return s.runMaker(&nilMaker{})
 }
 func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
@@ -116,19 +166,19 @@ func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 	w := condition.NewCountWatch(s.Grid.Etcd(), s.Grid.Name(), "hosts")
 	defer w.Stop()
 
-	u.Debugf("waiting for %d nodes to join", s.Conf.NodeCt)
+	//u.Debugf("waiting for %d nodes to join", s.Conf.NodeCt)
 	//u.LogTraceDf(u.WARN, 16, "")
 	started := w.WatchUntil(s.Conf.NodeCt)
 	select {
 	case <-exit:
-		u.Debug("Shutting down, grid exited")
+		//u.Debug("Shutting down, grid exited")
 		return nil
 	case <-w.WatchError():
 		u.Errorf("failed to watch other hosts join: %v", err)
 		os.Exit(1)
 	case <-started:
 		s.started = true
-		u.Infof("now started")
+		//u.Infof("now started")
 	}
 
 	go func() {
@@ -136,14 +186,14 @@ func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 		select {
 		case <-sig:
-			u.Debug("shutting down")
+			//u.Debug("shutting down")
 			s.Grid.Stop()
 		case <-exit:
 		}
 	}()
 
 	<-exit
-	u.Info("shutdown complete")
+	//u.Info("shutdown complete")
 	return nil
 }
 

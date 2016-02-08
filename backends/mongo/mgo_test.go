@@ -12,6 +12,8 @@ import (
 	"github.com/jmoiron/sqlx"
 	"gopkg.in/mgo.v2"
 
+	"github.com/araddon/qlbridge/exec"
+	"github.com/araddon/qlbridge/plan"
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
 	"github.com/dataux/dataux/planner"
 	"github.com/dataux/dataux/testutil"
@@ -41,9 +43,19 @@ func loadTestData() {
 	}
 }
 
+func jobMaker(ctx *plan.Context) (exec.Executor, error) {
+	// func BuildSqlJob(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
+	ctx.Schema = testmysql.Schema
+	return planner.BuildSqlJob(ctx, testmysql.ServerCtx.Grid)
+}
+
 func RunDistributedNodes(t *testing.T) func() {
+	planner.GridConf.JobMaker = jobMaker
+	//testmysql.ServerCtx.Grid.Conf.JobMaker = jobMaker
+	u.Debugf("%p planner.GridConf", planner.GridConf)
+	//u.Debugf("%p testmysql.ServerCtx.Grid.Conf", testmysql.ServerCtx.Grid.Conf)
 	testmysql.RunTestServer(t)
-	planner.RunWorkerNodes(2)
+	planner.RunWorkerNodes(2, testmysql.ServerCtx.RtConf)
 	return func() {
 		// placeholder
 	}
@@ -324,8 +336,9 @@ func TestSelectDistributed(t *testing.T) {
 	defer cleanup()
 
 	// We are going to use the WITH distributed=true to force distribution
+	// which is a temporary hack
 	validateQuerySpec(t, QuerySpec{
-		Sql:         "select AVG(CHAR_LENGTH(CAST(`title` AS CHAR))) as title_avg from article WITH distributed=true, node_ct=2",
+		Sql:         "SELECT AVG(CHAR_LENGTH(CAST(`title` AS CHAR))) as title_avg from article WITH distributed=true, node_ct=2",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			u.Infof("%#v", data.Avg)

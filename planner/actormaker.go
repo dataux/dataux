@@ -1,4 +1,4 @@
-package gridrunner
+package planner
 
 import (
 	"fmt"
@@ -16,23 +16,13 @@ type maker struct {
 }
 
 func newActorMaker(conf *Conf) (*maker, error) {
-	if conf.NrProducers > 1024 {
-		return nil, fmt.Errorf("to many producer actors requested: %v", conf.NrProducers)
-	}
-	if conf.NrConsumers > 1024 {
-		return nil, fmt.Errorf("to many consumer actors requested: %v", conf.NrConsumers)
-	}
 	return &maker{conf: conf}, nil
 }
 
 func (m *maker) MakeActor(def *grid.ActorDef) (grid.Actor, error) {
 	switch def.Type {
 	case "leader":
-		return NewLeaderActor(def, m.conf), nil
-	case "producer":
-		return NewProducerActor(def, m.conf), nil
-	case "consumer":
-		return NewConsumerActor(def, m.conf), nil
+		return NewSqlActor(def, m.conf), nil
 	default:
 		return nil, fmt.Errorf("type does not map to any type of actor: %v", def.Type)
 	}

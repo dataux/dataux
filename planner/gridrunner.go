@@ -9,10 +9,9 @@ import (
 	"time"
 
 	u "github.com/araddon/gou"
-
 	"github.com/lytics/metafora"
 
-	"github.com/dataux/dataux/planner/gridrunner"
+	"github.com/araddon/qlbridge/datasource"
 )
 
 var (
@@ -20,11 +19,8 @@ var (
 
 	// BuiltIn Default Conf, used for testing but real runtime swaps this out
 	//  for a real config
-	GridConf = &gridrunner.Conf{
+	GridConf = &Conf{
 		GridName:    "dataux",
-		MsgSize:     1000,
-		MsgCount:    100000,
-		NrConsumers: 2,
 		EtcdServers: strings.Split("http://127.0.0.1:2379", ","),
 		NatsServers: strings.Split("nats://127.0.0.1:4222", ","),
 	}
@@ -32,6 +28,7 @@ var (
 
 func init() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
+
 }
 
 func setupLogging() {
@@ -40,30 +37,29 @@ func setupLogging() {
 	u.DiscardStandardLogger() // Discard non-sanctioned spammers
 }
 
-func RunWorkerNodes(nodeCt int) {
+func RunWorkerNodes(nodeCt int, sc *datasource.RuntimeSchema) {
 
 	loggingOnce.Do(setupLogging)
 
 	for i := 0; i < nodeCt; i++ {
 		go func(nodeId int) {
-			s := serverStart(nodeCt, NodeName(uint64(nodeId)))
+			s := serverStart(nodeCt, NodeName(uint64(nodeId)), sc)
 			s.RunWorker() // blocking
 		}(i)
 	}
 	time.Sleep(time.Millisecond * 80)
 }
 
-func NewServerGrid(nodeCt int) *gridrunner.Server {
-	serverId, _ := gridrunner.NextId()
-	return serverStart(nodeCt, NodeName(serverId))
+func NewServerGrid(nodeCt int, sc *datasource.RuntimeSchema) *Server {
+	serverId, _ := NextId()
+	return serverStart(nodeCt, NodeName(serverId), sc)
 }
 
-func serverStart(nodeCt int, nodeName string) *gridrunner.Server {
+func serverStart(nodeCt int, nodeName string, sc *datasource.RuntimeSchema) *Server {
 	conf := GridConf.Clone()
 	conf.NodeCt = nodeCt
-	conf.NrProducers = nodeCt
 	conf.Hostname = nodeName
-	s := &gridrunner.Server{Conf: conf}
+	s := &Server{Conf: conf, schemaconf: sc}
 	return s
 }
 

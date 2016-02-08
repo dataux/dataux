@@ -10,7 +10,6 @@ import (
 	"github.com/araddon/qlbridge/schema"
 
 	"github.com/dataux/dataux/planner"
-	"github.com/dataux/dataux/planner/gridrunner"
 )
 
 // Server Context for the DataUX Server giving access to the shared
@@ -22,7 +21,7 @@ type ServerCtx struct {
 	//  available datasource Drivers/Adapters
 	RtConf *datasource.RuntimeSchema
 	// Grid is our real-time multi-node coordination and messaging system
-	Grid *gridrunner.Server
+	Grid *planner.Server
 
 	schemas map[string]*schema.Schema
 }
@@ -44,7 +43,7 @@ func (m *ServerCtx) Init() error {
 		return err
 	}
 	// how many worker nodes?
-	m.Grid = planner.NewServerGrid(2)
+	m.Grid = planner.NewServerGrid(2, m.RtConf)
 	go m.Grid.RunMaster()
 
 	return nil
@@ -114,11 +113,12 @@ func (m *ServerCtx) loadConfig() error {
 			sourceSchema.DS = ds
 
 			// TODO:   Periodically refresh this as sources are dynamic tables
-			u.Infof("tables to load? %#v", sourceSchema.Conf)
+			//u.Infof("tables to load? %#v", sourceSchema.Conf)
 			for _, tableName := range ds.Tables() {
 				m.loadSourceSchema(strings.ToLower(tableName), sch, sourceSchema)
 			}
 			sch.SourceSchemas[sourceName] = sourceSchema
+			m.RtConf.SchemaAdd(sch)
 		}
 
 	}

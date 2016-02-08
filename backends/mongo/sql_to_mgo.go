@@ -75,7 +75,7 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 
 	p.Conn = m
 
-	m.TaskBase = exec.NewTaskBase(p.Ctx)
+	m.TaskBase = exec.NewTaskBase(p.Context())
 	p.SourceExec = true
 	m.p = p
 
@@ -163,7 +163,7 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 
 	// ???
-	m.TaskBase = exec.NewTaskBase(p.Ctx)
+	m.TaskBase = exec.NewTaskBase(p.Context())
 
 	filterBy, _ := json.Marshal(m.filter)
 	//u.Infof("tbl %#v", m.tbl.Columns(), m.tbl)

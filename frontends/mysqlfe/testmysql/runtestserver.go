@@ -9,6 +9,7 @@ import (
 	"github.com/bmizerany/assert"
 	"github.com/lytics/sereno/embeddedetcd"
 
+	"github.com/araddon/qlbridge/schema"
 	"github.com/dataux/dataux/frontends/mysqlfe"
 	"github.com/dataux/dataux/models"
 	"github.com/dataux/dataux/planner"
@@ -25,6 +26,7 @@ var (
 	Conf           *models.Config
 	EtcdCluster    *embeddedetcd.EtcdCluster
 	ServerCtx      *models.ServerCtx
+	Schema         *schema.Schema
 )
 
 func init() {
@@ -123,6 +125,8 @@ func NewTestServer(t *testing.T) *TestListenerWraper {
 
 		ServerCtx = models.NewServerCtx(Conf)
 		ServerCtx.Init()
+
+		Schema = ServerCtx.Schema("datauxtest")
 
 		handler, err := mysqlfe.NewMySqlHandler(ServerCtx)
 		assert.Tf(t, err == nil, "must create es handler without err: %v", err)
