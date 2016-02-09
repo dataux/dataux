@@ -51,8 +51,9 @@ func jobMaker(ctx *plan.Context) (exec.Executor, error) {
 
 func RunDistributedNodes(t *testing.T) func() {
 	planner.GridConf.JobMaker = jobMaker
+	planner.GridConf.SchemaLoader = testmysql.SchemaLoader
 	//testmysql.ServerCtx.Grid.Conf.JobMaker = jobMaker
-	u.Debugf("%p planner.GridConf", planner.GridConf)
+	//u.Debugf("%p planner.GridConf", planner.GridConf)
 	//u.Debugf("%p testmysql.ServerCtx.Grid.Conf", testmysql.ServerCtx.Grid.Conf)
 	testmysql.RunTestServer(t)
 	planner.RunWorkerNodes(2, testmysql.ServerCtx.RtConf)

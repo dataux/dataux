@@ -117,7 +117,7 @@ func (m *MysqlListener) OnConn(c net.Conn) {
 		return
 	}
 	atomic.AddInt32(&m.connCt, 1)
-	u.Debugf("new conn id=%d conns active:%d  p:%p", conn.connectionId, m.connCt, conn)
+	//u.Debugf("new conn id=%d conns active:%d  p:%p", conn.connectionId, m.connCt, conn)
 	// Blocking
 	conn.Run()
 }

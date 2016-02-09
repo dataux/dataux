@@ -49,9 +49,9 @@ type Server struct {
 	lastTaskId uint64
 }
 
-func (s *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select) error {
+func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select) error {
 
-	u.Debugf("%s starting job server.Conf? %p", flow, s.Conf)
+	u.Debugf("%s starting job server.Conf? %p", flow, m.Conf)
 
 	// Going to marshal to Protobuf
 	pb, err := p.Marshal()
@@ -61,11 +61,11 @@ func (s *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 	}
 	//u.Infof("pb?  %s", pb)
 	pbs := string(pb)
-	p2, err := plan.SelectPlanFromPbBytes([]byte(pbs))
+	p2, err := plan.SelectPlanFromPbBytes([]byte(pbs), m.Conf.SchemaLoader)
 	if err != nil {
-		u.Warnf("%v", []byte(pb))
-		os.Exit(1)
 		u.Errorf("error %v", err)
+		//u.Warnf("%v", []byte(pb))
+		os.Exit(1)
 	}
 	if !p.Equal(p2) {
 		u.Warnf("wtf")
@@ -98,7 +98,7 @@ func (s *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 	pbsBase := base64.URLEncoding.EncodeToString(pb)
 	ldr.Settings["pb"] = pbsBase
 	//u.Debugf("pbval: %v", ldr.Settings["pb"])
-	err = s.Grid.StartActor(ldr)
+	err = m.Grid.StartActor(ldr)
 	if err != nil {
 		u.Errorf("error: failed to start: %v, due to: %v", "leader", err)
 		os.Exit(1)
@@ -113,18 +113,18 @@ func (s *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 	}
 	return nil
 }
-func (s *Server) RunWorker() error {
-	//u.Infof("starting grid worker nats: %v", s.Conf.NatsServers)
-	m, err := newActorMaker(s.Conf)
+func (m *Server) RunWorker() error {
+	//u.Infof("starting grid worker nats: %v", m.Conf.NatsServers)
+	actor, err := newActorMaker(m.Conf)
 	if err != nil {
 		u.Errorf("failed to make actor maker: %v", err)
 		return err
 	}
-	return s.runMaker(m)
+	return m.runMaker(actor)
 }
-func (s *Server) RunMaster() error {
+func (m *Server) RunMaster() error {
 	//u.Infof("start grid master")
-	return s.runMaker(&nilMaker{})
+	return m.runMaker(&nilMaker{})
 }
 func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 

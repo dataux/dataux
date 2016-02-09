@@ -89,7 +89,7 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 		proj := plan.NewProjectionInProcess(p.Stmt.Source)
 		p.Proj = proj.Proj
 	} else {
-		u.Infof("%p has projection!!! %s sqltomgo %p", p, p.Stmt, m)
+		//u.Infof("%p has projection!!! %s sqltomgo %p", p, p.Stmt, m)
 	}
 
 	m.sel = req
@@ -576,7 +576,7 @@ func (m *SqlToMgo) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {
 	case "max", "min", "avg", "sum", "cardinality":
 		m.hasSingleValue = true
 		if len(node.Args) != 1 {
-			u.Warnf("not able to run as native mongo query, running polyfill: %s", node.String())
+			//u.Debugf("not able to run as native mongo query, running polyfill: %s", node.String())
 			//return nil, fmt.Errorf("Invalid func")
 		}
 		val, ok := eval(node.Args[0])

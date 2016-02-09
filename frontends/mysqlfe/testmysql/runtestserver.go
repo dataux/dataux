@@ -36,6 +36,9 @@ func init() {
 	}
 	Conf = conf
 }
+func SchemaLoader(name string) (*schema.Schema, error) {
+	return Schema, nil
+}
 
 var testConfigData = `
 

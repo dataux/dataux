@@ -54,7 +54,7 @@ func NewSqlState() *SqlState {
 }
 
 func NewSqlActor(def *grid.ActorDef, conf *Conf) grid.Actor {
-	u.Debugf("%p conf", conf)
+	//u.Debugf("%p conf", conf)
 	return &SqlActor{
 		def:  def,
 		conf: conf,
@@ -119,7 +119,7 @@ func (m *SqlActor) Starting() dfa.Letter {
 	}
 
 	//u.Infof("got pb? %T  \n%s", pb, pb)
-	p, err := plan.SelectPlanFromPbBytes(pb)
+	p, err := plan.SelectPlanFromPbBytes(pb, m.conf.SchemaLoader)
 	if err != nil {
 		u.Warnf("%v", pb)
 		os.Exit(1)
@@ -168,7 +168,7 @@ func (m *SqlActor) Starting() dfa.Letter {
 
 	//time.Sleep(3 * time.Second)
 
-	u.Infof("starting actor %#v", m.def)
+	u.Infof("starting actor %#v", m.flow.Name())
 
 	j := condition.NewJoin(m.grid.Etcd(), 2*time.Minute, m.grid.Name(), m.flow.Name(), "started", m.ID())
 	if err := j.Rejoin(); err != nil {

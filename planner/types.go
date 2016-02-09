@@ -6,6 +6,7 @@ import (
 	"github.com/lytics/dfa"
 
 	"github.com/araddon/qlbridge/exec"
+	"github.com/araddon/qlbridge/plan"
 )
 
 var (
@@ -34,25 +35,30 @@ func init() {
 }
 
 type Conf struct {
-	JobMaker    exec.JobMaker
-	NodeCt      int
-	GridName    string
-	Hostname    string
-	EtcdServers []string
-	NatsServers []string
+	JobMaker     exec.JobMaker
+	SchemaLoader plan.SchemaLoader
+	NodeCt       int
+	GridName     string
+	Hostname     string
+	EtcdServers  []string
+	NatsServers  []string
 }
 
 func (c *Conf) Clone() *Conf {
 	if c.JobMaker == nil {
 		panic("need job maker")
 	}
+	if c.SchemaLoader == nil {
+		panic("need SchemaLoader")
+	}
 	return &Conf{
-		JobMaker:    c.JobMaker,
-		NodeCt:      c.NodeCt,
-		GridName:    c.GridName,
-		Hostname:    c.Hostname,
-		EtcdServers: c.EtcdServers,
-		NatsServers: c.NatsServers,
+		JobMaker:     c.JobMaker,
+		SchemaLoader: c.SchemaLoader,
+		NodeCt:       c.NodeCt,
+		GridName:     c.GridName,
+		Hostname:     c.Hostname,
+		EtcdServers:  c.EtcdServers,
+		NatsServers:  c.NatsServers,
 	}
 }
 

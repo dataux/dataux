@@ -207,9 +207,9 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		u.Errorf("error on finalize %v", err)
 		return err
 	}
-	u.Infof("about to run")
+	//u.Infof("about to run")
 	err = job.Run()
-	u.Infof("after run")
+	//u.Infof("after run")
 	if err != nil {
 		u.Errorf("error on Query.Run(): %v", err)
 	}
