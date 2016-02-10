@@ -89,7 +89,8 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 		proj := plan.NewProjectionInProcess(p.Stmt.Source)
 		p.Proj = proj.Proj
 	} else {
-		//u.Infof("%p has projection!!! %s sqltomgo %p", p, p.Stmt, m)
+		u.Infof("%p has projection!!! %s sqltomgo %p", p, p.Stmt, m)
+		u.LogTraceDf(u.WARN, 12, "hello")
 	}
 
 	m.sel = req
@@ -155,7 +156,7 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 	}
 
 	if m.needsPolyFill {
-		u.Warnf("need to signal poly-fill")
+		//u.Warnf("need to signal poly-fill")
 	}
 
 	return nil, nil
@@ -165,9 +166,9 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 	// ???
 	m.TaskBase = exec.NewTaskBase(p.Context())
 
-	filterBy, _ := json.Marshal(m.filter)
+	//filterBy, _ := json.Marshal(m.filter)
 	//u.Infof("tbl %#v", m.tbl.Columns(), m.tbl)
-	u.Infof("filter: %#v  \n%s", m.filter, filterBy)
+	//u.Infof("filter: %#v  \n%s", m.filter, filterBy)
 	//u.Debugf("db=%v  tbl=%v filter=%v sort=%v limit=%v skip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
 	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter)
 
@@ -581,7 +582,7 @@ func (m *SqlToMgo) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {
 		}
 		val, ok := eval(node.Args[0])
 		if !ok {
-			u.Warnf("Could not run node as mongo: %v", node.String())
+			//u.Warnf("Could not run node as mongo: %v", node.String())
 			m.needsPolyFill = true
 		} else {
 			// "min_price" : { "min" : { "field" : "price" } }

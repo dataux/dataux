@@ -71,7 +71,10 @@ func (m *ResultReader) Run() error {
 	//u.LogTracef(u.WARN, "hello")
 
 	sql := m.sql.sel
-
+	if m.sql.p == nil {
+		u.Warnf("no plan????  %#v", m.sql)
+		return fmt.Errorf("no plan")
+	}
 	//cols := m.sql.sel.Columns
 	u.Infof("%p about to blow up sqltomgo: %p", m.sql.p, m.sql)
 	cols := m.sql.p.Proj.Columns
@@ -161,7 +164,7 @@ func (m *ResultReader) Run() error {
 		//u.Debugf("new row ct: %v cols:%v vals:%v", len(m.Vals), colNames, vals)
 		//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
 		msg := datasource.NewSqlDriverMessageMap(uint64(len(m.Vals)), vals, colNames)
-		//u.Infof("In source Scanner iter %#v", msg)
+		u.Infof("In source Scanner iter %#v", msg)
 		select {
 		case <-sigChan:
 			return nil

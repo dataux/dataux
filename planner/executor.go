@@ -23,7 +23,7 @@ func BuildSqlJob(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
 	baseJob := exec.NewExecutor(ctx, sqlPlanner)
 
 	job := &ExecutorGrid{JobExecutor: baseJob}
-	job.Executor = job
+	job.Executor = baseJob
 	job.GridServer = gs
 	job.Ctx = ctx
 	task, err := exec.BuildSqlJobPlanned(job.Planner, job.Executor, ctx)

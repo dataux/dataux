@@ -172,6 +172,7 @@ func (m *SqlActor) Starting() dfa.Letter {
 
 	j := condition.NewJoin(m.grid.Etcd(), 2*time.Minute, m.grid.Name(), m.flow.Name(), "started", m.ID())
 	if err := j.Rejoin(); err != nil {
+		u.Errorf("wat?  %v", err)
 		return Failure
 	}
 	m.started = j
@@ -183,7 +184,11 @@ func (m *SqlActor) Starting() dfa.Letter {
 	defer f.Stop()
 
 	//started := w.WatchUntil(m.conf.NrConsumers + m.conf.NrProducers + 1)
-	started := w.WatchUntil(2)
+	u.Infof("waiting")
+	if 0 == 0 {
+		return EverybodyStarted
+	}
+	started := w.WatchUntil(0)
 	finished := f.WatchUntil(m.flow.NewContextualName("leader"))
 	for {
 		select {
@@ -194,6 +199,7 @@ func (m *SqlActor) Starting() dfa.Letter {
 				return Failure
 			}
 		case <-started:
+			u.Infof("everybody started")
 			return EverybodyStarted
 		case <-finished:
 			return EverybodyFinished
