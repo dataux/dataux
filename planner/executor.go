@@ -64,7 +64,7 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 	}
 
 	if len(p.Stmt.With) > 0 && p.Stmt.With.Bool("distributed") {
-		//u.Warnf("has distributed!!!!!: %#v", p.Stmt.With)
+		//u.Warnf("%p has distributed!!!!!: %#v", m, p.Stmt.With)
 
 		// We are going to run tasks remotely, so need a local grid source for them
 		//  remoteSink  -> nats ->  localSource

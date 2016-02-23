@@ -11,6 +11,7 @@ import (
 	u "github.com/araddon/gou"
 	"github.com/lytics/grid"
 	"github.com/lytics/grid/condition"
+	"github.com/lytics/grid/ring"
 	"github.com/sony/sonyflake"
 
 	"github.com/araddon/qlbridge/datasource"
@@ -49,19 +50,18 @@ type Server struct {
 	lastTaskId uint64
 }
 
-func (m *Server) startSqlActor(nodeCt int, partition string, pb []byte, flow Flow, p *plan.Select) error {
-	sqlNode := grid.NewActorDef(flow.NewContextualName("sqlactor"))
-	sqlNode.DefineType("sqlactor")
-	sqlNode.Define("flow", flow.Name())
-	sqlNode.RawData["pb"] = pb
-	sqlNode.Settings["partition"] = partition
-	sqlNode.Settings["node_ct"] = strconv.Itoa(nodeCt)
-	u.Debugf("%p submitting start actor", m)
-	err := m.Grid.StartActor(sqlNode)
-	u.Debugf("%p after submit start actor", m)
+func (m *Server) startSqlActor(nodeCt, nodeId int, partition string, pb []byte, flow Flow, def *grid.ActorDef, p *plan.Select) error {
+	//def := grid.NewActorDef(flow.NewContextualName("sqlactor"))
+	def.DefineType("sqlactor")
+	def.Define("flow", flow.Name())
+	def.RawData["pb"] = pb
+	def.Settings["partition"] = partition
+	def.Settings["node_ct"] = strconv.Itoa(nodeCt)
+	//u.Debugf("%p submitting start actor %s  nodeI=%d", m, def.ID(), nodeId)
+	err := m.Grid.StartActor(def)
+	//u.Debugf("%p after submit start actor", m)
 	if err != nil {
 		u.Errorf("error: failed to start: %v, due to: %v", "sqlactor", err)
-		//os.Exit(1)
 	}
 	return err
 }
@@ -82,7 +82,7 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 	nodeCt := 1
 	partitions := []string{""}
 	if len(p.Stmt.With) > 0 && p.Stmt.With.Bool("distributed") {
-		//u.Warnf("distribution instructions node_ct:%v", p.Stmt.With.Int("node_ct"))
+		u.Warnf("distribution instructions node_ct:%v", p.Stmt.With.Int("node_ct"))
 		for _, f := range p.From {
 			if f.Tbl != nil {
 				if len(f.Tbl.Partitions) > 1 {
@@ -95,16 +95,19 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 				}
 			}
 		}
+	} else {
+		u.Warnf("TODO:  NOT Distributed, don't start tasks!")
 	}
 
-	for i := 0; i < nodeCt; i++ {
-		go func(nodeId int) {
-			if err = m.startSqlActor(nodeCt, partitions[nodeId], pb, flow, p); err != nil {
+	rp := ring.New(flow.NewContextualName("sqlactor"), nodeCt)
+	for i, def := range rp.ActorDefs() {
+		go func(ad *grid.ActorDef, nodeId int) {
+			if err = m.startSqlActor(nodeCt, nodeId, partitions[nodeId], pb, flow, ad, p); err != nil {
 				u.Errorf("Could not create sql actor %v", err)
 			}
-		}(i)
-
+		}(def, i)
 	}
+
 	select {
 	case <-localTask.SigChan():
 		u.Warnf("%s YAAAAAY finished", flow.String())
@@ -124,7 +127,7 @@ func (m *Server) RunWorker() error {
 	return m.runMaker(actor)
 }
 func (m *Server) RunMaster() error {
-	u.Infof("%p start grid master", m)
+	u.Debugf("%p start grid master", m)
 	return m.runMaker(&nilMaker{})
 }
 func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
@@ -168,7 +171,7 @@ func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 	defer w.Stop()
 
 	waitForCt := s.Conf.NodeCt + 1 // worker nodes + master
-	u.Debugf("%p waiting for %d nodes to join", s, waitForCt)
+	//u.Debugf("%p waiting for %d nodes to join", s, waitForCt)
 	//u.LogTraceDf(u.WARN, 16, "")
 	started := w.WatchUntil(waitForCt)
 	select {
@@ -180,7 +183,7 @@ func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 		os.Exit(1)
 	case <-started:
 		s.started = true
-		u.Infof("%p now started", s)
+		//u.Debugf("%p now started", s)
 	}
 
 	go func() {

@@ -2,7 +2,6 @@ package planner
 
 import (
 	"encoding/gob"
-	"os"
 	"strconv"
 	"time"
 
@@ -59,7 +58,7 @@ func NewSqlActor(def *grid.ActorDef, conf *Conf) grid.Actor {
 		conf: conf,
 		flow: Flow(def.Settings["flow"]),
 	}
-	u.Debugf("%p new sqlactor", sa)
+	//u.Debugf("%p new sqlactor", sa)
 	return sa
 }
 
@@ -114,25 +113,15 @@ func (m *SqlActor) Starting() dfa.Letter {
 
 	u.Debugf("%p settings: %v", m, m.def.Settings)
 	//u.LogTracef(u.WARN, "wat")
-	// pb, err := base64.URLEncoding.DecodeString(m.def.Settings["pb"])
-	// if err != nil {
-	// 	u.Errorf("What, encoding error? %v", err)
-	// 	return Failure
-	// }
 	nodeCt := 1
 	nodeCt64, err := strconv.ParseInt(m.def.Settings["node_ct"], 10, 64)
 	if err == nil && nodeCt64 > 0 {
 		nodeCt = int(nodeCt64)
 	}
 	pb := m.def.RawData["pb"]
-	// if !bytes.Equal(pb, pbRaw) {
-	// 	u.Warnf("WTF, not equal? \n\t%v\n\t%v", pb, pbRaw)
-	// }
-	//u.Infof("got pb? %T  \n%s", pb, pb)
+
 	p, err := plan.SelectPlanFromPbBytes(pb, m.conf.SchemaLoader)
 	if err != nil {
-		u.Warnf("%v", pb)
-		os.Exit(1)
 		u.Errorf("error %v", err)
 		return Failure
 	}
@@ -141,11 +130,11 @@ func (m *SqlActor) Starting() dfa.Letter {
 
 	if m.conf == nil {
 		u.Warnf("no conf?")
-		os.Exit(1)
+		return Failure
 	}
 	if m.conf.JobMaker == nil {
 		u.Warnf("no JobMaker?")
-		os.Exit(1)
+		return Failure
 	}
 	executor, err := m.conf.JobMaker(p.Ctx)
 	if err != nil {
@@ -153,8 +142,14 @@ func (m *SqlActor) Starting() dfa.Letter {
 		return Failure
 	}
 
-	u.Errorf("nodeCt:%v  run executor walk select %#v", nodeCt, p.Stmt.With)
+	//u.Debugf("nodeCt:%v  run executor walk select %#v from ct? %v", nodeCt, p.Stmt.With, len(p.From))
+	for _, f := range p.From {
+		f.Custom["partition"] = m.def.Settings["partition"]
+		//u.Infof("from: %#v", f.Custom)
+	}
+	u.Infof("%p starting executor %#v", m, executor)
 	sqlTask, err := executor.WalkSelectPartition(p, nil)
+	//sqlTask, err := executor.WalkPlan(p)
 	if err != nil {
 		u.Errorf("Could not create select task %v", err)
 		return Failure
@@ -178,7 +173,7 @@ func (m *SqlActor) Starting() dfa.Letter {
 
 	//time.Sleep(3 * time.Second)
 
-	u.Infof("%p starting actor %#v  settings:%v", m, m.flow.Name(), m.def.Settings)
+	//u.Debugf("%p starting actor %#v  settings:%v", m, m.flow.Name(), m.def.Settings)
 
 	// Our Join Barrier that is going to allow us to wait for all
 	//  sql actors to have started
@@ -196,11 +191,11 @@ func (m *SqlActor) Starting() dfa.Letter {
 	defer f.Stop()
 
 	//started := w.WatchUntil(m.conf.NrConsumers + m.conf.NrProducers + 1)
-	u.Infof("%p waiting for %v", m, nodeCt)
+	//u.Infof("%p waiting for %v", m, nodeCt)
 	// if 0 == 0 {
 	// 	return EverybodyStarted
 	// }
-	started := w.WatchUntil(1)
+	started := w.WatchUntil(nodeCt)
 	finished := f.WatchUntil(m.flow.NewContextualName("sqlactor"))
 	for {
 		select {
@@ -211,7 +206,7 @@ func (m *SqlActor) Starting() dfa.Letter {
 				return Failure
 			}
 		case <-started:
-			u.Infof("%p everybody started", m)
+			//u.Debugf("%p everybody started", m)
 			return EverybodyStarted
 		case <-finished:
 			u.Warnf("everybody finished?")
@@ -294,7 +289,8 @@ func (m *SqlActor) Running() dfa.Letter {
 			return FetchStateFailure
 		}
 	}
-	u.Infof("%v: running with state: %v, index: %v", m.ID(), m.state, s.Index())
+
+	u.Debugf("%v: running ", m.ID())
 
 	w := condition.NewCountWatch(m.grid.Etcd(), m.grid.Name(), m.flow.Name(), "sqlcomplete")
 	defer w.Stop()
@@ -306,9 +302,6 @@ func (m *SqlActor) Running() dfa.Letter {
 	for {
 		select {
 		case <-m.exit:
-			if _, err := s.Store(m.state); err != nil {
-				u.Warnf("%v: failed to save state: %v", m, err)
-			}
 			u.Warnf("%s finished store", m)
 			return Exit
 		case <-ticker.C:
@@ -318,15 +311,8 @@ func (m *SqlActor) Running() dfa.Letter {
 				return Failure
 			}
 			u.Warnf("%s about to do ticker store", m)
-			if _, err := s.Store(m.state); err != nil {
-				u.Warnf("could not store: %v", err)
-				return Failure
-			}
 		case <-finished:
 			u.Warnf("%s sqlactor about to send finished signal?", m)
-			if _, err := s.Store(m.state); err != nil {
-				u.Warnf("%v: failed to save state: %v", m, err)
-			}
 			return EverybodyFinished
 		case err := <-w.WatchError():
 			u.Errorf("%v: error: %v", m, err)
@@ -341,7 +327,6 @@ func (m *SqlActor) Running() dfa.Letter {
 			u.Debugf("%s rx Msg:  %#v", m, m)
 			// switch m := m.(type) {
 			// case ResultMsg:
-
 			// }
 		}
 	}
