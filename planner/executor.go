@@ -8,6 +8,7 @@ import (
 
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/schema"
 )
 
 var (
@@ -95,6 +96,10 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 		}()
 		return localTask, nil
 	}
+
+	return m.JobExecutor.WalkSelect(p)
+}
+func (m *ExecutorGrid) WalkSelectPartition(p *plan.Select, part *schema.Partition) (exec.Task, error) {
 
 	return m.JobExecutor.WalkSelect(p)
 }

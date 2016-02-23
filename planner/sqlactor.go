@@ -1,9 +1,9 @@
 package planner
 
 import (
-	"encoding/base64"
 	"encoding/gob"
 	"os"
+	"strconv"
 	"time"
 
 	u "github.com/araddon/gou"
@@ -23,11 +23,11 @@ func init() {
 }
 
 type (
+	// State of a single actor, persisted upon stop, transfer nodes
 	SqlState struct {
-		Start             time.Time
-		ConsumerCounts    map[string]int
-		ProducerCounts    map[string]int
-		ProducerDurations map[string]float64
+		Start          time.Time
+		ConsumerCounts map[string]int
+		ProducerCounts map[string]int
 	}
 	// Our actor for running SQL tasks in distributed grid nodes
 	SqlActor struct {
@@ -50,16 +50,17 @@ type (
 )
 
 func NewSqlState() *SqlState {
-	return &SqlState{ConsumerCounts: make(map[string]int), ProducerCounts: make(map[string]int), ProducerDurations: make(map[string]float64)}
+	return &SqlState{ConsumerCounts: make(map[string]int), ProducerCounts: make(map[string]int)}
 }
 
 func NewSqlActor(def *grid.ActorDef, conf *Conf) grid.Actor {
-	//u.Debugf("%p conf", conf)
-	return &SqlActor{
+	sa := &SqlActor{
 		def:  def,
 		conf: conf,
 		flow: Flow(def.Settings["flow"]),
 	}
+	u.Debugf("%p new sqlactor", sa)
+	return sa
 }
 
 func (a *SqlActor) ID() string {
@@ -102,7 +103,7 @@ func (a *SqlActor) Act(g grid.Grid, exit <-chan bool) bool {
 	d.SetTransition(Finishing, Exit, Exiting, a.Exiting)
 
 	final, _ := d.Run(a.Starting)
-	u.Warnf("%s leader final: %v", a, final.String())
+	u.Warnf("%s sqlactor final: %v", a, final.String())
 	if final == Terminating {
 		return true
 	}
@@ -111,13 +112,22 @@ func (a *SqlActor) Act(g grid.Grid, exit <-chan bool) bool {
 
 func (m *SqlActor) Starting() dfa.Letter {
 
-	//u.Debugf("pbval: %v", m.def.Settings["pb"])
-	pb, err := base64.URLEncoding.DecodeString(m.def.Settings["pb"])
-	if err != nil {
-		u.Errorf("What, encoding error? %v", err)
-		return Failure
+	u.Debugf("%p settings: %v", m, m.def.Settings)
+	//u.LogTracef(u.WARN, "wat")
+	// pb, err := base64.URLEncoding.DecodeString(m.def.Settings["pb"])
+	// if err != nil {
+	// 	u.Errorf("What, encoding error? %v", err)
+	// 	return Failure
+	// }
+	nodeCt := 1
+	nodeCt64, err := strconv.ParseInt(m.def.Settings["node_ct"], 10, 64)
+	if err == nil && nodeCt64 > 0 {
+		nodeCt = int(nodeCt64)
 	}
-
+	pb := m.def.RawData["pb"]
+	// if !bytes.Equal(pb, pbRaw) {
+	// 	u.Warnf("WTF, not equal? \n\t%v\n\t%v", pb, pbRaw)
+	// }
 	//u.Infof("got pb? %T  \n%s", pb, pb)
 	p, err := plan.SelectPlanFromPbBytes(pb, m.conf.SchemaLoader)
 	if err != nil {
@@ -127,8 +137,7 @@ func (m *SqlActor) Starting() dfa.Letter {
 		return Failure
 	}
 	m.p = p
-	//u.Infof("ctx: %+v", p.Ctx)
-	//os.Exit(1)
+	p.Ctx.DisableRecover = m.conf.SupressRecover
 
 	if m.conf == nil {
 		u.Warnf("no conf?")
@@ -144,7 +153,8 @@ func (m *SqlActor) Starting() dfa.Letter {
 		return Failure
 	}
 
-	sqlTask, err := executor.WalkSelect(p)
+	u.Errorf("nodeCt:%v  run executor walk select %#v", nodeCt, p.Stmt.With)
+	sqlTask, err := executor.WalkSelectPartition(p, nil)
 	if err != nil {
 		u.Errorf("Could not create select task %v", err)
 		return Failure
@@ -168,8 +178,10 @@ func (m *SqlActor) Starting() dfa.Letter {
 
 	//time.Sleep(3 * time.Second)
 
-	u.Infof("starting actor %#v", m.flow.Name())
+	u.Infof("%p starting actor %#v  settings:%v", m, m.flow.Name(), m.def.Settings)
 
+	// Our Join Barrier that is going to allow us to wait for all
+	//  sql actors to have started
 	j := condition.NewJoin(m.grid.Etcd(), 2*time.Minute, m.grid.Name(), m.flow.Name(), "started", m.ID())
 	if err := j.Rejoin(); err != nil {
 		u.Errorf("wat?  %v", err)
@@ -184,12 +196,12 @@ func (m *SqlActor) Starting() dfa.Letter {
 	defer f.Stop()
 
 	//started := w.WatchUntil(m.conf.NrConsumers + m.conf.NrProducers + 1)
-	u.Infof("waiting")
-	if 0 == 0 {
-		return EverybodyStarted
-	}
-	started := w.WatchUntil(0)
-	finished := f.WatchUntil(m.flow.NewContextualName("leader"))
+	u.Infof("%p waiting for %v", m, nodeCt)
+	// if 0 == 0 {
+	// 	return EverybodyStarted
+	// }
+	started := w.WatchUntil(1)
+	finished := f.WatchUntil(m.flow.NewContextualName("sqlactor"))
 	for {
 		select {
 		case <-m.exit:
@@ -199,9 +211,10 @@ func (m *SqlActor) Starting() dfa.Letter {
 				return Failure
 			}
 		case <-started:
-			u.Infof("everybody started")
+			u.Infof("%p everybody started", m)
 			return EverybodyStarted
 		case <-finished:
+			u.Warnf("everybody finished?")
 			return EverybodyFinished
 		}
 	}
@@ -228,7 +241,7 @@ func (m *SqlActor) RunSqlDag() {
 
 func (m *SqlActor) Finishing() dfa.Letter {
 
-	u.Warnf("%s leader finishing", m.String())
+	u.Warnf("%s sqlactor finishing", m.String())
 	return EverybodyFinished
 
 	ticker := time.NewTicker(30 * time.Second)
@@ -301,7 +314,7 @@ func (m *SqlActor) Running() dfa.Letter {
 		case <-ticker.C:
 			u.Infof("alive")
 			if err := m.started.Alive(); err != nil {
-				u.Warnf("leader not alive?: %v", err)
+				u.Warnf("sqlactor not alive?: %v", err)
 				return Failure
 			}
 			u.Warnf("%s about to do ticker store", m)
@@ -310,7 +323,7 @@ func (m *SqlActor) Running() dfa.Letter {
 				return Failure
 			}
 		case <-finished:
-			u.Warnf("%s leader about to send finished signal?", m)
+			u.Warnf("%s sqlactor about to send finished signal?", m)
 			if _, err := s.Store(m.state); err != nil {
 				u.Warnf("%v: failed to save state: %v", m, err)
 			}
@@ -358,7 +371,6 @@ func (m *SqlActor) Terminating() {
 	for p, n := range m.state.ProducerCounts {
 		rx := m.state.ConsumerCounts[p]
 		delta := m.state.ConsumerCounts[p] - n
-		rate := float64(m.state.ProducerCounts[p]) / m.state.ProducerDurations[p]
-		u.Infof("%v: producer: %v, sent: %v, consumers received: %v, delta: %v, rate: %2.f/s", m.ID(), p, n, rx, delta, rate)
+		u.Infof("%v: producer: %v, sent: %v, consumers received: %v, delta: %v", m.ID(), p, n, rx, delta)
 	}
 }

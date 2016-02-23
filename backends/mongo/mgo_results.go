@@ -44,9 +44,13 @@ type ResultReaderNext struct {
 
 func NewResultReader(req *SqlToMgo, q *mgo.Query, limit int) *ResultReader {
 	m := &ResultReader{}
+	if req.Ctx == nil {
+		u.Errorf("no context? %p", m)
+	}
 	m.TaskBase = exec.NewTaskBase(req.Ctx)
 	m.query = q
-	u.Infof("new resultreader:  sqltomgo:%p   sourceplan:%p", req, req.p)
+	//u.LogTraceDf(u.WARN, 16, "hello")
+	//u.Debugf("new resultreader:  sqltomgo:%p   sourceplan:%p", req, req.p)
 	m.sql = req
 	m.limit = limit
 	return m
@@ -71,12 +75,28 @@ func (m *ResultReader) Run() error {
 	//u.LogTracef(u.WARN, "hello")
 
 	sql := m.sql.sel
+	if sql == nil {
+		u.Warnf("no sql? %p  %#v", m.sql, m.sql)
+		return fmt.Errorf("no sql")
+	}
 	if m.sql.p == nil {
 		u.Warnf("no plan????  %#v", m.sql)
 		return fmt.Errorf("no plan")
 	}
 	//cols := m.sql.sel.Columns
-	u.Infof("%p about to blow up sqltomgo: %p", m.sql.p, m.sql)
+	//u.Debugf("m.sql %p %#v", m.sql, m.sql)
+	if m.sql == nil {
+		return fmt.Errorf("No sqltomgo?????? ")
+	}
+	//u.Debugf("%p about to blow up sqltomgo: %p", m.sql.p, m.sql)
+	if m.sql.p == nil {
+		u.Warnf("no plan?")
+		return fmt.Errorf("no plan? %v", m.sql)
+	}
+	if m.sql.p.Proj == nil {
+		u.Warnf("no projection?? %#v", m.sql.p)
+		return fmt.Errorf("no plan? %v", m.sql)
+	}
 	cols := m.sql.p.Proj.Columns
 	colNames := make(map[string]int, len(cols))
 	if m.sql.needsPolyFill {
@@ -92,6 +112,8 @@ func (m *ResultReader) Run() error {
 			//u.Debugf("%d col: %s %#v", i, col.As, col)
 		}
 	}
+
+	u.Infof("sqltomgo:%p  resultreader:%p colnames? %v", m.sql, m, colNames)
 
 	m.Vals = make([][]driver.Value, 0)
 
@@ -131,7 +153,7 @@ func (m *ResultReader) Run() error {
 		if !iter.Next(&bm) {
 			break
 		}
-		u.Debugf("col? %v", bm)
+		//u.Debugf("col? %v", bm)
 		vals := make([]driver.Value, len(cols))
 		for i, col := range cols {
 			//u.Debugf("col source:%s   %s", col.Col.SourceField, col.Col)
@@ -164,7 +186,7 @@ func (m *ResultReader) Run() error {
 		//u.Debugf("new row ct: %v cols:%v vals:%v", len(m.Vals), colNames, vals)
 		//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
 		msg := datasource.NewSqlDriverMessageMap(uint64(len(m.Vals)), vals, colNames)
-		u.Infof("In source Scanner iter %#v", msg)
+		//u.Debugf("mongo result msg out %#v", msg)
 		select {
 		case <-sigChan:
 			return nil

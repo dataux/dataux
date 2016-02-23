@@ -56,7 +56,7 @@ func (m *SinkNats) Run() error {
 			return nil
 		case msg, ok := <-inCh:
 			if !ok {
-				u.Debugf("NICE, got msg shutdown")
+				//u.Debugf("NICE, got msg shutdown")
 				eofMsg := datasource.NewSqlDriverMessageMapEmpty()
 				if err := m.tx.Send(m.destination, eofMsg); err != nil {
 					u.Errorf("Could not send eof message? %v", err)
@@ -65,7 +65,7 @@ func (m *SinkNats) Run() error {
 				return nil
 			}
 
-			u.Infof("In SinkNats topic:%q    msg:%#v", m.destination, msg)
+			//u.Debugf("In SinkNats topic:%q    msg:%#v", m.destination, msg)
 			if err := m.tx.Send(m.destination, msg); err != nil {
 				u.Errorf("Could not send message? %v", err)
 				return err

@@ -111,13 +111,15 @@ func (m *ServerCtx) loadConfig() error {
 			}
 			ds := sourceFunc(sourceSchema, m.Config)
 			sourceSchema.DS = ds
+			sourceSchema.Partitions = sourceConf.Partitions
 
 			// TODO:   Periodically refresh this as sources are dynamic tables
 			//u.Infof("tables to load? %#v", sourceSchema.Conf)
 			for _, tableName := range ds.Tables() {
 				m.loadSourceSchema(strings.ToLower(tableName), sch, sourceSchema)
 			}
-			sch.SourceSchemas[sourceName] = sourceSchema
+			//sch.SourceSchemas[sourceName] = sourceSchema
+			sch.AddSourceSchema(sourceSchema)
 			m.RtConf.SchemaAdd(sch)
 		}
 

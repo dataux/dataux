@@ -5,7 +5,6 @@ import (
 
 	"github.com/lytics/dfa"
 
-	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/plan"
 )
 
@@ -34,14 +33,17 @@ func init() {
 	gob.Register(DataMsg{})
 }
 
+type JobMaker func(ctx *plan.Context) (*ExecutorGrid, error)
+
 type Conf struct {
-	JobMaker     exec.JobMaker
-	SchemaLoader plan.SchemaLoader
-	NodeCt       int
-	GridName     string
-	Hostname     string
-	EtcdServers  []string
-	NatsServers  []string
+	JobMaker       JobMaker
+	SchemaLoader   plan.SchemaLoader
+	SupressRecover bool
+	NodeCt         int
+	GridName       string
+	Hostname       string
+	EtcdServers    []string
+	NatsServers    []string
 }
 
 func (c *Conf) Clone() *Conf {
@@ -52,13 +54,14 @@ func (c *Conf) Clone() *Conf {
 		panic("need SchemaLoader")
 	}
 	return &Conf{
-		JobMaker:     c.JobMaker,
-		SchemaLoader: c.SchemaLoader,
-		NodeCt:       c.NodeCt,
-		GridName:     c.GridName,
-		Hostname:     c.Hostname,
-		EtcdServers:  c.EtcdServers,
-		NatsServers:  c.NatsServers,
+		JobMaker:       c.JobMaker,
+		SchemaLoader:   c.SchemaLoader,
+		SupressRecover: c.SupressRecover,
+		NodeCt:         c.NodeCt,
+		GridName:       c.GridName,
+		Hostname:       c.Hostname,
+		EtcdServers:    c.EtcdServers,
+		NatsServers:    c.NatsServers,
 	}
 }
 

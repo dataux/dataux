@@ -60,17 +60,17 @@ func (m *SourceNats) Run() error {
 				return nil
 			}
 
-			u.Infof("In SourceNats msg %#v", msg)
+			//u.Debugf("In SourceNats msg %#v", msg)
 			switch mt := msg.(type) {
 			case *datasource.SqlDriverMessageMap:
 				if len(mt.Vals) == 0 {
-					u.Infof("NICE EMPTY EOF MESSAGE")
+					//u.Infof("NICE EMPTY EOF MESSAGE")
 					return nil
 				}
 				outCh <- mt
 			case datasource.SqlDriverMessageMap:
 				if len(mt.Vals) == 0 {
-					u.Infof("NICE EMPTY EOF MESSAGE")
+					//u.Infof("NICE EMPTY EOF MESSAGE 2")
 					return nil
 				}
 				outCh <- &mt

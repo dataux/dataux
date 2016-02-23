@@ -30,6 +30,8 @@ var (
 )
 
 func init() {
+	u.SetupLogging("debug")
+	u.SetColorOutput()
 	conf, err := models.LoadConfig(testConfigData)
 	if err != nil {
 		panic("must load confiig")
@@ -64,6 +66,22 @@ sources : [
   {
     name : mgo_datauxtest
     type : mongo
+    partitions : [
+        {
+            table : article
+            keys : [ "title"]
+            partitions : [
+               {
+                   id    : a
+                   right : m
+               },
+               {
+                   id    : b
+                   left  : m
+               }
+            ]
+        }
+    ]
   },
   {
     name : es_test

@@ -45,8 +45,8 @@ func init() {
 	body := json.RawMessage([]byte(`{"name":"morestuff"}`))
 
 	Articles = append(Articles, &Article{"article1", "aaron", 22, 75, false, []string{"news", "sports"}, t1, &t, 55.5, ev, &body})
-	Articles = append(Articles, &Article{"article2", "james", 2, 64, true, []string{"news", "sports"}, t2, &t, 55.5, ev, &body})
-	Articles = append(Articles, &Article{"article3", "bjorn", 55, 100, true, []string{"politics"}, t3, &t, 21.5, ev, &body})
+	Articles = append(Articles, &Article{"qarticle2", "james", 2, 64, true, []string{"news", "sports"}, t2, &t, 55.5, ev, &body})
+	Articles = append(Articles, &Article{"zarticle3", "bjorn", 55, 100, true, []string{"politics"}, t3, &t, 21.5, ev, &body})
 	Articles = append(Articles, &Article{"listicle1", "bjorn", 7, 12, true, []string{"world"}, t4, &t, 21.5, ev, &body})
 	// Users
 	Users = append(Users, &User{"user123", "aaron", false, []string{"admin", "author"}, time.Now(), &t})

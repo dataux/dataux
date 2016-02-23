@@ -12,7 +12,6 @@ import (
 	"github.com/jmoiron/sqlx"
 	"gopkg.in/mgo.v2"
 
-	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/plan"
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
 	"github.com/dataux/dataux/planner"
@@ -43,7 +42,7 @@ func loadTestData() {
 	}
 }
 
-func jobMaker(ctx *plan.Context) (exec.Executor, error) {
+func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
 	// func BuildSqlJob(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
 	ctx.Schema = testmysql.Schema
 	return planner.BuildSqlJob(ctx, testmysql.ServerCtx.Grid)
@@ -52,6 +51,7 @@ func jobMaker(ctx *plan.Context) (exec.Executor, error) {
 func RunDistributedNodes(t *testing.T) func() {
 	planner.GridConf.JobMaker = jobMaker
 	planner.GridConf.SchemaLoader = testmysql.SchemaLoader
+	planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
 	//testmysql.ServerCtx.Grid.Conf.JobMaker = jobMaker
 	//u.Debugf("%p planner.GridConf", planner.GridConf)
 	//u.Debugf("%p testmysql.ServerCtx.Grid.Conf", testmysql.ServerCtx.Grid.Conf)
@@ -343,7 +343,7 @@ func TestSelectDistributed(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			u.Infof("%#v", data.Avg)
-			assert.Tf(t, data.Avg == 8.25, "Not avg right?? %v", data)
+			assert.Tf(t, data.Avg == 8.75, "Not avg right?? %v", data)
 		},
 		RowData: &data,
 	})
@@ -360,7 +360,7 @@ func TestSelectAggAvg(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			u.Infof("%#v", data.Avg)
-			assert.Tf(t, data.Avg == 8.25, "Not avg right?? %v", data)
+			assert.Tf(t, data.Avg == 8.75, "Not avg right?? %v", data)
 		},
 		RowData: &data,
 	})
@@ -370,7 +370,7 @@ func TestSelectAggAvg(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			u.Infof("%#v", data.Avg)
-			assert.Tf(t, data.Avg == 8.25, "Not avg right?? %v", data)
+			assert.Tf(t, data.Avg == 8.75, "Not avg right?? %v", data)
 		},
 		RowData: &data,
 	})
@@ -675,9 +675,9 @@ func TestSelectWhereBetween(t *testing.T) {
 		ValidateRowData: func() {
 			//u.Debugf("%#v", data)
 			switch data.Title {
-			case "article2":
+			case "qarticle2":
 				assert.Tf(t, data.Count == 2, "%v", data)
-			case "article3":
+			case "zarticle3":
 				assert.Tf(t, data.Count == 55, "%v", data)
 			default:
 				t.Errorf("Should not be in results: %#v", data)
@@ -715,7 +715,7 @@ func TestSelectOrderBy(t *testing.T) {
 		Sql:         "select title, count64 AS ct FROM article ORDER BY count64 DESC LIMIT 1;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			assert.Tf(t, data.Title == "article3", "%v", data)
+			assert.Tf(t, data.Title == "zarticle3", "%v", data)
 			assert.Tf(t, data.Ct == 100, "%v", data)
 		},
 		RowData: &data,
@@ -754,9 +754,9 @@ func TestMongoToMongoJoin(t *testing.T) {
 				assert.Tf(t, data.Id == "user789", "%#v", data)
 			case "article1":
 				assert.Tf(t, data.Id == "user123", "%#v", data)
-			case "article2":
+			case "qarticle2":
 				assert.Tf(t, data.Id == "user456", "%#v", data)
-			case "article3":
+			case "zarticle3":
 				assert.Tf(t, data.Id == "user789", "%#v", data)
 			default:
 				assert.Tf(t, false, "Should not have found this column: %#v", data)

@@ -37,11 +37,11 @@ var (
 		WalkSourceSelect(s *Source) (Task, error)
 	}
 */
+
 // Sql To Mongo Request
 //   Map sql queries into Mongo bson Requests
 type SqlToMgo struct {
 	*exec.TaskBase
-	ctx            *plan.Context
 	resp           *ResultReader
 	p              *plan.Source
 	tbl            *schema.Table
@@ -60,11 +60,13 @@ type SqlToMgo struct {
 }
 
 func NewSqlToMgo(table *schema.Table, sess *mgo.Session) *SqlToMgo {
-	return &SqlToMgo{
+	sm := &SqlToMgo{
 		tbl:    table,
 		schema: table.SourceSchema,
 		sess:   sess,
 	}
+	//u.Debugf("new SqlToMgo %p", sm)
+	return sm
 }
 
 func (m *SqlToMgo) Columns() []string {
@@ -73,7 +75,12 @@ func (m *SqlToMgo) Columns() []string {
 
 func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.Task, error) {
 
+	//u.Debugf("WalkSourceSelect %p", m)
 	p.Conn = m
+
+	if len(p.Custom) == 0 {
+		p.Custom = make(u.JsonHelper)
+	}
 
 	m.TaskBase = exec.NewTaskBase(p.Context())
 	p.SourceExec = true
@@ -89,8 +96,8 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 		proj := plan.NewProjectionInProcess(p.Stmt.Source)
 		p.Proj = proj.Proj
 	} else {
-		u.Infof("%p has projection!!! %s sqltomgo %p", p, p.Stmt, m)
-		u.LogTraceDf(u.WARN, 12, "hello")
+		//u.Infof("%p has projection!!! %s sqltomgo %p", p, p.Stmt, m)
+		//u.LogTraceDf(u.WARN, 12, "hello")
 	}
 
 	m.sel = req
@@ -156,15 +163,40 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 	}
 
 	if m.needsPolyFill {
-		//u.Warnf("need to signal poly-fill")
+		p.Custom["poly_fill"] = true
+		//u.Warnf("%p  need to signal poly-fill", m)
 	}
 
 	return nil, nil
 }
+
 func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 
-	// ???
-	m.TaskBase = exec.NewTaskBase(p.Context())
+	if p.Stmt == nil {
+		return nil, fmt.Errorf("Plan did not include Sql Statement?")
+	}
+	if p.Stmt.Source == nil {
+		return nil, fmt.Errorf("Plan did not include Sql Select Statement?")
+	}
+	if m.p == nil {
+		//u.Debugf("custom? %v", p.Custom)
+		// If we are operating in distributed mode it hasn't
+		// been planned?   WE probably should allow raw data to be
+		// passed via plan?
+		// if _, err := m.WalkSourceSelect(nil, p); err != nil {
+		// 	u.Errorf("Could not plan")
+		// 	return nil, err
+		// }
+		m.p = p
+		if p.Custom.Bool("poly_fill") {
+			m.needsPolyFill = true
+		}
+	}
+	ctx := p.Context()
+	m.TaskBase = exec.NewTaskBase(ctx)
+	m.sel = p.Stmt.Source
+	//u.Debugf("sqltomgo plan sql?  %#v", p.Stmt)
+	//u.Debugf("sqltomgo plan sql.Source %#v", p.Stmt.Source)
 
 	//filterBy, _ := json.Marshal(m.filter)
 	//u.Infof("tbl %#v", m.tbl.Columns(), m.tbl)
@@ -172,9 +204,10 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 	//u.Debugf("db=%v  tbl=%v filter=%v sort=%v limit=%v skip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
 	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter)
 
-	u.Infof("sqltomgo: %p  resultreader sourceplan: %p argsource:%p ", m, m.p, p)
+	//u.LogTraceDf(u.WARN, 16, "hello")
 	resultReader := NewResultReader(m, query, m.limit)
 	m.resp = resultReader
+	//u.Debugf("sqltomgo: %p  resultreader: %p sourceplan: %p argsource:%p ", m, m.resp, m.p, p)
 
 	return resultReader, nil
 }

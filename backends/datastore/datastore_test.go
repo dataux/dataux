@@ -421,7 +421,7 @@ func TestSelectOrderBy(t *testing.T) {
 		Sql:         "select title, count64 AS ct FROM DataUxTestArticle ORDER BY count64 DESC LIMIT 1;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			assert.Tf(t, data.Title == "article3", "%v", data)
+			assert.Tf(t, data.Title == "zarticle3", "%v", data)
 			assert.Tf(t, data.Ct == 100, "%v", data)
 		},
 		RowData: &data,

@@ -1,10 +1,10 @@
 package planner
 
 import (
-	"encoding/base64"
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -49,61 +49,62 @@ type Server struct {
 	lastTaskId uint64
 }
 
+func (m *Server) startSqlActor(nodeCt int, partition string, pb []byte, flow Flow, p *plan.Select) error {
+	sqlNode := grid.NewActorDef(flow.NewContextualName("sqlactor"))
+	sqlNode.DefineType("sqlactor")
+	sqlNode.Define("flow", flow.Name())
+	sqlNode.RawData["pb"] = pb
+	sqlNode.Settings["partition"] = partition
+	sqlNode.Settings["node_ct"] = strconv.Itoa(nodeCt)
+	u.Debugf("%p submitting start actor", m)
+	err := m.Grid.StartActor(sqlNode)
+	u.Debugf("%p after submit start actor", m)
+	if err != nil {
+		u.Errorf("error: failed to start: %v, due to: %v", "sqlactor", err)
+		//os.Exit(1)
+	}
+	return err
+}
+
 func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select) error {
 
-	u.Debugf("%s starting job server.Conf? %p", flow, m.Conf)
+	u.Debugf("%p master starting job %s", m, flow)
 
-	// Going to marshal to Protobuf
+	// marshal plan to Protobuf for transport
 	pb, err := p.Marshal()
 	if err != nil {
-		u.Errorf("Could not protbuf marshall %v for %s", err, p.Stmt)
+		u.Errorf("Could not protbuf marshal %v for %s", err, p.Stmt)
 		return err
 	}
-	//u.Infof("pb?  %s", pb)
-	pbs := string(pb)
-	p2, err := plan.SelectPlanFromPbBytes([]byte(pbs), m.Conf.SchemaLoader)
-	if err != nil {
-		u.Errorf("error %v", err)
-		//u.Warnf("%v", []byte(pb))
-		os.Exit(1)
-	}
-	if !p.Equal(p2) {
-		u.Warnf("wtf")
-		os.Exit(1)
-	} else {
-		//u.Errorf("WTF?  WTF?, %v", pb)
-		//u.Infof("p2? %#v", p2.Ctx)
-	}
+	//pbsBase := base64.URLEncoding.EncodeToString(pb)
+	//sqlNode.Settings["pb"] = pbsBase
 
-	//p2, err := plan.SelectPlanFromPbBytes(pb)
-
-	/*
-		sqlTask, err := m.JobExecutor.WalkSelect(p)
-		if err != nil {
-			u.Errorf("Could not create select task %v", err)
-			return nil, err
+	nodeCt := 1
+	partitions := []string{""}
+	if len(p.Stmt.With) > 0 && p.Stmt.With.Bool("distributed") {
+		//u.Warnf("distribution instructions node_ct:%v", p.Stmt.With.Int("node_ct"))
+		for _, f := range p.From {
+			if f.Tbl != nil {
+				if len(f.Tbl.Partitions) > 1 {
+					partitions = make([]string, len(f.Tbl.Partitions))
+					nodeCt = len(f.Tbl.Partitions)
+					for i, part := range f.Tbl.Partitions {
+						//u.Warnf("Found Partitions for %q = %#v", f.Tbl.Name, part)
+						partitions[i] = part.Id
+					}
+				}
+			}
 		}
-
-		tx, err := grid.NewSender(m.GridServer.Grid.Nats(), 1)
-		if err != nil {
-			u.Errorf("error: %v", err)
-		}
-		natsSink := NewSinkNats(m.Ctx, flow.Name(), tx)
-		sqlTask.Add(natsSink)
-	*/
-
-	ldr := grid.NewActorDef(flow.NewContextualName("leader"))
-	ldr.DefineType("leader")
-	ldr.Define("flow", flow.Name())
-	pbsBase := base64.URLEncoding.EncodeToString(pb)
-	ldr.Settings["pb"] = pbsBase
-	//u.Debugf("pbval: %v", ldr.Settings["pb"])
-	err = m.Grid.StartActor(ldr)
-	if err != nil {
-		u.Errorf("error: failed to start: %v, due to: %v", "leader", err)
-		os.Exit(1)
 	}
 
+	for i := 0; i < nodeCt; i++ {
+		go func(nodeId int) {
+			if err = m.startSqlActor(nodeCt, partitions[nodeId], pb, flow, p); err != nil {
+				u.Errorf("Could not create sql actor %v", err)
+			}
+		}(i)
+
+	}
 	select {
 	case <-localTask.SigChan():
 		u.Warnf("%s YAAAAAY finished", flow.String())
@@ -114,7 +115,7 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 	return nil
 }
 func (m *Server) RunWorker() error {
-	//u.Infof("starting grid worker nats: %v", m.Conf.NatsServers)
+	u.Infof("%p starting grid worker", m)
 	actor, err := newActorMaker(m.Conf)
 	if err != nil {
 		u.Errorf("failed to make actor maker: %v", err)
@@ -123,7 +124,7 @@ func (m *Server) RunWorker() error {
 	return m.runMaker(actor)
 }
 func (m *Server) RunMaster() error {
-	//u.Infof("start grid master")
+	u.Infof("%p start grid master", m)
 	return m.runMaker(&nilMaker{})
 }
 func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
@@ -166,9 +167,10 @@ func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 	w := condition.NewCountWatch(s.Grid.Etcd(), s.Grid.Name(), "hosts")
 	defer w.Stop()
 
-	//u.Debugf("waiting for %d nodes to join", s.Conf.NodeCt)
+	waitForCt := s.Conf.NodeCt + 1 // worker nodes + master
+	u.Debugf("%p waiting for %d nodes to join", s, waitForCt)
 	//u.LogTraceDf(u.WARN, 16, "")
-	started := w.WatchUntil(s.Conf.NodeCt)
+	started := w.WatchUntil(waitForCt)
 	select {
 	case <-exit:
 		//u.Debug("Shutting down, grid exited")
@@ -178,7 +180,7 @@ func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 		os.Exit(1)
 	case <-started:
 		s.started = true
-		//u.Infof("now started")
+		u.Infof("%p now started", s)
 	}
 
 	go func() {
