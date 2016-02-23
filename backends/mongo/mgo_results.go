@@ -113,13 +113,13 @@ func (m *ResultReader) Run() error {
 		}
 	}
 
-	u.Infof("sqltomgo:%p  resultreader:%p colnames? %v", m.sql, m, colNames)
+	//u.Debugf("sqltomgo:%p  resultreader:%p colnames? %v", m.sql, m, colNames)
 
 	m.Vals = make([][]driver.Value, 0)
 
 	if sql.CountStar() {
 		// Count *
-		//u.Infof("count * colnames? %v", colNames)
+		//u.Debugf("count * colnames? %v", colNames)
 		//u.Debugf("ctx projection? %#v", m.Ctx.Projection.Proj)
 		vals := make([]driver.Value, 1)
 		ct, err := m.query.Count()
@@ -130,9 +130,9 @@ func (m *ResultReader) Run() error {
 		// Wtf, sometime i want to strangle mysql
 		vals[0] = fmt.Sprintf("%d", ct)
 		m.Vals = append(m.Vals, vals)
-		//u.Infof("was a select count(*) query %d", ct)
+		//u.Debugf("was a select count(*) query %d", ct)
 		msg := datasource.NewSqlDriverMessageMap(uint64(1), vals, colNames)
-		//u.Infof("In source Scanner iter %#v", msg)
+		//u.Debugf("In source Scanner iter %#v", msg)
 		outCh <- msg
 
 		return nil

@@ -53,6 +53,7 @@ type SqlToMgo struct {
 	groupby        bson.M
 	innergb        bson.M // InnerMost Group By
 	sort           []bson.M
+	partition      *schema.Partition
 	limit          int
 	hasMultiValue  bool // Multi-Value vs Single-Value aggs
 	hasSingleValue bool // single value agg
@@ -179,7 +180,7 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 		return nil, fmt.Errorf("Plan did not include Sql Select Statement?")
 	}
 	if m.p == nil {
-		//u.Debugf("custom? %v", p.Custom)
+		u.Debugf("custom? %v", p.Custom)
 		// If we are operating in distributed mode it hasn't
 		// been planned?   WE probably should allow raw data to be
 		// passed via plan?
@@ -191,6 +192,26 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 		if p.Custom.Bool("poly_fill") {
 			m.needsPolyFill = true
 		}
+		if partitionId := p.Custom.String("partition"); partitionId != "" {
+			if p.Tbl.Partition != nil {
+				for _, pt := range p.Tbl.Partition.Partitions {
+					if pt.Id == partitionId {
+						u.Infof("partition: %s   %#v", partitionId, pt)
+						m.partition = pt
+						if len(m.filter) == 0 {
+							if pt.Left == "" {
+								m.filter = bson.M{p.Tbl.Partition.Keys[0]: bson.M{"$lt": pt.Right}}
+							} else if pt.Right == "" {
+								m.filter = bson.M{p.Tbl.Partition.Keys[0]: bson.M{"$gte": pt.Left}}
+							} else {
+
+							}
+
+						}
+					}
+				}
+			}
+		}
 	}
 	ctx := p.Context()
 	m.TaskBase = exec.NewTaskBase(ctx)
@@ -198,9 +219,9 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 	//u.Debugf("sqltomgo plan sql?  %#v", p.Stmt)
 	//u.Debugf("sqltomgo plan sql.Source %#v", p.Stmt.Source)
 
-	//filterBy, _ := json.Marshal(m.filter)
+	filterBy, _ := json.Marshal(m.filter)
 	//u.Infof("tbl %#v", m.tbl.Columns(), m.tbl)
-	//u.Infof("filter: %#v  \n%s", m.filter, filterBy)
+	u.Infof("filter: %#v  \n%s", m.filter, filterBy)
 	//u.Debugf("db=%v  tbl=%v filter=%v sort=%v limit=%v skip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
 	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter)
 

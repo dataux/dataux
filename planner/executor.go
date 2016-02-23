@@ -24,10 +24,12 @@ func BuildSqlJob(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
 	baseJob := exec.NewExecutor(ctx, sqlPlanner)
 
 	job := &ExecutorGrid{JobExecutor: baseJob}
+	baseJob.Executor = job
 	job.Executor = baseJob
 	job.GridServer = gs
 	job.Ctx = ctx
-	task, err := exec.BuildSqlJobPlanned(job.Planner, job.Executor, ctx)
+	//u.Debugf("buildsqljob: %T  %T", job, job.Executor)
+	task, err := exec.BuildSqlJobPlanned(job.Planner, job, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -58,6 +60,13 @@ func (m *ExecutorGrid) Finalize(resultWriter exec.Task) error {
 	return nil
 }
 
+// func (m *ExecutorGrid) WalkSource(p *plan.Source) (exec.Task, error) {
+// 	u.Debugf("NewSource? %#v", p)
+// 	if p.SourceExec {
+// 		return m.WalkSourceExec(p)
+// 	}
+// 	return exec.NewSource(m.Ctx, p)
+// }
 func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 	if len(p.Stmt.From) > 0 {
 		//u.Debugf("ExecutorGrid.WalkSelect ?  %s", p.Stmt.Raw)

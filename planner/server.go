@@ -68,7 +68,7 @@ func (m *Server) startSqlActor(nodeCt, nodeId int, partition string, pb []byte, 
 
 func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select) error {
 
-	u.Debugf("%p master starting job %s", m, flow)
+	//u.Debugf("%p master starting job %s", m, flow)
 
 	// marshal plan to Protobuf for transport
 	pb, err := p.Marshal()
@@ -82,13 +82,13 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 	nodeCt := 1
 	partitions := []string{""}
 	if len(p.Stmt.With) > 0 && p.Stmt.With.Bool("distributed") {
-		u.Warnf("distribution instructions node_ct:%v", p.Stmt.With.Int("node_ct"))
+		//u.Warnf("distribution instructions node_ct:%v", p.Stmt.With.Int("node_ct"))
 		for _, f := range p.From {
 			if f.Tbl != nil {
-				if len(f.Tbl.Partitions) > 1 {
-					partitions = make([]string, len(f.Tbl.Partitions))
-					nodeCt = len(f.Tbl.Partitions)
-					for i, part := range f.Tbl.Partitions {
+				if f.Tbl.Partition != nil {
+					partitions = make([]string, len(f.Tbl.Partition.Partitions))
+					nodeCt = len(f.Tbl.Partition.Partitions)
+					for i, part := range f.Tbl.Partition.Partitions {
 						//u.Warnf("Found Partitions for %q = %#v", f.Tbl.Name, part)
 						partitions[i] = part.Id
 					}
@@ -118,7 +118,7 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 	return nil
 }
 func (m *Server) RunWorker() error {
-	u.Infof("%p starting grid worker", m)
+	//u.Debugf("%p starting grid worker", m)
 	actor, err := newActorMaker(m.Conf)
 	if err != nil {
 		u.Errorf("failed to make actor maker: %v", err)
@@ -127,7 +127,7 @@ func (m *Server) RunWorker() error {
 	return m.runMaker(actor)
 }
 func (m *Server) RunMaster() error {
-	u.Debugf("%p start grid master", m)
+	//u.Debugf("%p start grid master", m)
 	return m.runMaker(&nilMaker{})
 }
 func (s *Server) runMaker(actorMaker grid.ActorMaker) error {

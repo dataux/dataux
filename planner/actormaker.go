@@ -25,7 +25,7 @@ func (m *maker) MakeActor(def *grid.ActorDef) (grid.Actor, error) {
 	switch def.Type {
 	case "sqlactor":
 		sa := NewSqlActor(def, m.conf)
-		u.Infof("%p starting sql actor", sa)
+		//u.Infof("%p starting sql actor", sa)
 		return sa, nil
 	default:
 		return nil, fmt.Errorf("type does not map to any type of actor: %v", def.Type)

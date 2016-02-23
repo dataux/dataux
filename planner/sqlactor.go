@@ -111,7 +111,7 @@ func (a *SqlActor) Act(g grid.Grid, exit <-chan bool) bool {
 
 func (m *SqlActor) Starting() dfa.Letter {
 
-	u.Debugf("%p settings: %v", m, m.def.Settings)
+	//u.Debugf("%p settings: %v", m, m.def.Settings)
 	//u.LogTracef(u.WARN, "wat")
 	nodeCt := 1
 	nodeCt64, err := strconv.ParseInt(m.def.Settings["node_ct"], 10, 64)
@@ -147,7 +147,7 @@ func (m *SqlActor) Starting() dfa.Letter {
 		f.Custom["partition"] = m.def.Settings["partition"]
 		//u.Infof("from: %#v", f.Custom)
 	}
-	u.Infof("%p starting executor %#v", m, executor)
+	//u.Infof("%p starting executor %#v", m, executor)
 	sqlTask, err := executor.WalkSelectPartition(p, nil)
 	//sqlTask, err := executor.WalkPlan(p)
 	if err != nil {
