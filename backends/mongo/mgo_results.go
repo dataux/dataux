@@ -186,7 +186,7 @@ func (m *ResultReader) Run() error {
 		//u.Debugf("new row ct: %v cols:%v vals:%v", len(m.Vals), colNames, vals)
 		//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
 		msg := datasource.NewSqlDriverMessageMap(uint64(len(m.Vals)), vals, colNames)
-		//u.Debugf("mongo result msg out %#v", msg)
+		u.Debugf("mongo result msg out %#v", msg)
 		select {
 		case <-sigChan:
 			return nil

@@ -206,7 +206,6 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 							} else {
 
 							}
-
 						}
 					}
 				}
