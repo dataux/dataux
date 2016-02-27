@@ -2,6 +2,7 @@ package planner
 
 import (
 	"encoding/gob"
+	"os"
 	"strconv"
 	"time"
 
@@ -232,6 +233,9 @@ func (m *SqlActor) RunSqlDag() {
 		u.Errorf("could not join?? %v", err)
 	}
 	u.Warnf("sqlcomplete sql dag")
+	if 22 == 55 {
+		os.Exit(0)
+	}
 }
 
 func (m *SqlActor) Finishing() dfa.Letter {
@@ -290,7 +294,7 @@ func (m *SqlActor) Running() dfa.Letter {
 		}
 	}
 
-	u.Debugf("%v: running ", m.ID())
+	//u.Debugf("%v: running ", m.ID())
 
 	w := condition.NewCountWatch(m.grid.Etcd(), m.grid.Name(), m.flow.Name(), "sqlcomplete")
 	defer w.Stop()

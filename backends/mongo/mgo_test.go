@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"github.com/araddon/qlbridge/datasource"
 	"testing"
 
 	u "github.com/araddon/gou"
@@ -19,8 +20,9 @@ import (
 )
 
 var (
-	mongoHost *string = flag.String("host", "localhost", "mongo Server Host Address")
-	mongoDb   *string = flag.String("db", "mgo_datauxtest", "mongo database to use for testing")
+	mongoHost           *string = flag.String("host", "localhost", "mongo Server Host Address")
+	mongoDb             *string = flag.String("db", "mgo_datauxtest", "mongo database to use for testing")
+	testServicesRunning bool
 )
 
 func init() {
@@ -48,15 +50,20 @@ func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
 	return planner.BuildSqlJob(ctx, testmysql.ServerCtx.Grid)
 }
 
-func RunDistributedNodes(t *testing.T) func() {
-	planner.GridConf.JobMaker = jobMaker
-	planner.GridConf.SchemaLoader = testmysql.SchemaLoader
-	planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
-	//testmysql.ServerCtx.Grid.Conf.JobMaker = jobMaker
-	//u.Debugf("%p planner.GridConf", planner.GridConf)
-	//u.Debugf("%p testmysql.ServerCtx.Grid.Conf", testmysql.ServerCtx.Grid.Conf)
-	testmysql.RunTestServer(t)
-	planner.RunWorkerNodes(2, testmysql.ServerCtx.RtConf)
+func RunTestServer(t *testing.T) func() {
+	if !testServicesRunning {
+		// cleanup := RunDistributedNodes(t)
+		// defer cleanup()
+		testServicesRunning = true
+		planner.GridConf.JobMaker = jobMaker
+		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
+		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
+		//testmysql.ServerCtx.Grid.Conf.JobMaker = jobMaker
+		//u.Debugf("%p planner.GridConf", planner.GridConf)
+		//u.Debugf("%p testmysql.ServerCtx.Grid.Conf", testmysql.ServerCtx.Grid.Conf)
+		testmysql.RunTestServer(t)
+		planner.RunWorkerNodes(2, testmysql.ServerCtx.RtConf)
+	}
 	return func() {
 		// placeholder
 	}
@@ -80,7 +87,8 @@ func validateQuery(t *testing.T, querySql string, expectCols []string, expectCol
 }
 
 func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
-	testmysql.RunTestServer(t)
+
+	RunTestServer(t)
 	dbName := "datauxtest"
 
 	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/"+dbName)
@@ -139,7 +147,7 @@ func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 }
 
 func TestInvalidQuery(t *testing.T) {
-	testmysql.RunTestServer(t)
+	RunTestServer(t)
 	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:4000)/mgo")
 	assert.T(t, err == nil)
 	// It is parsing the SQL on server side (proxy)
@@ -333,9 +341,6 @@ func TestSelectDistributed(t *testing.T) {
 		Avg float64 `db:"title_avg"`
 	}{}
 
-	cleanup := RunDistributedNodes(t)
-	defer cleanup()
-
 	// We are going to use the WITH distributed=true to force distribution
 	// which is a temporary hack
 	validateQuerySpec(t, QuerySpec{
@@ -381,7 +386,7 @@ func TestSimpleRowSelect(t *testing.T) {
 		Title   string
 		Count   int
 		Deleted bool
-		// Category []string  // Crap, downside of sqlx/mysql is no complex types
+		//Category *datasource.StringArray
 	}{}
 	validateQuerySpec(t, QuerySpec{
 		Sql:         "select title, count, deleted from article WHERE `author` = \"aaron\" ",
@@ -395,6 +400,25 @@ func TestSimpleRowSelect(t *testing.T) {
 	})
 
 	return
+
+	// The problem here is ??  related to the mysql/mysqlx/type etc, the values are being written
+	dataComplex := struct {
+		Title    string
+		Count    int
+		Deleted  bool
+		Category datasource.StringArray
+	}{}
+	validateQuerySpec(t, QuerySpec{
+		Sql:         "select title, count, deleted, category from article WHERE `author` = \"aaron\" ",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			//u.Infof("%v", dataComplex)
+			assert.Tf(t, dataComplex.Deleted == false, "Not deleted? %v", dataComplex)
+			assert.Tf(t, dataComplex.Title == "article1", "%v", dataComplex)
+		},
+		RowData: &dataComplex,
+	})
+
 	validateQuerySpec(t, QuerySpec{
 		Sql:         "select title, count, deleted from article WHERE `author` = \"aaron\" AND count = 22 ",
 		ExpectRowCt: 1,

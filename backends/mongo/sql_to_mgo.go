@@ -74,9 +74,10 @@ func (m *SqlToMgo) Columns() []string {
 	return m.tbl.Columns()
 }
 
+// Called by Planner, pre-executor
 func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.Task, error) {
 
-	//u.Debugf("WalkSourceSelect %p", m)
+	u.Debugf("WalkSourceSelect %p", m)
 	p.Conn = m
 
 	if len(p.Custom) == 0 {
@@ -97,7 +98,7 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 		proj := plan.NewProjectionInProcess(p.Stmt.Source)
 		p.Proj = proj.Proj
 	} else {
-		//u.Infof("%p has projection!!! %s sqltomgo %p", p, p.Stmt, m)
+		u.Infof("%p has projection!!! %s sqltomgo %p", p, p.Stmt, m)
 		//u.LogTraceDf(u.WARN, 12, "hello")
 	}
 
@@ -166,6 +167,8 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 	if m.needsPolyFill {
 		p.Custom["poly_fill"] = true
 		//u.Warnf("%p  need to signal poly-fill", m)
+	} else {
+		p.Complete = true
 	}
 
 	return nil, nil
@@ -196,7 +199,7 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 			if p.Tbl.Partition != nil {
 				for _, pt := range p.Tbl.Partition.Partitions {
 					if pt.Id == partitionId {
-						u.Infof("partition: %s   %#v", partitionId, pt)
+						//u.Debugf("partition: %s   %#v", partitionId, pt)
 						m.partition = pt
 						if len(m.filter) == 0 {
 							if pt.Left == "" {
@@ -218,9 +221,9 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 	//u.Debugf("sqltomgo plan sql?  %#v", p.Stmt)
 	//u.Debugf("sqltomgo plan sql.Source %#v", p.Stmt.Source)
 
-	filterBy, _ := json.Marshal(m.filter)
+	//filterBy, _ := json.Marshal(m.filter)
 	//u.Infof("tbl %#v", m.tbl.Columns(), m.tbl)
-	u.Infof("filter: %#v  \n%s", m.filter, filterBy)
+	//u.Infof("filter: %#v  \n%s", m.filter, filterBy)
 	//u.Debugf("db=%v  tbl=%v filter=%v sort=%v limit=%v skip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
 	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter)
 

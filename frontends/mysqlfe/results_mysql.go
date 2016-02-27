@@ -145,7 +145,7 @@ func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 		switch mt := msg.Body().(type) {
 		case *datasource.SqlDriverMessageMap:
-			// u.Infof("write: %#v", mt.Values())
+			//u.Infof("write: %#v", mt.Values())
 			// for _, v := range mt.Values() {
 			// 	u.Debugf("v = %T = %v", v, v)
 			// }

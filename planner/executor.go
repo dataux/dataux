@@ -52,20 +52,25 @@ type ExecutorGrid struct {
 // Finalize is after the Dag of Relational-algebra tasks have been assembled
 //  and just before we run them.
 func (m *ExecutorGrid) Finalize(resultWriter exec.Task) error {
-	//u.Debugf("planner.Finalize  %#v", m.JobExecutor.RootTask)
 
 	m.JobExecutor.RootTask.Add(resultWriter)
 	m.JobExecutor.Setup()
+	//u.Debugf("planner.Finalize  %#v", m.JobExecutor.RootTask)
 	//u.Debugf("finished finalize")
 	return nil
 }
 
 func (m *ExecutorGrid) WalkSource(p *plan.Source) (exec.Task, error) {
-	u.Debugf("%p %T  NewSource? ", m, m)
+	//u.Debugf("%p %T  NewSource? ", m, m)
 	if p.SourceExec {
 		return m.WalkSourceExec(p)
 	}
 	return exec.NewSource(m.Ctx, p)
+}
+func (m *ExecutorGrid) WalkGroupBy(p *plan.GroupBy) (exec.Task, error) {
+	//u.Warnf("partial groupby")
+	p.Partial = true
+	return exec.NewGroupBy(m.Ctx, p), nil
 }
 func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 	if len(p.Stmt.From) > 0 {
@@ -83,8 +88,8 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 			u.Errorf("Could not create task id %v", err)
 			return nil, err
 		}
-		flow := NewFlow(taskUint)
 
+		flow := NewFlow(taskUint)
 		rx, err := grid.NewReceiver(m.GridServer.Grid.Nats(), flow.Name(), 2, 0)
 		if err != nil {
 			u.Errorf("%v: error: %v", "ourtask", err)
@@ -92,6 +97,13 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 		}
 		natsSource := NewSourceNats(m.Ctx, rx)
 		localTask.Add(natsSource)
+
+		if p.Stmt.IsAggQuery() {
+			//u.Debugf("Adding aggregate/group by?")
+			gbplan := plan.NewGroupBy(p.Stmt)
+			gb := exec.NewGroupByFinal(m.Ctx, gbplan)
+			localTask.Add(gb)
+		}
 
 		// submit task in background node
 		go func() {
