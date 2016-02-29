@@ -27,8 +27,10 @@ var (
 
 	_ = json.Marshal
 
-	// planner
-	_ plan.SourceSelectPlanner = (*SqlToDatstore)(nil)
+	// Implement Datasource interface that allows Mongo
+	//  to fully implement a full select statement
+	_ plan.SourcePlanner  = (*SqlToDatstore)(nil)
+	_ exec.ExecutorSource = (*SqlToDatstore)(nil)
 )
 
 // Sql To Google Datastore Maps a Sql request into an equivalent
@@ -38,15 +40,18 @@ type SqlToDatstore struct {
 	ctx            *plan.Context
 	resp           *ResultReader
 	tbl            *schema.Table
-	plan           *plan.SourcePlan
+	p              *plan.Source
 	sel            *rel.SqlSelect
 	stmt           rel.SqlStatement
 	schema         *schema.SourceSchema
 	dsCtx          context.Context
 	dsClient       *datastore.Client
 	query          *datastore.Query
-	hasMultiValue  bool // Multi-Value vs Single-Value aggs
-	hasSingleValue bool // single value agg
+	hasMultiValue  bool              // Multi-Value vs Single-Value aggs
+	hasSingleValue bool              // single value agg
+	partition      *schema.Partition // current partition for this request
+	needsPolyFill  bool              // do we request that features be polyfilled?
+
 }
 
 func NewSqlToDatstore(table *schema.Table, cl *datastore.Client, ctx context.Context) *SqlToDatstore {
@@ -142,30 +147,65 @@ func (m *SqlToDatstore) getEntity(req *rel.SqlSelect) (*Row, error) {
 	return nil, fmt.Errorf("expected one row got %v", len(rows))
 }
 
-func (m *SqlToDatstore) VisitSourceSelect(sp *plan.SourcePlan) (rel.Task, rel.VisitStatus, error) {
+func (m *SqlToDatstore) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.Task, error) {
 	//u.Debugf("VisitSourceSelect(): %T  %#v", visitor, visitor)
-	// TODO:   this is really bad, this should not be a type switch
-	//         something pretty wrong upstream, that the Plan doesn't do the walk visitor
-	u.Debugf("VisitSourceSelect():  %T  %#v", sp, sp)
-	m.ctx = sp.Ctx
-	m.TaskBase = exec.NewTaskBase(sp.Ctx, "SqlToDatstore")
-	m.plan = sp
-	reader, err := m.Query(sp.SqlSource.Source)
-	if err != nil {
-		return nil, rel.VisitError, nil
+	m.p = p
+	return nil, nil
+}
+
+func (m *SqlToDatstore) WalkExecSource(p *plan.Source) (exec.Task, error) {
+
+	if p.Stmt == nil {
+		return nil, fmt.Errorf("Plan did not include Sql Statement?")
 	}
-	return reader, rel.VisitContinue, nil
+	if p.Stmt.Source == nil {
+		return nil, fmt.Errorf("Plan did not include Sql Select Statement?")
+	}
+	if m.p == nil {
+		u.Debugf("custom? %v", p.Custom)
+
+		m.p = p
+		if p.Custom.Bool("poly_fill") {
+			m.needsPolyFill = true
+		}
+		if partitionId := p.Custom.String("partition"); partitionId != "" {
+			if p.Tbl.Partition != nil {
+				for _, pt := range p.Tbl.Partition.Partitions {
+					if pt.Id == partitionId {
+						//u.Debugf("partition: %s   %#v", partitionId, pt)
+						m.partition = pt
+						if pt.Left == "" {
+							//m.filter = bson.M{p.Tbl.Partition.Keys[0]: bson.M{"$lt": pt.Right}}
+						} else if pt.Right == "" {
+							//m.filter = bson.M{p.Tbl.Partition.Keys[0]: bson.M{"$gte": pt.Left}}
+						} else {
+
+						}
+					}
+				}
+			}
+		}
+	}
+
+	u.Debugf("WalkExecSource():  %T  %#v", p, p)
+	m.ctx = p.Context()
+	m.TaskBase = exec.NewTaskBase(m.ctx)
+	reader, err := m.Query(p.Stmt.Source)
+	if err != nil {
+		return nil, nil
+	}
+	return reader, nil
 }
 
 // interface for SourceMutation
 //CreateMutator(stmt expr.SqlStatement) (Mutator, error)
-func (m *SqlToDatstore) CreateMutator(stmt rel.SqlStatement) (datasource.Mutator, error) {
+func (m *SqlToDatstore) CreateMutator(stmt rel.SqlStatement) (schema.Mutator, error) {
 	m.stmt = stmt
 	return m, nil
 }
 
 // interface for Upsert.Put()
-func (m *SqlToDatstore) Put(ctx context.Context, key datasource.Key, val interface{}) (datasource.Key, error) {
+func (m *SqlToDatstore) Put(ctx context.Context, key schema.Key, val interface{}) (schema.Key, error) {
 
 	if key == nil {
 		u.Debugf("didn't have key?  %v", val)
@@ -304,7 +344,7 @@ func (m *SqlToDatstore) Put(ctx context.Context, key datasource.Key, val interfa
 	return newKey, nil
 }
 
-func (m *SqlToDatstore) PutMulti(ctx context.Context, keys []datasource.Key, src interface{}) ([]datasource.Key, error) {
+func (m *SqlToDatstore) PutMulti(ctx context.Context, keys []schema.Key, src interface{}) ([]schema.Key, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 

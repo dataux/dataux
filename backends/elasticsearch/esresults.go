@@ -15,7 +15,7 @@ import (
 
 var (
 	// Ensure we implement Scanner
-	_ rel.Task = (*ResultReader)(nil)
+	_ exec.Task = (*ResultReader)(nil)
 	//_ datasource.Scanner = (*ResultReader)(nil)
 )
 
@@ -45,7 +45,7 @@ type ResultReaderNext struct {
 
 func NewResultReader(req *SqlToEs) *ResultReader {
 	m := &ResultReader{}
-	m.TaskBase = exec.NewTaskBase(req.ctx, "es-resultreader")
+	m.TaskBase = exec.NewTaskBase(req.ctx)
 	m.Req = req
 	return m
 }

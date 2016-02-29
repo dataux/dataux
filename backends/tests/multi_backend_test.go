@@ -6,17 +6,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/araddon/dateparse"
+	u "github.com/araddon/gou"
+	"github.com/bmizerany/assert"
+	"github.com/jmoiron/sqlx"
+	"gopkg.in/mgo.v2"
+
 	_ "github.com/dataux/dataux/backends/elasticsearch"
 	_ "github.com/dataux/dataux/backends/mongo"
 	_ "github.com/go-sql-driver/mysql"
 
-	"gopkg.in/mgo.v2"
-
-	"github.com/araddon/dateparse"
-	u "github.com/araddon/gou"
-	"github.com/bmizerany/assert"
-	"github.com/dataux/dataux/frontends/testmysql"
-	"github.com/jmoiron/sqlx"
+	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
 )
 
 var (

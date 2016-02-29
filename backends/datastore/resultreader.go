@@ -41,7 +41,7 @@ type ResultReaderNext struct {
 
 func NewResultReader(req *SqlToDatstore) *ResultReader {
 	m := &ResultReader{}
-	m.TaskBase = exec.NewTaskBase(req.ctx, "gds-resultreader")
+	m.TaskBase = exec.NewTaskBase(req.ctx)
 	m.Req = req
 	return m
 }
@@ -124,7 +124,7 @@ func (m *ResultReader) Run() error {
 	}
 
 	//cols := m.proj.Columns
-	cols := m.Req.plan.Proj.Columns
+	cols := m.Req.p.Proj.Columns
 	colNames := make(map[string]int, len(cols))
 	for i, col := range cols {
 		colNames[col.Name] = i

@@ -8,6 +8,7 @@ import (
 
 	u "github.com/araddon/gou"
 
+	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/plan"
@@ -20,8 +21,10 @@ import (
 var (
 	DefaultLimit = 20
 
-	// planner
-	_ plan.SourceSelectPlanner = (*SqlToEs)(nil)
+	// Implement Datasource interface that allows Mongo
+	//  to fully implement a full select statement
+	_ plan.SourcePlanner  = (*SqlToEs)(nil)
+	_ exec.ExecutorSource = (*SqlToEs)(nil)
 )
 
 type esMap map[string]interface{}
@@ -30,17 +33,21 @@ type esMap map[string]interface{}
 //   Map sql queries into Elasticsearch Json Requests
 type SqlToEs struct {
 	resp           *ResultReader
+	p              *plan.Source
 	tbl            *schema.Table
 	sel            *rel.SqlSelect
 	schema         *schema.SourceSchema
 	ctx            *plan.Context
+	partition      *schema.Partition // current partition for this request
+	req            esMap             // Full request
 	filter         esMap
 	aggs           esMap
 	groupby        esMap
-	innergb        esMap // InnerMost Group By
-	sort           []esMap
-	hasMultiValue  bool // Multi-Value vs Single-Value aggs
-	hasSingleValue bool // single value agg
+	innergb        esMap   // InnerMost Group By
+	sort           []esMap // sort
+	hasMultiValue  bool    // Multi-Value vs Single-Value aggs
+	hasSingleValue bool    // single value agg
+	needsPolyFill  bool    // do we request that features be polyfilled?
 	projections    map[string]string
 }
 
@@ -70,12 +77,15 @@ func (m *SqlToEs) Columns() []string {
 	return m.resp.Columns()
 }
 
-func (m *SqlToEs) VisitSourceSelect(sp *plan.SourcePlan) (rel.Task, rel.VisitStatus, error) {
+// WalkSourceSelect is used during planning phase, to create a plan (plan.Task)
+//  or error, and to report back any poly-fill necessary
+func (m *SqlToEs) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.Task, error) {
 
 	var err error
-	req := sp.SqlSource.Source
-	m.sel = sp.SqlSource.Source
-	if req.Limit == 0 && sp.Final {
+	m.p = p
+	req := p.Stmt.Source
+	m.sel = p.Stmt.Source
+	if m.sel.Limit == 0 && p.Final {
 		req.Limit = DefaultLimit
 	} else if req.Limit == 0 {
 		req.Limit = 1000
@@ -86,20 +96,20 @@ func (m *SqlToEs) VisitSourceSelect(sp *plan.SourcePlan) (rel.Task, rel.VisitSta
 		_, err = m.WalkNode(req.Where.Expr, &m.filter)
 		if err != nil {
 			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.String(), err)
-			return nil, rel.VisitError, err
+			return nil, err
 		}
 	}
 
 	err = m.WalkSelectList()
 	if err != nil {
 		u.Warnf("Could Not evaluate Columns/Aggs %s %v", req.Columns.String(), err)
-		return nil, rel.VisitError, err
+		return nil, err
 	}
 	if len(req.GroupBy) > 0 {
 		err = m.WalkGroupBy()
 		if err != nil {
 			u.Warnf("Could Not evaluate GroupBys %s %v", req.GroupBy.String(), err)
-			return nil, rel.VisitError, err
+			return nil, err
 		}
 	}
 
@@ -145,6 +155,49 @@ func (m *SqlToEs) VisitSourceSelect(sp *plan.SourcePlan) (rel.Task, rel.VisitSta
 		}
 	}
 
+	p.Complete = true
+	m.req = esReq
+	return nil, nil
+}
+
+func (m *SqlToEs) WalkExecSource(p *plan.Source) (exec.Task, error) {
+
+	if p.Stmt == nil {
+		return nil, fmt.Errorf("Plan did not include Sql Statement?")
+	}
+	if p.Stmt.Source == nil {
+		return nil, fmt.Errorf("Plan did not include Sql Select Statement?")
+	}
+	if m.p == nil {
+		u.Debugf("custom? %v", p.Custom)
+
+		m.p = p
+		if p.Custom.Bool("poly_fill") {
+			m.needsPolyFill = true
+		}
+		if partitionId := p.Custom.String("partition"); partitionId != "" {
+			if p.Tbl.Partition != nil {
+				for _, pt := range p.Tbl.Partition.Partitions {
+					if pt.Id == partitionId {
+						//u.Debugf("partition: %s   %#v", partitionId, pt)
+						m.partition = pt
+						if len(m.filter) == 0 {
+							if pt.Left == "" {
+								//m.filter = bson.M{p.Tbl.Partition.Keys[0]: bson.M{"$lt": pt.Right}}
+							} else if pt.Right == "" {
+								//m.filter = bson.M{p.Tbl.Partition.Keys[0]: bson.M{"$gte": pt.Left}}
+							} else {
+
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	req := p.Stmt.Source
+
 	// TODO:  hostpool
 	qs := make(url.Values)
 	qs.Set("size", strconv.Itoa(req.Limit))
@@ -159,16 +212,16 @@ func (m *SqlToEs) VisitSourceSelect(sp *plan.SourcePlan) (rel.Task, rel.VisitSta
 	}
 	query := fmt.Sprintf("%s/%s/_search?%s", m.Host(), m.tbl.Name, qs.Encode())
 
-	u.Infof("%v url=%v  filter=%v   \n\n%s", esReq, query, m.filter, u.JsonHelper(esReq).PrettyJson())
-	jhResp, err := u.JsonHelperHttp("POST", query, esReq)
+	u.Infof("%v url=%v  filter=%v   \n\n%s", m.req, query, m.filter, u.JsonHelper(m.req).PrettyJson())
+	jhResp, err := u.JsonHelperHttp("POST", query, m.req)
 	if err != nil {
 		u.Errorf("err %v", err)
-		return nil, rel.VisitError, err
+		return nil, err
 	}
 	//u.Debugf("%s", jhResp.PrettyJson())
 
 	if len(jhResp) == 0 {
-		return nil, rel.VisitError, fmt.Errorf("No response, error fetching elasticsearch query")
+		return nil, fmt.Errorf("No response, error fetching elasticsearch query")
 	}
 
 	resp := NewResultReader(m)
@@ -187,7 +240,8 @@ func (m *SqlToEs) VisitSourceSelect(sp *plan.SourcePlan) (rel.Task, rel.VisitSta
 
 	resp.Docs = jhResp.Helpers("hits.hits")
 	u.Debugf("p:%p resp %T  doc.ct = %v  cols:%v", resp, resp, len(resp.Docs), resp.Columns())
-	return resp, rel.VisitFinal, nil
+	p.Complete = true
+	return resp, nil
 }
 
 // Aggregations from the <select_list>
