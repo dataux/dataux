@@ -7,7 +7,7 @@ import (
 	u "github.com/araddon/gou"
 
 	"github.com/araddon/qlbridge/schema"
-	"github.com/dataux/dataux/pkg/models"
+	"github.com/dataux/dataux/models"
 )
 
 var _ = u.EMPTY

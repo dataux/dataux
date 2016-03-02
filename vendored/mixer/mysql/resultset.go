@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -120,7 +121,13 @@ func ValuesToRowData(values []driver.Value, fields []*Field) (RowData, error) {
 			if v == nil {
 				buf.WriteByte(0xfb)
 			} else {
-				u.Warnf("type not implemented: T:%T v:%v", v, v)
+				//u.Warnf("type not implemented: T:%T v:%v", v, v)
+				by, err := json.Marshal(v)
+				if err != nil {
+					u.Warnf("could not json marshall err=%v  v=%#v", err, v)
+				} else {
+					buf.Write(by)
+				}
 			}
 		}
 

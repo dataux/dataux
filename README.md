@@ -1,28 +1,57 @@
 
-Sql Query Proxy to Elasticsearch, Mongo, Etc
-----------------------------------------------
-Mysql tcp proxy to Elasticsearch, Mongo, Mysql backend sources, including join.
+##  Sql Query Proxy to Elasticsearch, Mongo, Etc
 
-This is an early prototype, not production ready.  It is wire compatible with
-Mysql by implementing a relational algebra engine to map the sql queries to one or more
-backends.
+Mysql compatible proxy to Elasticsearch, Mongo, Google Datastore backend sources, including join.
 
-**Why?** An experiement to see if it is possible, as more and more databases for more and more
-specialized needs seems to be the norm and this is an attempt to translate back into a
-cohesive data model.
+Make data more accessible and usable by querying data existing datasources using mysql protocol.  
+This proxy translates from mysql to backend protocol (elasticsearch, mongo, etc) by implementing a full
+relational algebra layer to run sql queries and poly-fill missing features.  So, a 
+backend key-value storage such as redis can now have aggregate functions, where etc.
 
-SQL -> Elasticsearch Api
+
+## Features
+
+* *Distributed*  Distributed from the start, run queries across multiple servers
+* *Hackable DataSources*  Very easy to add a new DataSource for your custom data, files, json, csv, storage.
+* *Hackable Functions* Add custom go functions to extend the sql language.
+* *Joins* Get join functionality between heterogeneous sources.
+* *Frontends* currently only MySql protocol is supported but Postgres, CQL, Memcached, etc are planned.
+* *Backends*  Elasticsearch, Google-Datastore, Mongo currently implemented.
+
+SQL -> Mongo
+----------------------------------
+
+Mongo | SQL Query  
+----- | -------
+`show collections`                                                                | `show tables;`
+na, -- runtime inspection                                                         | `describe mytable;`
+`db.accounts.find({},{created:{"$gte":"1/1/2016"}}).count();`                     | `select count(*) from accounts WHERE created > "1/1/2016";`
+`db.article.find({"year":{"$in": [2013,2014,2015] }},{}}`                         | `select * from article WHERE year IN (2015,2014,2013);`
+`db.article.find({"created":{"$gte": new Date('Aug 01, 2011'), "$lte": new Date('Aug 03, 2013') },{title:1,count:1,author:1}}` |  `SELECT title, count, author FROM article WHERE created BETWEEN todate(\"2011-08-01\") AND todate(\"2013-08-03\")
+`db.article.find({"title":{"Pattern":"^list","Options":"i"}},{title:1,count:1})`  | `SELECT title, count AS ct FROM article WHERE title like \"list%\"`
+na, not avail in mongo (polyfill in dataux)                                       |  `SELECT avg(CHAR_LENGTH(CAST(`title`, \"AS\", \"CHAR\"))) AS title_avg FROM article;`
+need to document ...                                                              | `select min(year), max(year), avg(year), sum(year) from table WHERE exists(a);`
+
+SQL -> Elasticsearch
 ----------------------------------
 
 ES API | SQL Query  
 ----- | -------
 Aliases                 | `show tables;`
 Mapping                 | `describe mytable;`
-hits.total              | `select count(*) from table WHERE exists(a);`
+hits.total  for filter  | `select count(*) from table WHERE exists(a);`
 aggs min, max, avg, sum | `select min(year), max(year), avg(year), sum(year) from table WHERE exists(a);`
 filter:   terms         | `select * from table WHERE year IN (2015,2014,2013);`
 filter: gte, range      | `select * from table WHERE year BETWEEN 2012 AND 2014`
 
+
+Roadmap(ish)
+------------------------------
+* **Backends**: Redis, CSV, Json-Files, Kafka, Rest api's
+* Pub-Sub for Writes
+
+
+**Hacking**
 
 * see **tools/importgithub** for tool to import 2 days of github data for examples above.
 
@@ -43,40 +72,29 @@ Other Projects, Database Proxies & Multi-Data QL
 
 Name | Scaling | Ease Of Access (sql, etc) | Comments
 ---- | ------- | ----------------------------- | ---------
-***[Couchbase N1QL](https://github.com/couchbaselabs/query)***          | Y | Y | sql interface to couchbase k/v (and full-text-index)
-***[prestodb](http://prestodb.io/)***                                   |   | Y | not really a proxy more of query front end
-***[GitQL](https://github.com/cloudson/gitql)***                        |   | Y | SQL to http api 
-***[cratedb](https://crate.io/docs/current/sql/index.html)***           | Y | Y | all-in-one db, not a proxy, sql to es
-***[Vitess](https://github.com/youtube/vitess)***                       | Y |   | for scaling (sharding), very mature
-***[twemproxy](https://github.com/twitter/twemproxy)***                 | Y |   | for scaling memcache
-***[codis](https://github.com/wandoulabs/codis)***                      | Y |   | for scaling redis
+***[Vitess](https://github.com/youtube/vitess)***                          | Y |   | for scaling (sharding), very mature
+***[twemproxy](https://github.com/twitter/twemproxy)***                    | Y |   | for scaling memcache
+***[Couchbase N1QL](https://github.com/couchbaselabs/query)***             | Y | Y | sql interface to couchbase k/v (and full-text-index)
+***[prestodb](http://prestodb.io/)***                                      |   | Y | query front end to multiple backends, distributed
+***[cratedb](https://crate.io/)***                                         | Y | Y | all-in-one db, not a proxy, sql to es
+***[codis](https://github.com/wandoulabs/codis)***                         | Y |   | for scaling redis
 ***[MariaDB MaxScale](https://github.com/mariadb-corporation/MaxScale)***  | Y |   | for scaling mysql/mariadb (sharding) mature
-***[Netflix Dynomite](https://github.com/Netflix/dynomite)***           | Y |   | not really sql, just multi-store k/v 
-***[redishappy](https://github.com/mdevilliers/redishappy)***           | Y |   | for scaling redis, haproxy
-***[mixer](https://github.com/siddontang/mixer)***                      | Y |   | simple mysql sharding 
+***[Netflix Dynomite](https://github.com/Netflix/dynomite)***              | Y |   | not really sql, just multi-store k/v 
+***[redishappy](https://github.com/mdevilliers/redishappy)***              | Y |   | for scaling redis, haproxy
+***[mixer](https://github.com/siddontang/mixer)***                         | Y |   | simple mysql sharding 
 
 We use more and more databases, flatfiles, message queues, etc.
 For db's the primary reader/writer is fine but secondary readers 
 such as investigating ad-hoc issues means we might be accessing 
 and learning many different query languages.  
 
-This is a tool to facilitate non-primary ad-hoc investigation 
-of elasticsearch, redis, csv, etc via a proxy.   
-Used small bits of a forked [mixer](https://github.com/siddontang/mixer), the mysql connection pieces.
-
-Roadmap(ish)
-------------------------------
-* ***Elasticsearch***  Make elasticsearch more accessible through SQL
-* ***Elasticsearch BQL*** Extend SQL with search specfiic syntax
-* Mongo, Redis, CSV, Json-FlatFiles, Kafka Backends
-* Cross-DB Join
-* Event-Bus for Writes
+Credit to [mixer](https://github.com/siddontang/mixer), derived mysql connection pieces from it (which was forked from vitess).
 
 Inspiration/Other works
 --------------------------
-* https://github.com/linkedin/databus
-* [ql.io](http://ql.io/), [yql](https://developer.yahoo.com/yql/)
-* [dockersql](https://github.com/crosbymichael/dockersql), [q -python](http://harelba.github.io/q/), [textql](https://github.com/dinedal/textql)
+* https://github.com/linkedin/databus, 
+* [ql.io](http://www.ebaytechblog.com/2011/11/30/announcing-ql-io/), [yql](https://developer.yahoo.com/yql/)
+* [dockersql](https://github.com/crosbymichael/dockersql), [q -python](http://harelba.github.io/q/), [textql](https://github.com/dinedal/textql), [GitQL](https://github.com/cloudson/gitql)
 
 
 > In Internet architectures, data systems are typically categorized

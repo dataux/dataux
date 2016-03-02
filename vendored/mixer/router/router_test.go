@@ -1,7 +1,7 @@
 package router
 
 import (
-	"github.com/dataux/dataux/pkg/models"
+	"github.com/dataux/dataux/models"
 	"testing"
 )
 
