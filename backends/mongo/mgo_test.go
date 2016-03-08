@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
-	"github.com/araddon/qlbridge/datasource"
 	"testing"
 
 	u "github.com/araddon/gou"
@@ -13,6 +12,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"gopkg.in/mgo.v2"
 
+	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/plan"
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
 	"github.com/dataux/dataux/planner"
@@ -52,17 +52,12 @@ func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
 
 func RunTestServer(t *testing.T) func() {
 	if !testServicesRunning {
-		// cleanup := RunDistributedNodes(t)
-		// defer cleanup()
 		testServicesRunning = true
 		planner.GridConf.JobMaker = jobMaker
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
-		//testmysql.ServerCtx.Grid.Conf.JobMaker = jobMaker
-		//u.Debugf("%p planner.GridConf", planner.GridConf)
-		//u.Debugf("%p testmysql.ServerCtx.Grid.Conf", testmysql.ServerCtx.Grid.Conf)
 		testmysql.RunTestServer(t)
-		planner.RunWorkerNodes(2, testmysql.ServerCtx.RtConf)
+		planner.RunWorkerNodes(2, testmysql.ServerCtx.Reg)
 	}
 	return func() {
 		// placeholder

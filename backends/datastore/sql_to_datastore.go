@@ -29,15 +29,15 @@ var (
 
 	// Implement Datasource interface that allows Mongo
 	//  to fully implement a full select statement
-	_ plan.SourcePlanner  = (*SqlToDatstore)(nil)
-	_ exec.ExecutorSource = (*SqlToDatstore)(nil)
+	_ plan.SourcePlanner    = (*SqlToDatstore)(nil)
+	_ exec.ExecutorSource   = (*SqlToDatstore)(nil)
+	_ schema.SourceMutation = (*SqlToDatstore)(nil)
 )
 
 // Sql To Google Datastore Maps a Sql request into an equivalent
 //    google data store query
 type SqlToDatstore struct {
 	*exec.TaskBase
-	ctx            *plan.Context
 	resp           *ResultReader
 	tbl            *schema.Table
 	p              *plan.Source
@@ -55,12 +55,14 @@ type SqlToDatstore struct {
 }
 
 func NewSqlToDatstore(table *schema.Table, cl *datastore.Client, ctx context.Context) *SqlToDatstore {
-	return &SqlToDatstore{
+	m := &SqlToDatstore{
 		tbl:      table,
 		schema:   table.SourceSchema,
 		dsCtx:    ctx,
 		dsClient: cl,
 	}
+	u.Infof("create sqltodatasource %p", m)
+	return m
 }
 
 func (m *SqlToDatstore) Host() string {
@@ -161,6 +163,9 @@ func (m *SqlToDatstore) WalkExecSource(p *plan.Source) (exec.Task, error) {
 	if p.Stmt.Source == nil {
 		return nil, fmt.Errorf("Plan did not include Sql Select Statement?")
 	}
+	if m.TaskBase == nil {
+		m.TaskBase = exec.NewTaskBase(p.Context())
+	}
 	if m.p == nil {
 		u.Debugf("custom? %v", p.Custom)
 
@@ -188,8 +193,9 @@ func (m *SqlToDatstore) WalkExecSource(p *plan.Source) (exec.Task, error) {
 	}
 
 	u.Debugf("WalkExecSource():  %T  %#v", p, p)
-	m.ctx = p.Context()
-	m.TaskBase = exec.NewTaskBase(m.ctx)
+	u.Debugf("%p walkexec: %#v", m, m.TaskBase)
+	m.Ctx = p.Context()
+	m.TaskBase = exec.NewTaskBase(m.Ctx)
 	reader, err := m.Query(p.Stmt.Source)
 	if err != nil {
 		return nil, nil
@@ -199,9 +205,12 @@ func (m *SqlToDatstore) WalkExecSource(p *plan.Source) (exec.Task, error) {
 
 // interface for SourceMutation
 //CreateMutator(stmt expr.SqlStatement) (Mutator, error)
-func (m *SqlToDatstore) CreateMutator(stmt rel.SqlStatement) (schema.Mutator, error) {
-	m.stmt = stmt
-	return m, nil
+func (m *SqlToDatstore) CreateMutator(pc interface{}) (schema.Mutator, error) {
+	if ctx, ok := pc.(*plan.Context); ok {
+		m.Ctx = ctx
+		return m, nil
+	}
+	return nil, fmt.Errorf("Expected *plan.Context but got %T", pc)
 }
 
 // interface for Upsert.Put()

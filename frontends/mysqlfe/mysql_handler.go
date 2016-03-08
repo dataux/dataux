@@ -90,8 +90,8 @@ func (m *MySqlHandler) Handle(writer models.ResultWriter, req *models.Request) e
 
 // Session level schema Use command of sql
 func (m *MySqlHandler) SchemaUse(db string) *schema.Schema {
-	schema := m.svr.Schema(db)
-	if schema == nil {
+	schema, ok := m.svr.Schema(db)
+	if schema == nil || !ok {
 		u.Warnf("Could not find schema for db=%s", db)
 		return nil
 	}
@@ -161,6 +161,11 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	ctx.DisableRecover = m.svr.Config.SupressRecover
 	ctx.Session = m.sess
 	ctx.Schema = m.schema
+	if ctx.Schema == nil {
+		u.Warnf("no schema: ")
+	} else {
+		//u.Warnf("ctx has schema? %p", ctx.Schema)
+	}
 	job, err := BuildMySqlJob(m.svr, ctx)
 
 	if err != nil {

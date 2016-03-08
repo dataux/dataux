@@ -64,7 +64,6 @@ func Setup() {
 			u.SetupLogging("warn")
 			u.SetColorOutput()
 		}
-		u.SetColorIfTerminal()
 	})
 }
 

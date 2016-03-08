@@ -9,7 +9,6 @@ import (
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
-	"github.com/dataux/dataux/models"
 )
 
 var (
@@ -23,27 +22,28 @@ const (
 
 func init() {
 	// We need to register our DataSource provider here
-	models.DataSourceRegister("elasticsearch", NewElasticsearchDataSource)
+	datasource.Register(ListenerType, &ElasticsearchDataSource{})
 }
 
 type ElasticsearchDataSource struct {
-	schema *schema.SourceSchema
-	conf   *models.Config
+	srcschema *schema.SourceSchema
+	conf      *schema.SourceConfig
 }
 
-func NewElasticsearchDataSource(sch *schema.SourceSchema, conf *models.Config) models.DataSource {
-	es := ElasticsearchDataSource{}
-	es.schema = sch
-	es.conf = conf
-	// Register our datasource.Datasources in registry
-	es.Init()
-	datasource.Register(ListenerType, &es)
-	return &es
-}
+func (m *ElasticsearchDataSource) Setup(ss *schema.SourceSchema) error {
 
-func (m *ElasticsearchDataSource) Init() error {
+	if m.srcschema != nil {
+		return nil
+	}
 
-	u.Debugf("Init() Eleasticsearch schema P=%p", m.schema)
+	m.srcschema = ss
+	m.conf = ss.Conf
+
+	if ss.Conf != nil && len(ss.Conf.Partitions) > 0 {
+
+	}
+
+	u.Debugf("Init() Eleasticsearch schema P=%p", m.srcschema)
 	if err := m.findEsNodes(); err != nil {
 		u.Errorf("could not init es: %v", err)
 		return err
@@ -53,21 +53,21 @@ func (m *ElasticsearchDataSource) Init() error {
 		u.Errorf("could not load es tables: %v", err)
 		return err
 	}
-	if m.schema != nil {
-		u.Debugf("Post Init() Eleasticsearch schema P=%p tblct=%d", m.schema, len(m.schema.Tables()))
+	if m.srcschema != nil {
+		u.Debugf("Post Init() Eleasticsearch schema P=%p tblct=%d", m.srcschema, len(m.srcschema.Tables()))
 	}
 	return nil
 }
 
 func (m *ElasticsearchDataSource) Open(schemaName string) (schema.SourceConn, error) {
 	//u.Debugf("Open(%v)", schemaName)
-	tbl, err := m.schema.Table(schemaName)
+	tbl, err := m.srcschema.Table(schemaName)
 	if err != nil {
 		return nil, err
 	}
 	if tbl == nil {
-		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, schemaName)
-		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, schemaName)
+		u.Errorf("Could not find table for '%s'.'%s'", m.srcschema.Name, schemaName)
+		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.srcschema.Name, schemaName)
 	}
 
 	sqlConverter := NewSqlToEs(tbl)
@@ -81,7 +81,7 @@ func (m *ElasticsearchDataSource) DataSource() schema.DataSource {
 }
 
 func (m *ElasticsearchDataSource) Tables() []string {
-	return m.schema.Tables()
+	return m.srcschema.Tables()
 }
 
 func (m *ElasticsearchDataSource) Table(table string) (*schema.Table, error) {
@@ -92,9 +92,9 @@ func (m *ElasticsearchDataSource) Table(table string) (*schema.Table, error) {
 // Load only table names, not full schema
 func (m *ElasticsearchDataSource) loadTableNames() error {
 
-	host := chooseBackend(m.schema)
+	host := chooseBackend(m.srcschema)
 	if host == "" {
-		u.Errorf("missing address: %#v", m.schema)
+		u.Errorf("missing address: %#v", m.srcschema)
 		return fmt.Errorf("Could not find Elasticsearch Host Address: %v", host)
 	}
 
@@ -116,39 +116,39 @@ func (m *ElasticsearchDataSource) loadTableNames() error {
 			tables = append(tables, alias)
 		}
 	}
-	if len(m.schema.Conf.TablesToLoad) > 0 {
-		tableMap := make(map[string]struct{}, len(m.schema.Conf.TablesToLoad))
-		for _, tableToLoad := range m.schema.Conf.TablesToLoad {
+	if len(m.srcschema.Conf.TablesToLoad) > 0 {
+		tableMap := make(map[string]struct{}, len(m.srcschema.Conf.TablesToLoad))
+		for _, tableToLoad := range m.srcschema.Conf.TablesToLoad {
 			tableMap[tableToLoad] = struct{}{}
 		}
 		for _, table := range tables {
 			if _, ok := tableMap[table]; ok {
-				m.schema.AddTableName(table)
+				m.srcschema.AddTableName(table)
 			}
 		}
 	} else {
 		for _, table := range tables {
-			m.schema.AddTableName(table)
+			m.srcschema.AddTableName(table)
 		}
 	}
 
-	u.Debugf("found tables: %v", m.schema.Tables())
+	u.Debugf("found tables: %v", m.srcschema.Tables())
 
 	return nil
 }
 
 func (m *ElasticsearchDataSource) loadTableSchema(table string) (*schema.Table, error) {
 
-	if m.schema == nil {
+	if m.srcschema == nil {
 		return nil, fmt.Errorf("no schema in use")
 	}
 
-	host := chooseBackend(m.schema)
+	host := chooseBackend(m.srcschema)
 	if host == "" {
-		u.Errorf("missing address: %#v", m.schema)
+		u.Errorf("missing address: %#v", m.srcschema)
 		return nil, fmt.Errorf("Could not find Elasticsearch Host Address: %v", table)
 	}
-	tbl := schema.NewTable(table, m.schema)
+	tbl := schema.NewTable(table, m.srcschema)
 
 	indexUrl := fmt.Sprintf("%s/%s/_mapping", host, tbl.Name)
 	respJh, err := u.JsonHelperHttp("GET", indexUrl, nil)
@@ -189,9 +189,9 @@ func (m *ElasticsearchDataSource) loadTableSchema(table string) (*schema.Table, 
 	tbl.AddField(schema.NewFieldBase("type", value.StringType, 24, "tbd"))
 	tbl.AddField(schema.NewFieldBase("_score", value.NumberType, 24, "Created per Search By Elasticsearch"))
 
-	buildEsFields(m.schema, tbl, jh, "", 0)
+	buildEsFields(m.srcschema, tbl, jh, "", 0)
 
-	m.schema.AddTable(tbl)
+	m.srcschema.AddTable(tbl)
 
 	return tbl, nil
 }

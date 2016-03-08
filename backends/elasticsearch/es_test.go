@@ -10,16 +10,39 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 
+	"github.com/araddon/qlbridge/plan"
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
+	"github.com/dataux/dataux/planner"
 	"github.com/dataux/dataux/testutil"
 )
 
 var (
-	eshost *string = flag.String("host", "localhost", "Elasticsearch Server Host Address")
+	eshost              *string = flag.String("host", "localhost", "Elasticsearch Server Host Address")
+	testServicesRunning bool
 )
 
 func init() {
 	testutil.Setup()
+}
+
+func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
+	// func BuildSqlJob(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
+	ctx.Schema = testmysql.Schema
+	return planner.BuildSqlJob(ctx, testmysql.ServerCtx.Grid)
+}
+
+func RunTestServer(t *testing.T) func() {
+	if !testServicesRunning {
+		testServicesRunning = true
+		planner.GridConf.JobMaker = jobMaker
+		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
+		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
+		testmysql.RunTestServer(t)
+		planner.RunWorkerNodes(2, testmysql.ServerCtx.Reg)
+	}
+	return func() {
+		// placeholder
+	}
 }
 
 type QuerySpec struct {
@@ -41,7 +64,7 @@ func validateQuery(t *testing.T, querySql string, expectCols []string, expectCol
 
 func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 
-	testmysql.RunTestServer(t)
+	RunTestServer(t)
 
 	// This is a connection to RunTestServer, which starts on port 13307
 	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")

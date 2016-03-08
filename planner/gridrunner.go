@@ -28,7 +28,6 @@ var (
 
 func init() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
-
 }
 
 func setupLogging() {
@@ -37,29 +36,29 @@ func setupLogging() {
 	u.DiscardStandardLogger() // Discard non-sanctioned spammers
 }
 
-func RunWorkerNodes(nodeCt int, sc *datasource.RuntimeSchema) {
+func RunWorkerNodes(nodeCt int, r *datasource.Registry) {
 
 	loggingOnce.Do(setupLogging)
 
 	for i := 0; i < nodeCt; i++ {
 		go func(nodeId int) {
-			s := serverStart(nodeCt, NodeName(uint64(nodeId)), sc)
+			s := serverStart(nodeCt, NodeName(uint64(nodeId)), r)
 			s.RunWorker() // blocking
 		}(i)
 	}
 	time.Sleep(time.Millisecond * 80)
 }
 
-func NewServerGrid(nodeCt int, sc *datasource.RuntimeSchema) *Server {
+func NewServerGrid(nodeCt int, r *datasource.Registry) *Server {
 	serverId, _ := NextId()
-	return serverStart(nodeCt, NodeName(serverId), sc)
+	return serverStart(nodeCt, NodeName(serverId), r)
 }
 
-func serverStart(nodeCt int, nodeName string, sc *datasource.RuntimeSchema) *Server {
+func serverStart(nodeCt int, nodeName string, r *datasource.Registry) *Server {
 	conf := GridConf.Clone()
 	conf.NodeCt = nodeCt
 	conf.Hostname = nodeName
-	s := &Server{Conf: conf, schemaconf: sc}
+	s := &Server{Conf: conf, reg: r}
 	return s
 }
 

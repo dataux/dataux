@@ -2,7 +2,6 @@ package models
 
 import (
 	"fmt"
-	"strings"
 
 	u "github.com/araddon/gou"
 
@@ -19,7 +18,7 @@ type ServerCtx struct {
 	Config *Config
 	// The underlying qlbridge schema holds info about the
 	//  available datasource Drivers/Adapters
-	RtConf *datasource.RuntimeSchema
+	Reg *datasource.Registry
 	// Grid is our real-time multi-node coordination and messaging system
 	Grid *planner.Server
 
@@ -29,10 +28,7 @@ type ServerCtx struct {
 func NewServerCtx(conf *Config) *ServerCtx {
 	svr := ServerCtx{}
 	svr.Config = conf
-	svr.RtConf = datasource.NewRuntimeSchema()
-	if conf.SupressRecover {
-		svr.RtConf.DisableRecover = true
-	}
+	svr.Reg = datasource.DataSourcesRegistry()
 	return &svr
 }
 
@@ -43,7 +39,7 @@ func (m *ServerCtx) Init() error {
 		return err
 	}
 	// how many worker nodes?
-	m.Grid = planner.NewServerGrid(2, m.RtConf)
+	m.Grid = planner.NewServerGrid(2, m.Reg)
 	go m.Grid.RunMaster()
 
 	return nil
@@ -70,7 +66,7 @@ func (m *ServerCtx) loadConfig() error {
 		}
 
 		sch := schema.NewSchema(schemaConf.Name)
-		m.schemas[schemaConf.Name] = sch
+		m.Reg.SchemaAdd(sch)
 
 		// find the Source config for eached named db/source
 		for _, sourceName := range schemaConf.Sources {
@@ -88,39 +84,36 @@ func (m *ServerCtx) loadConfig() error {
 				u.Warnf("could not find source: %v", sourceName)
 				return fmt.Errorf("Could not find Source Config for %v", sourceName)
 			}
-			sourceConf.Init()
 
-			sourceSchema := schema.NewSourceSchema(sourceName, sourceConf.SourceType)
-			sourceSchema.Conf = sourceConf
-			sourceSchema.Schema = sch
-			//u.Infof("found sourceName: %q schema.Name=%q", sourceName, sourceSchema.Name)
+			ss := schema.NewSourceSchema(sourceName, sourceConf.SourceType)
+			ss.Conf = sourceConf
+			ss.Schema = sch
+			//u.Infof("found sourceName: %q schema.Name=%q conf=%+v", sourceName, ss.Name, sourceConf)
 
 			for _, nc := range m.Config.Nodes {
 				if nc.Source == sourceConf.Name {
-					sourceSchema.Nodes = append(sourceSchema.Nodes, nc)
+					ss.Nodes = append(ss.Nodes, nc)
 					sourceConf.Nodes = append(sourceConf.Nodes, nc)
 				}
 			}
 
-			//u.Warnf("source: %v has nodect: %v", sourceSchema.Name, len(sourceConf.Nodes))
-			sourceFunc := DataSourceCreatorGet(sourceConf.SourceType)
-			if sourceFunc == nil {
-				//u.Warnf("Data source Not found for source_type: " + sourceConf.SourceType)
-				//return fmt.Errorf("Could not find DataSource for %v", sourceConf.SourceType)
-				continue
-			}
-			ds := sourceFunc(sourceSchema, m.Config)
-			sourceSchema.DS = ds
-			sourceSchema.Partitions = sourceConf.Partitions
+			sch.AddSourceSchema(ss)
 
-			// TODO:   Periodically refresh this as sources are dynamic tables
-			//u.Infof("tables to load? %#v", sourceSchema.Conf)
-			for _, tableName := range ds.Tables() {
-				m.loadSourceSchema(strings.ToLower(tableName), sch, sourceSchema)
+			ds := m.Reg.Get(sourceConf.SourceType)
+			//u.Debugf("after reg.Get(%q)  %#v", sourceConf.SourceType, ds)
+			if ds == nil {
+				u.Warnf("could not find source for %v", sourceName)
+			} else {
+				ss.DS = ds
+				ss.Partitions = sourceConf.Partitions
+				if dsConfig, getsConfig := ss.DS.(schema.SourceSetup); getsConfig {
+					if err := dsConfig.Setup(ss); err != nil {
+						u.Errorf("Error setuping up %v  %v", sourceName, err)
+					}
+				}
 			}
-			//sch.SourceSchemas[sourceName] = sourceSchema
-			sch.AddSourceSchema(sourceSchema)
-			m.RtConf.SchemaAdd(sch)
+
+			m.Reg.SourceSchemaAdd(ss)
 		}
 
 	}
@@ -128,23 +121,6 @@ func (m *ServerCtx) loadConfig() error {
 	return nil
 }
 
-func (m *ServerCtx) loadSourceSchema(tableName string, schema *schema.Schema, source *schema.SourceSchema) {
-	tableLoad := true
-	if len(source.Conf.TablesToLoad) > 0 {
-		tableLoad = false
-		for _, tbl := range source.Conf.TablesToLoad {
-			if tbl == tableName {
-				tableLoad = true
-				break
-			}
-		}
-	}
-	if tableLoad {
-		source.AddTableName(tableName)
-	}
-}
-
-func (m *ServerCtx) Schema(db string) *schema.Schema {
-	s := m.schemas[db]
-	return s
+func (m *ServerCtx) Schema(source string) (*schema.Schema, bool) {
+	return m.Reg.Schema(source)
 }

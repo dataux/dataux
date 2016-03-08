@@ -39,6 +39,7 @@ func init() {
 	Conf = conf
 }
 func SchemaLoader(name string) (*schema.Schema, error) {
+	u.Infof("SchemaLoader")
 	return Schema, nil
 }
 
@@ -147,7 +148,7 @@ func NewTestServer(t *testing.T) *TestListenerWraper {
 		ServerCtx = models.NewServerCtx(Conf)
 		ServerCtx.Init()
 
-		Schema = ServerCtx.Schema("datauxtest")
+		Schema, _ = ServerCtx.Schema("datauxtest")
 
 		handler, err := mysqlfe.NewMySqlHandler(ServerCtx)
 		assert.Tf(t, err == nil, "must create es handler without err: %v", err)

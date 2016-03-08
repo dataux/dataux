@@ -42,9 +42,10 @@ func NextId() (uint64, error) {
 	return sf.NextID()
 }
 
+// Distributed DataUx worker node
 type Server struct {
 	Conf       *Conf
-	schemaconf *datasource.RuntimeSchema
+	reg        *datasource.Registry
 	Grid       grid.Grid
 	started    bool
 	lastTaskId uint64

@@ -22,9 +22,11 @@ import (
 	"google.golang.org/cloud/datastore"
 
 	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/plan"
 
 	gds "github.com/dataux/dataux/backends/datastore"
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
+	"github.com/dataux/dataux/planner"
 	tu "github.com/dataux/dataux/testutil"
 )
 
@@ -39,8 +41,9 @@ var (
 	now = time.Now()
 
 	// we are too lazy to type
-	validateQuerySpec = tu.ValidateQuerySpec
-	validateQuery     = tu.ValidateQuery
+	//validateQuery     = tu.ValidateQuery
+
+	testServicesRunning bool
 )
 
 func init() {
@@ -64,6 +67,26 @@ func init() {
 	ctx, client = loadAuth(jsonKey)
 }
 
+func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
+	// func BuildSqlJob(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
+	ctx.Schema = testmysql.Schema
+	return planner.BuildSqlJob(ctx, testmysql.ServerCtx.Grid)
+}
+
+func RunTestServer(t *testing.T) func() {
+	if !testServicesRunning {
+		testServicesRunning = true
+		planner.GridConf.JobMaker = jobMaker
+		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
+		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
+		testmysql.RunTestServer(t)
+		planner.RunWorkerNodes(2, testmysql.ServerCtx.Reg)
+	}
+	return func() {
+		// placeholder
+	}
+}
+
 const (
 	ArticleKind string = "DataUxTestArticle"
 	UserKind    string = "DataUxTestUser"
@@ -75,6 +98,11 @@ func articleKey(title string) *datastore.Key {
 
 func userKey(id string) *datastore.Key {
 	return datastore.NewKey(ctx, UserKind, id, 0, nil)
+}
+
+func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
+	RunTestServer(t)
+	tu.ValidateQuerySpec(t, testSpec)
 }
 
 /*
@@ -172,6 +200,7 @@ func (m *User) Save() ([]datastore.Property, error) {
 
 func loadTestData(t *testing.T) {
 	loadTestDataOnce.Do(func() {
+
 		for _, article := range tu.Articles {
 			key, err := client.Put(ctx, articleKey(article.Title), &Article{article})
 			//u.Infof("key: %v", key)
@@ -228,7 +257,7 @@ func loadAuth(jsonKey []byte) (context.Context, *datastore.Client) {
 func TestDataSourceInterface(t *testing.T) {
 
 	// By running testserver, we will load schema/config
-	testmysql.RunTestServer(t)
+	RunTestServer(t)
 	loadTestData(t)
 
 	// Now make sure that the datastore source has been registered
@@ -239,7 +268,7 @@ func TestDataSourceInterface(t *testing.T) {
 }
 
 func TestInvalidQuery(t *testing.T) {
-	testmysql.RunTestServer(t)
+	RunTestServer(t)
 	db, err := sql.Open("mysql", DbConn)
 	assert.T(t, err == nil)
 	// It is parsing the SQL on server side (proxy) not in client
@@ -272,7 +301,7 @@ func TestShowTables(t *testing.T) {
 func TestBasic(t *testing.T) {
 
 	// By running testserver, we will load schema/config
-	testmysql.RunTestServer(t)
+	RunTestServer(t)
 	loadTestData(t)
 
 	// This is a connection to RunTestServer, which starts on port 13307

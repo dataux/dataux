@@ -12,10 +12,8 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/araddon/qlbridge/datasource"
-	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
-	"github.com/dataux/dataux/models"
 )
 
 var (
@@ -29,40 +27,41 @@ const (
 
 func init() {
 	// We need to register our DataSource provider here
-	models.DataSourceRegister("mongo", NewMongoDataSource)
+	datasource.Register("mongo", NewMongoDataSource())
 }
 
-// Mongo Data Source implements qlbridge DataSource interfaces
-//  to a backend mongo server
-//  - shared across all sessions/connections
+// Mongo Data Source implements qlbridge DataSource interfaces to mongo server
+//  - singleton shared across all sessions/connections
+//  - creates connections by mgo.Session.Clone()
 type MongoDataSource struct {
-	db        string
-	databases []string
-	conf      *models.Config
-	schema    *schema.SourceSchema
-	ctx       *plan.Context
-	mu        sync.Mutex
-	sess      *mgo.Session
-	closed    bool
+	db             string   // the underlying mongo database name
+	databases      []string // all available database names from this mongo instance
+	srcschema      *schema.SourceSchema
+	mu             sync.Mutex
+	sess           *mgo.Session
+	closed         bool
+	loadedSchema   bool
+	tablesNotFound map[string]string
 }
 
-func NewMongoDataSource(schema *schema.SourceSchema, conf *models.Config) models.DataSource {
-	m := MongoDataSource{}
-	m.schema = schema
-	m.conf = conf
-	m.db = strings.ToLower(schema.Name)
-	// Register our datasource.Datasources in registry
-	if err := m.Init(); err != nil {
-		u.Errorf("Could not open Mongo datasource %v", err)
+func NewMongoDataSource() schema.DataSource {
+	return &MongoDataSource{tablesNotFound: make(map[string]string)}
+}
+
+func (m *MongoDataSource) Setup(ss *schema.SourceSchema) error {
+
+	if m.srcschema != nil {
+		return nil
 	}
-	datasource.Register("mongo", &m)
-	return &m
-}
 
-func (m *MongoDataSource) Init() error {
+	m.srcschema = ss
+	if ss.Conf != nil && len(ss.Conf.Partitions) > 0 {
 
-	//u.Infof("Init:  %#v", m.schema.Conf)
-	if m.schema.Conf == nil {
+	}
+	m.db = strings.ToLower(ss.Name)
+
+	//u.Infof("Init:  %#v", m.srcschema.Conf)
+	if m.srcschema.Conf == nil {
 		return fmt.Errorf("Schema conf not found")
 	}
 
@@ -71,8 +70,8 @@ func (m *MongoDataSource) Init() error {
 		return err
 	}
 
-	if m.schema != nil {
-		//u.Debugf("Post Init() mongo schema P=%p tblct=%d", m.schema, len(m.schema.Tables()))
+	if m.srcschema != nil {
+		//u.Debugf("Post Init() mongo srcschema P=%p tblct=%d", m.srcschema, len(m.srcschema.Tables()))
 	}
 
 	return m.loadSchema()
@@ -93,21 +92,38 @@ func (m *MongoDataSource) Close() error {
 }
 
 func (m *MongoDataSource) DataSource() schema.DataSource { return m }
-func (m *MongoDataSource) Tables() []string              { return m.schema.Tables() }
+func (m *MongoDataSource) Tables() []string {
+	if m.srcschema == nil {
+		return nil
+	}
+	return m.srcschema.Tables()
+}
 func (m *MongoDataSource) Table(table string) (*schema.Table, error) {
-	//u.LogTracef(u.WARN, "who calling me?")
-	return m.loadTableSchema(table)
+	if !m.loadedSchema {
+		m.loadedSchema = true
+		return m.loadTableSchema(table)
+	}
+	if _, alreadyTried := m.tablesNotFound[table]; !alreadyTried {
+		m.tablesNotFound[table] = ""
+		tbl, err := m.loadTableSchema(table)
+		if err == nil {
+			delete(m.tablesNotFound, table)
+		}
+		return tbl, err
+	}
+
+	return nil, schema.ErrNotFound
 }
 
 func (m *MongoDataSource) Open(collectionName string) (schema.SourceConn, error) {
 	//u.Debugf("Open(%v)", collectionName)
-	tbl, err := m.schema.Table(collectionName)
+	tbl, err := m.srcschema.Table(collectionName)
 	if err != nil {
 		return nil, err
 	}
 	if tbl == nil {
-		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, collectionName)
-		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, collectionName)
+		u.Errorf("Could not find table for '%s'.'%s'", m.srcschema.Name, collectionName)
+		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.srcschema.Name, collectionName)
 	}
 
 	mgoSource := NewSqlToMgo(tbl, m.sess.Clone())
@@ -129,7 +145,9 @@ func (m *MongoDataSource) loadSchema() error {
 	return nil
 }
 
+// TODO:  this is horrible, use mgo's built in gossip with mongo for cluster info
 func chooseBackend(source string, schema *schema.SourceSchema) string {
+	//u.Infof("check backends: %v", len(schema.Nodes))
 	for _, node := range schema.Nodes {
 		//u.Debugf("check node:%q =? %+v", source, node)
 		if node.Source == source {
@@ -143,15 +161,15 @@ func chooseBackend(source string, schema *schema.SourceSchema) string {
 
 func (m *MongoDataSource) connect() error {
 
-	host := chooseBackend(m.db, m.schema)
+	host := chooseBackend(m.db, m.srcschema)
 
-	//u.Debugf("connecting MongoDataSource: host='%s'  conf=%#v", host, m.schema.Conf)
+	//u.Debugf("connecting MongoDataSource: host='%s'  conf=%#v", host, m.srcschema.Conf)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	sess, err := mgo.Dial(host)
 	if err != nil {
-		u.Errorf("Could not connect to mongo: %v", err)
+		u.Errorf("Could not connect to mongo: host=%q  err=%v", host, err)
 		return err
 	}
 
@@ -172,9 +190,9 @@ func (m *MongoDataSource) connect() error {
 	//u.Infof("old session %p -> new session %p", m.sess, sess)
 	m.sess = sess
 
-	db := sess.DB(m.schema.Name)
+	db := sess.DB(m.srcschema.Name)
 	if db == nil {
-		return fmt.Errorf("Database %v not found", m.schema.Name)
+		return fmt.Errorf("Database %v not found", m.srcschema.Name)
 	}
 
 	return nil
@@ -191,13 +209,13 @@ func (m *MongoDataSource) loadDatabases() error {
 	//u.Debugf("found database names: %v", m.databases)
 	found := false
 	for _, db := range dbs {
-		if strings.ToLower(db) == strings.ToLower(m.schema.Name) {
+		if strings.ToLower(db) == strings.ToLower(m.srcschema.Name) {
 			found = true
 		}
 	}
 	if !found {
-		u.Warnf("could not find database: %q", m.schema.Name)
-		return fmt.Errorf("Could not find that database: %v", m.schema.Name)
+		u.Warnf("could not find database: %q", m.srcschema.Name)
+		return fmt.Errorf("Could not find that database: %v", m.srcschema.Name)
 	}
 
 	return nil
@@ -213,7 +231,7 @@ func (m *MongoDataSource) loadTableNames() error {
 	}
 
 	for _, tableName := range tables {
-		m.schema.AddTableName(tableName)
+		m.srcschema.AddTableName(tableName)
 	}
 	//u.Debugf("found tables: %v", tables)
 	return nil
@@ -221,7 +239,8 @@ func (m *MongoDataSource) loadTableNames() error {
 
 func (m *MongoDataSource) loadTableSchema(table string) (*schema.Table, error) {
 
-	if m.schema == nil {
+	//u.WarnT(7)
+	if m.srcschema == nil {
 		return nil, fmt.Errorf("no schema in use")
 	}
 	/*
@@ -233,7 +252,7 @@ func (m *MongoDataSource) loadTableSchema(table string) (*schema.Table, error) {
 				- use new structure for Observations
 			- shared pkg for data-inspection, data builder
 	*/
-	tbl := schema.NewTable(table, m.schema)
+	tbl := schema.NewTable(table, m.srcschema)
 	coll := m.sess.DB(m.db).C(table)
 	colNames := make([]string, 0)
 	errs := make(map[string]string)
@@ -342,7 +361,7 @@ func (m *MongoDataSource) loadTableSchema(table string) (*schema.Table, error) {
 	}
 	// buildMongoFields(s, tbl, jh, "", 0)
 	tbl.SetColumns(colNames)
-	m.schema.AddTable(tbl)
+	m.srcschema.AddTable(tbl)
 
 	return tbl, nil
 }

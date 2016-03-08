@@ -41,7 +41,7 @@ type ResultReaderNext struct {
 
 func NewResultReader(req *SqlToDatstore) *ResultReader {
 	m := &ResultReader{}
-	m.TaskBase = exec.NewTaskBase(req.ctx)
+	m.TaskBase = exec.NewTaskBase(req.Ctx)
 	m.Req = req
 	return m
 }

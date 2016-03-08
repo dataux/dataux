@@ -21,8 +21,6 @@ import (
 	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
-
-	"github.com/dataux/dataux/models"
 )
 
 const (
@@ -37,16 +35,11 @@ var (
 
 	// Ensure our Google DataStore implements datasource.DataSource interface
 	_ schema.DataSource = (*GoogleDSDataSource)(nil)
-	//_ datasource.SourceMutation = (*GoogleDSDataSource)(nil)
-	//_ datasource.Deletion       = (*GoogleDSDataSource)(nil)
-	//_ datasource.Scanner    = (*ResultReader)(nil)
-	// source
-	//_ models.DataSource = (*GoogleDSDataSource)(nil)
 )
 
 func init() {
 	// We need to register our DataSource provider here
-	models.DataSourceRegister(DataSourceLabel, NewGoogleDataStoreDataSource)
+	datasource.Register(DataSourceLabel, &GoogleDSDataSource{})
 }
 
 // Google Datastore Data Source, is a singleton, non-threadsafe connection
@@ -58,10 +51,11 @@ type GoogleDSDataSource struct {
 	tablesLower    []string          // Lower cased
 	tablesOriginal map[string]string // google is case sensitive  map[lower]Original
 	cloudProjectId string
+	jwtFile        string
 	authConfig     *jwt.Config
 	dsCtx          context.Context
 	dsClient       *datastore.Client
-	conf           *models.Config
+	conf           *schema.SourceConfig
 	schema         *schema.SourceSchema
 	mu             sync.Mutex
 	closed         bool
@@ -73,28 +67,32 @@ type DatastoreMutator struct {
 	ds  *GoogleDSDataSource
 }
 
-func NewGoogleDataStoreDataSource(s *schema.SourceSchema, conf *models.Config) models.DataSource {
-	m := GoogleDSDataSource{}
-	m.schema = s
-	m.conf = conf
+func (m *GoogleDSDataSource) Setup(ss *schema.SourceSchema) error {
+
+	if m.schema != nil {
+		return nil
+	}
+
+	m.schema = ss
+	m.conf = ss.Conf
+	m.db = strings.ToLower(ss.Name)
+
 	m.cloudProjectId = *GoogleProject
-
-	m.db = strings.ToLower(s.Name)
-	// Register our datasource.Datasources in registry
-	m.Init()
-	u.Infof("datasource.Register: %v", DataSourceLabel)
-	datasource.Register(DataSourceLabel, &m)
-	return &m
-}
-
-func (m *GoogleDSDataSource) Init() error {
+	m.jwtFile = *GoogleJwt
 
 	//u.Infof("Init:  %#v", m.schema.Conf)
 	if m.schema.Conf == nil {
 		return fmt.Errorf("Schema conf not found")
 	}
+	jh := u.JsonHelper(conf.Settings)
+	if pid := jh.String("projectid"); pid != "" {
+		m.cloudProjectId = pid
+	}
+	if jwt := jh.String("jwt"); jwt != "" {
+		m.jwtFile = jwt
+	}
 
-	// This will return an error if the database name we are using nis not found
+	// This will return an error if the database name we are using is not found
 	if err := m.connect(); err != nil {
 		return err
 	}
@@ -127,15 +125,15 @@ func (m *GoogleDSDataSource) Close() error {
 }
 
 func (m *GoogleDSDataSource) connect() error {
-	//host := m.schema.ChooseBackend()
+
 	//u.Infof("connecting GoogleDSDataSource: host='%s'  conf=%#v", host, m.schema.Conf)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	jsonKey, err := ioutil.ReadFile(*GoogleJwt)
+	jsonKey, err := ioutil.ReadFile(m.jwtFile)
 	if err != nil {
 		u.Errorf("Could not open Google Auth Token JWT file %v", err)
-		os.Exit(1)
+		return err
 	}
 
 	conf, err := google.JWTConfigFromJSON(
@@ -152,13 +150,11 @@ func (m *GoogleDSDataSource) connect() error {
 	ctx := context.Background()
 	client, err := datastore.NewClient(ctx, m.cloudProjectId, cloud.WithTokenSource(conf.TokenSource(ctx)))
 	if err != nil {
-		u.Errorf("could not create client: %v", err)
+		u.Errorf("could not create google datastore client: project:%s jwt:%s  err=%v", m.cloudProjectId, m.jwtFile, err)
 		return err
 	}
 	m.dsClient = client
 	m.dsCtx = ctx
-	//m.dsCtx = cloud.NewContext(*GoogleProject, conf.Client(oauth2.NoContext))
-
 	return nil
 }
 

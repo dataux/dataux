@@ -11,12 +11,17 @@ backend key-value storage such as redis can now have aggregate functions, where 
 
 ## Features
 
-* *Distributed*  Distributed from the start, run queries across multiple servers
+* *Distributed*  run queries across multiple servers
 * *Hackable DataSources*  Very easy to add a new DataSource for your custom data, files, json, csv, storage.
 * *Hackable Functions* Add custom go functions to extend the sql language.
 * *Joins* Get join functionality between heterogeneous sources.
-* *Frontends* currently only MySql protocol is supported but Postgres, CQL, Memcached, etc are planned.
-* *Backends*  Elasticsearch, Google-Datastore, Mongo currently implemented.
+* *Frontends* currently only MySql protocol is supported but RethinkDB (for real-time api) is planned, and are pluggable.
+* *Backends*  Elasticsearch, Google-Datastore, Mongo currently implemented.  Csv, Json files, and custom formats (protobuf) are in progress.
+
+## Status
+* NOT Production ready.  Currently supporting a few non-critical use-cases (ad-hoc queries, support tool) in production.
+
+
 
 SQL -> Mongo
 ----------------------------------
@@ -43,6 +48,16 @@ hits.total  for filter  | `select count(*) from table WHERE exists(a);`
 aggs min, max, avg, sum | `select min(year), max(year), avg(year), sum(year) from table WHERE exists(a);`
 filter:   terms         | `select * from table WHERE year IN (2015,2014,2013);`
 filter: gte, range      | `select * from table WHERE year BETWEEN 2012 AND 2014`
+
+## Running
+```sh
+
+go build
+
+# using dataux.conf from root of this project
+./dataux --config=dataux.conf
+
+```
 
 
 Roadmap(ish)
