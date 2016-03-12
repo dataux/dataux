@@ -58,7 +58,7 @@ frontends [
 schemas : [
   {
     name : datauxtest
-    sources : [ "mgo_datauxtest", "es_test", "csvlocal" , "google_ds_test"]
+    sources : [ "mgo_datauxtest", "es_test", "gcscsvs", "csvlocal" , "google_ds_test"]
   }
 ]
 
@@ -91,6 +91,13 @@ sources : [
   {
     name : csvlocal
     type : csv
+  },
+  {
+    name     : gcscsvs
+    type     : cloudstore
+    settings : {
+      gcsbucket : "lytics-dataux-dev"
+    }
   },
   {
     name : google_ds_test
