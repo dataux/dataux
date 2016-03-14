@@ -93,10 +93,23 @@ sources : [
     type : csv
   },
   {
+    # this section is for http://seanlahman.com/baseball-archive/statistics/
+    # csv files
     name     : gcscsvs
     type     : cloudstore
     settings : {
-      gcsbucket : "lytics-dataux-dev"
+      type             : gcs
+      gcsbucket        : "lytics-dataux-tests"
+      path             : "tables/"
+    }
+  },
+  {
+    name     : gcscsvs2
+    type     : cloudstore
+    settings : {
+      type             : gcs
+      gcsbucket        : "lytics-dataux-tests"
+      path             : "baseball/"
     }
   },
   {

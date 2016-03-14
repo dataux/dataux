@@ -48,10 +48,10 @@ type Conf struct {
 
 func (c *Conf) Clone() *Conf {
 	if c.JobMaker == nil {
-		panic("need job maker")
+		//panic("need job maker")
 	}
 	if c.SchemaLoader == nil {
-		panic("need SchemaLoader")
+		//panic("need SchemaLoader")
 	}
 	return &Conf{
 		JobMaker:       c.JobMaker,

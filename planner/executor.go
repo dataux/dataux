@@ -61,7 +61,7 @@ func (m *ExecutorGrid) Finalize(resultWriter exec.Task) error {
 }
 
 func (m *ExecutorGrid) WalkSource(p *plan.Source) (exec.Task, error) {
-	u.Debugf("%p %T  NewSource? SourceExec=%v", m, m, p.SourceExec)
+	u.Debugf("%p %T  NewSource? HasConn?%v SourceExec=%v", m, m, p.Conn != nil, p.SourceExec)
 	if p.Conn != nil {
 		e, hasSourceExec := p.Conn.(exec.ExecutorSource)
 		if hasSourceExec {

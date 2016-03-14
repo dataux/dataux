@@ -9,14 +9,13 @@ import (
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
 	"github.com/go-sql-driver/mysql"
-	"github.com/jmoiron/sqlx"
 	"gopkg.in/mgo.v2"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/plan"
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
 	"github.com/dataux/dataux/planner"
-	"github.com/dataux/dataux/testutil"
+	tu "github.com/dataux/dataux/testutil"
 )
 
 var (
@@ -26,7 +25,7 @@ var (
 )
 
 func init() {
-	testutil.Setup()
+	tu.Setup()
 	loadTestData()
 }
 
@@ -36,10 +35,10 @@ func loadTestData() {
 	userColl.DropCollection()
 	articleColl := sess.DB("mgo_datauxtest").C("article")
 	articleColl.DropCollection()
-	for _, article := range testutil.Articles {
+	for _, article := range tu.Articles {
 		articleColl.Insert(article)
 	}
-	for _, user := range testutil.Users {
+	for _, user := range tu.Users {
 		userColl.Insert(user)
 	}
 }
@@ -50,7 +49,7 @@ func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
 	return planner.BuildSqlJob(ctx, testmysql.ServerCtx.Grid)
 }
 
-func RunTestServer(t *testing.T) func() {
+func RunTestServer(t *testing.T) {
 	if !testServicesRunning {
 		testServicesRunning = true
 		planner.GridConf.JobMaker = jobMaker
@@ -59,86 +58,10 @@ func RunTestServer(t *testing.T) func() {
 		testmysql.RunTestServer(t)
 		planner.RunWorkerNodes(2, testmysql.ServerCtx.Reg)
 	}
-	return func() {
-		// placeholder
-	}
 }
-
-type QuerySpec struct {
-	Sql             string
-	Cols            []string
-	ValidateRow     func([]interface{})
-	ExpectRowCt     int
-	ExpectColCt     int
-	RowData         interface{}
-	ValidateRowData func()
-}
-
-func validateQuery(t *testing.T, querySql string, expectCols []string, expectColCt, expectRowCt int, rowValidate func([]interface{})) {
-	validateQuerySpec(t, QuerySpec{Sql: querySql,
-		Cols:        expectCols,
-		ExpectRowCt: expectRowCt, ExpectColCt: expectColCt,
-		ValidateRow: rowValidate})
-}
-
-func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
-
+func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
 	RunTestServer(t)
-	dbName := "datauxtest"
-
-	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/"+dbName)
-	assert.Tf(t, err == nil, "%v", err)
-	defer dbx.Close()
-	//u.Debugf("%v", testSpec.Sql)
-	rows, err := dbx.Queryx(testSpec.Sql)
-	assert.Tf(t, err == nil, "%v", err)
-	defer rows.Close()
-
-	cols, err := rows.Columns()
-	assert.Tf(t, err == nil, "%v", err)
-	if len(testSpec.Cols) > 0 {
-		for _, expectCol := range testSpec.Cols {
-			found := false
-			for _, colName := range cols {
-				if colName == expectCol {
-					found = true
-				}
-			}
-			assert.Tf(t, found, "Should have found column: %v", expectCol)
-		}
-	}
-	rowCt := 0
-	for rows.Next() {
-		if testSpec.RowData != nil {
-			err = rows.StructScan(testSpec.RowData)
-			//u.Infof("rowVals: %#v", testSpec.RowData)
-			assert.Tf(t, err == nil, "%v", err)
-			rowCt++
-			if testSpec.ValidateRowData != nil {
-				testSpec.ValidateRowData()
-			}
-
-		} else {
-			// rowVals is an []interface{} of all of the column results
-			rowVals, err := rows.SliceScan()
-			u.Infof("rowVals: %#v", rowVals)
-			assert.Tf(t, err == nil, "%v", err)
-			if testSpec.ExpectColCt > 0 {
-				assert.Tf(t, len(rowVals) == testSpec.ExpectColCt, "wanted cols but got %v", len(rowVals))
-			}
-			rowCt++
-			if testSpec.ValidateRow != nil {
-				testSpec.ValidateRow(rowVals)
-			}
-		}
-
-	}
-	if testSpec.ExpectRowCt >= 0 {
-		assert.Tf(t, rowCt == testSpec.ExpectRowCt, "expected %v rows but got %v", testSpec.ExpectRowCt, rowCt)
-	}
-
-	assert.T(t, rows.Err() == nil)
-	//u.Infof("rows: %v", cols)
+	tu.ValidateQuerySpec(t, testSpec)
 }
 
 func TestInvalidQuery(t *testing.T) {
@@ -159,7 +82,7 @@ func TestSchemaQueries(t *testing.T) {
 	data := struct {
 		Max int64 `db:"@@max_allowed_packet"`
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql: `
 		select @@max_allowed_packet`,
 		ExpectRowCt: 1,
@@ -173,7 +96,7 @@ func TestSchemaQueries(t *testing.T) {
 	assert.Tf(t, found, "Must have found @@vaars")
 
 	found = false
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql: `
 		select  
 			@@session.auto_increment_increment as auto_increment_increment, 
@@ -195,7 +118,7 @@ func TestShowTables(t *testing.T) {
 	data := struct {
 		Table string `db:"Table"`
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "show tables;",
 		ExpectRowCt: -1,
 		ValidateRowData: func() {
@@ -214,7 +137,7 @@ func TestShowTables(t *testing.T) {
 		Create string `db:"Create Table"`
 	}{}
 	found = false
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "SHOW CREATE TABLE `article`;",
 		ExpectRowCt: -1,
 		ValidateRowData: func() {
@@ -243,8 +166,8 @@ func TestShowColumns(t *testing.T) {
 		Comment    sql.NullString `db:"Comment"`
 	}{}
 	describedCt := 0
-	validateQuerySpec(t, QuerySpec{
-		Sql:         fmt.Sprintf("show full columns from `article` from `%s` LIKE '%%'", testutil.DbName),
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         fmt.Sprintf("show full columns from `article` from `%s` LIKE '%%'", tu.DbName),
 		ExpectRowCt: 12,
 		ValidateRowData: func() {
 			//u.Infof("%#v", data)
@@ -285,7 +208,7 @@ func TestDescribeTable(t *testing.T) {
 		Extra   sql.NullString `db:"Extra"`
 	}{}
 	describedCt := 0
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "describe article;",
 		ExpectRowCt: 12,
 		ValidateRowData: func() {
@@ -320,7 +243,7 @@ func TestSelectCountStar(t *testing.T) {
 	data := struct {
 		Count int `db:"count(*)"`
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select count(*) from article",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -338,7 +261,7 @@ func TestSelectDistributed(t *testing.T) {
 
 	// We are going to use the WITH distributed=true to force distribution
 	// which is a temporary hack
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "SELECT AVG(CHAR_LENGTH(CAST(`title` AS CHAR))) as title_avg from article WITH distributed=true, node_ct=2",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -355,7 +278,7 @@ func TestSelectAggAvg(t *testing.T) {
 	}{}
 
 	// Note, this needs to be poly-filled (the avg(char_lenght)) as isn't natively suppported in mongo
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select AVG(CHAR_LENGTH(CAST(`title` AS CHAR))) as title_avg from article",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -365,7 +288,7 @@ func TestSelectAggAvg(t *testing.T) {
 		RowData: &data,
 	})
 	// Same test only with a left.right
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select AVG(CHAR_LENGTH(CAST(`article.title` AS CHAR))) as title_avg from article",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -383,7 +306,7 @@ func TestSimpleRowSelect(t *testing.T) {
 		Deleted bool
 		//Category *datasource.StringArray
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select title, count, deleted from article WHERE `author` = \"aaron\" ",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -403,7 +326,7 @@ func TestSimpleRowSelect(t *testing.T) {
 		Deleted  bool
 		Category datasource.StringArray
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select title, count, deleted, category from article WHERE `author` = \"aaron\" ",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -414,7 +337,7 @@ func TestSimpleRowSelect(t *testing.T) {
 		RowData: &dataComplex,
 	})
 
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select title, count, deleted from article WHERE `author` = \"aaron\" AND count = 22 ",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -424,7 +347,7 @@ func TestSimpleRowSelect(t *testing.T) {
 		},
 		RowData: &data,
 	})
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select title, count, deleted from article WHERE `author` = \"notarealname\" OR count = 22 ",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -434,7 +357,7 @@ func TestSimpleRowSelect(t *testing.T) {
 		},
 		RowData: &data,
 	})
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select title, count,deleted from article WHERE count = 22;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -442,7 +365,7 @@ func TestSimpleRowSelect(t *testing.T) {
 		},
 		RowData: &data,
 	})
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:             "select title, count, deleted from article LIMIT 10;",
 		ExpectRowCt:     4,
 		ValidateRowData: func() {},
@@ -455,7 +378,7 @@ func TestSelectLimit(t *testing.T) {
 		Title string
 		Count int
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:             "select title, count from article LIMIT 1;",
 		ExpectRowCt:     1,
 		ValidateRowData: func() {},
@@ -476,7 +399,7 @@ func TestSelectAggsSimple(t *testing.T) {
 		Ct     int    `db:"article_ct"`
 		Author string `db:"author"`
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select author, count(*) AS article_ct from article group by author;",
 		ExpectRowCt: 3,
 		ValidateRowData: func() {
@@ -494,7 +417,7 @@ func TestSelectAggsSimple(t *testing.T) {
 		Card   int `db:"users_who_released"`
 		Ct     int
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql: "select cardinality(`actor`) AS users_who_released, count(*) as ct " +
 			", min(`repository.id`) as oldest_repo " +
 			` FROM github_release
@@ -516,7 +439,7 @@ func TestSelectAggsGroupBy(t *testing.T) {
 	data := struct {
 		Actor string
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         `select terms(repository.description), terms(repository.name) from github_push GROUP BY actor_attributes.login;`,
 		ExpectRowCt: 0,
 		ValidateRowData: func() {
@@ -529,7 +452,7 @@ func TestSelectAggsGroupBy(t *testing.T) {
 	data2 := struct {
 		Actor string
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql: `
 		SELECT count(*), repository.name
 		FROM github_watch
@@ -551,7 +474,7 @@ func TestSelectWhereEqual(t *testing.T) {
 			Deleted bool
 			Updated time.Time
 		}{}
-		validateQuerySpec(t, QuerySpec{
+		validateQuerySpec(t, tu.QuerySpec{
 			Sql: "select title, count, deleted, updated " +
 				"from article WHERE Count = 22;",
 			ExpectRowCt: 1,
@@ -564,7 +487,7 @@ func TestSelectWhereEqual(t *testing.T) {
 		})
 		// Test when we have compound where clause
 
-				validateQuerySpec(t, QuerySpec{
+				validateQuerySpec(t, tu.QuerySpec{
 					Sql: "select `actor`, `repository.name`, `repository.stargazers_count`, `repository.language` " +
 						" from github_watch where " +
 						"`repository.language` == \"Go\" AND `repository.forks_count` > 1000;",
@@ -580,7 +503,7 @@ func TestSelectWhereEqual(t *testing.T) {
 
 			return
 			// TODO:   This isn't working yet bc the nested 3 where clauses
-			validateQuerySpec(t, QuerySpec{
+			validateQuerySpec(t, tu.QuerySpec{
 				Sql: `
 				SELECT
 					actor, repository.name, repository.stargazers_count, repository.language
@@ -606,7 +529,7 @@ func TestSelectWhereLike(t *testing.T) {
 		Title string
 		Ct    int
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         `SELECT title, count as ct from article WHERE title like "list%"`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -614,7 +537,7 @@ func TestSelectWhereLike(t *testing.T) {
 		},
 		RowData: &data,
 	})
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         `SELECT title, count as ct from article WHERE title like "%stic%"`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -631,7 +554,7 @@ func TestSelectWhereIn(t *testing.T) {
 		Deleted bool
 		Updated mysql.NullTime // go-sql-driver/mysql#NullTime
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         `select title, count, deleted, updated from article WHERE category IN ("news");`,
 		ExpectRowCt: 2,
 		ValidateRowData: func() {
@@ -648,7 +571,7 @@ func TestSelectWhereExists(t *testing.T) {
 		Count   int
 		Deleted bool
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         `select title, count, deleted from article WHERE exists(title);`,
 		ExpectRowCt: 4,
 		ValidateRowData: func() {
@@ -656,7 +579,7 @@ func TestSelectWhereExists(t *testing.T) {
 		},
 		RowData: &data,
 	})
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:             `select title, count, deleted from article WHERE exists(fakefield);`,
 		ExpectRowCt:     0,
 		ValidateRowData: func() {},
@@ -670,7 +593,7 @@ func TestSelectWhereBetween(t *testing.T) {
 		Author string `db:"author"`
 		Count  int
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         `select title, count, author from article where count BETWEEN 5 AND 25;`,
 		ExpectRowCt: 2,
 		ValidateRowData: func() {
@@ -688,7 +611,7 @@ func TestSelectWhereBetween(t *testing.T) {
 	})
 
 	// Now one that is date based
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         `select title, count, author from article where created BETWEEN todate("2011-08-01") AND todate("2013-08-03");`,
 		ExpectRowCt: 2,
 		ValidateRowData: func() {
@@ -707,7 +630,7 @@ func TestSelectWhereBetween(t *testing.T) {
 
 	// Now try that again but without todate
 	// TODO - need to convert string -> date by virtue of schema knowing it is a date?
-	// validateQuerySpec(t, QuerySpec{
+	// validateQuerySpec(t, tu.QuerySpec{
 	// 	Sql:         `select title, count, author from article where created BETWEEN "2011-08-01" AND "2013-08-03";`,
 	// 	ExpectRowCt: 2,
 	// 	ValidateRowData: func() {
@@ -730,7 +653,7 @@ func TestSelectOrderBy(t *testing.T) {
 		Title string
 		Ct    int
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select title, count64 AS ct FROM article ORDER BY count64 DESC LIMIT 1;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -739,7 +662,7 @@ func TestSelectOrderBy(t *testing.T) {
 		},
 		RowData: &data,
 	})
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select title, count64 AS ct FROM article ORDER BY count64 ASC LIMIT 1;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
@@ -764,7 +687,7 @@ func TestMongoToMongoJoin(t *testing.T) {
 		Title string
 		Id    string
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         sqlText,
 		ExpectRowCt: 4,
 		ValidateRowData: func() {

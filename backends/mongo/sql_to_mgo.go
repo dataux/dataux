@@ -31,13 +31,6 @@ var (
 	_ exec.ExecutorSource = (*SqlToMgo)(nil)
 )
 
-/*
-	SourcePlanner interface {
-		// given our request statement, turn that into a plan.Task.
-		WalkSourceSelect(s *Source) (Task, error)
-	}
-*/
-
 // Sql To Mongo Request
 //   Map sql queries into Mongo bson Requests
 type SqlToMgo struct {

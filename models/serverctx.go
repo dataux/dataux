@@ -102,7 +102,7 @@ func (m *ServerCtx) loadConfig() error {
 			ds := m.Reg.Get(sourceConf.SourceType)
 			//u.Debugf("after reg.Get(%q)  %#v", sourceConf.SourceType, ds)
 			if ds == nil {
-				u.Warnf("could not find source for %v", sourceName)
+				//u.Debugf("could not find source for %v", sourceName)
 			} else {
 				ss.DS = ds
 				ss.Partitions = sourceConf.Partitions
@@ -111,9 +111,9 @@ func (m *ServerCtx) loadConfig() error {
 						u.Errorf("Error setuping up %v  %v", sourceName, err)
 					}
 				}
+				m.Reg.SourceSchemaAdd(ss)
 			}
 
-			m.Reg.SourceSchemaAdd(ss)
 		}
 
 	}

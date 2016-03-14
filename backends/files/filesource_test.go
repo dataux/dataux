@@ -3,19 +3,19 @@ package files_test
 import (
 	"bufio"
 	"io/ioutil"
+	"os"
 	"testing"
 
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
-	"github.com/jmoiron/sqlx"
 	"github.com/lytics/cloudstorage"
+	"github.com/lytics/cloudstorage/logging"
 
 	"github.com/araddon/qlbridge/plan"
 
-	"github.com/dataux/dataux/backends/files"
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
 	"github.com/dataux/dataux/planner"
-	"github.com/dataux/dataux/testutil"
+	tu "github.com/dataux/dataux/testutil"
 )
 
 /*
@@ -32,20 +32,25 @@ var (
 	testServicesRunning bool
 )
 
+var localconfig = &cloudstorage.CloudStoreContext{
+	LogggingContext: "unittest",
+	TokenSource:     cloudstorage.LocalFileSource,
+	LocalFS:         "/tmp/mockcloud",
+	TmpDir:          "/tmp/localcache",
+}
+
+var gcsIntconfig = &cloudstorage.CloudStoreContext{
+	LogggingContext: "dataux-test",
+	TokenSource:     cloudstorage.GCEDefaultOAuthToken,
+	Project:         "lytics-dev",
+	Bucket:          "lytics-dataux-tests",
+	TmpDir:          "/tmp/localcache",
+}
+
 func init() {
 	u.SetupLogging("debug")
 	u.SetColorOutput()
-	testutil.Setup()
-	loadTestData()
-}
-
-func loadTestData() {
-	// for _, article := range testutil.Articles {
-	// 	articleColl.Insert(article)
-	// }
-	// for _, user := range testutil.Users {
-	// 	userColl.Insert(user)
-	// }
+	tu.Setup()
 }
 
 func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
@@ -53,96 +58,33 @@ func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
 	return planner.BuildSqlJob(ctx, testmysql.ServerCtx.Grid)
 }
 
-func RunTestServer(t *testing.T) func() {
+func RunTestServer(t *testing.T) {
 	if !testServicesRunning {
 		testServicesRunning = true
 		planner.GridConf.JobMaker = jobMaker
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
-		createTestData(t)
+		//createTestData(t)
 		testmysql.RunTestServer(t)
 		planner.RunWorkerNodes(2, testmysql.ServerCtx.Reg)
 	}
-	return func() {
-		// placeholder
-	}
 }
 
-type QuerySpec struct {
-	Sql             string
-	Cols            []string
-	ValidateRow     func([]interface{})
-	ExpectRowCt     int
-	ExpectColCt     int
-	RowData         interface{}
-	ValidateRowData func()
-}
+func createTestStore() (cloudstorage.Store, error) {
 
-func validateQuery(t *testing.T, querySql string, expectCols []string, expectColCt, expectRowCt int, rowValidate func([]interface{})) {
-	validateQuerySpec(t, QuerySpec{Sql: querySql,
-		Cols:        expectCols,
-		ExpectRowCt: expectRowCt, ExpectColCt: expectColCt,
-		ValidateRow: rowValidate})
-}
-
-func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
-
-	RunTestServer(t)
-	dbName := "datauxtest"
-
-	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/"+dbName)
-	assert.Tf(t, err == nil, "%v", err)
-	defer dbx.Close()
-	//u.Debugf("%v", testSpec.Sql)
-	rows, err := dbx.Queryx(testSpec.Sql)
-	assert.Tf(t, err == nil, "%v", err)
-	defer rows.Close()
-
-	cols, err := rows.Columns()
-	assert.Tf(t, err == nil, "%v", err)
-	if len(testSpec.Cols) > 0 {
-		for _, expectCol := range testSpec.Cols {
-			found := false
-			for _, colName := range cols {
-				if colName == expectCol {
-					found = true
-				}
-			}
-			assert.Tf(t, found, "Should have found column: %v", expectCol)
-		}
-	}
-	rowCt := 0
-	for rows.Next() {
-		if testSpec.RowData != nil {
-			err = rows.StructScan(testSpec.RowData)
-			//u.Infof("rowVals: %#v", testSpec.RowData)
-			assert.Tf(t, err == nil, "%v", err)
-			rowCt++
-			if testSpec.ValidateRowData != nil {
-				testSpec.ValidateRowData()
-			}
-
-		} else {
-			// rowVals is an []interface{} of all of the column results
-			rowVals, err := rows.SliceScan()
-			u.Infof("rowVals: %#v", rowVals)
-			assert.Tf(t, err == nil, "%v", err)
-			if testSpec.ExpectColCt > 0 {
-				assert.Tf(t, len(rowVals) == testSpec.ExpectColCt, "wanted cols but got %v", len(rowVals))
-			}
-			rowCt++
-			if testSpec.ValidateRow != nil {
-				testSpec.ValidateRow(rowVals)
-			}
-		}
-
-	}
-	if testSpec.ExpectRowCt >= 0 {
-		assert.Tf(t, rowCt == testSpec.ExpectRowCt, "expected %v rows but got %v", testSpec.ExpectRowCt, rowCt)
+	cloudstorage.LogConstructor = func(prefix string) logging.Logger {
+		return logging.NewStdLogger(true, logging.DEBUG, prefix)
 	}
 
-	assert.T(t, rows.Err() == nil)
-	//u.Infof("rows: %v", cols)
+	var config *cloudstorage.CloudStoreContext
+	if os.Getenv("TESTINT") == "" {
+		//os.RemoveAll("/tmp/mockcloud")
+		//os.RemoveAll("/tmp/localcache")
+		config = localconfig
+	} else {
+		config = gcsIntconfig
+	}
+	return cloudstorage.NewStore(config)
 }
 
 func clearStore(t *testing.T, store cloudstorage.Store) {
@@ -156,28 +98,40 @@ func clearStore(t *testing.T, store cloudstorage.Store) {
 	}
 
 	// if os.Getenv("TESTINT") != "" {
-	// 	//GCS is lazy about deletes...
+	// 	// GCS is lazy about deletes...
 	// 	time.Sleep(15 * time.Second)
 	// }
 }
 
+func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
+	RunTestServer(t)
+	tu.ValidateQuerySpec(t, testSpec)
+}
 func createTestData(t *testing.T) {
-	store, err := files.CreateStore()
+	store, err := createTestStore()
 	assert.T(t, err == nil)
-	clearStore(t, store)
+	//clearStore(t, store)
 	//defer clearStore(t, store)
 
 	//Create a new object and write to it.
 	obj, err := store.NewObject("tables/article/article1.csv")
+	if err != nil {
+		return // already created
+	}
 	assert.T(t, err == nil)
 	f, err := obj.Open(cloudstorage.ReadWrite)
 	assert.T(t, err == nil)
 
-	testcsv := "Year,Make,Model\n1997,Ford,E350\n2000,Mercury,Cougar\n"
-
 	w := bufio.NewWriter(f)
-	w.WriteString(testcsv)
-	assert.T(t, err == nil)
+	w.WriteString(tu.Articles[0].Header())
+	w.WriteByte('\n')
+	lastIdx := len(tu.Articles) - 1
+	for i, a := range tu.Articles {
+		w.WriteString(a.Row())
+		if i != lastIdx {
+			w.WriteByte('\n')
+		}
+	}
 	w.Flush()
 	err = obj.Close()
 	assert.T(t, err == nil)
@@ -185,7 +139,15 @@ func createTestData(t *testing.T) {
 	obj, _ = store.NewObject("tables/user/user1.csv")
 	f, _ = obj.Open(cloudstorage.ReadWrite)
 	w = bufio.NewWriter(f)
-	w.WriteString(testcsv)
+	w.WriteString(tu.Users[0].Header())
+	w.WriteByte('\n')
+	lastIdx = len(tu.Users) - 1
+	for i, a := range tu.Users {
+		w.WriteString(a.Row())
+		if i != lastIdx {
+			w.WriteByte('\n')
+		}
+	}
 	w.Flush()
 	obj.Close()
 
@@ -199,7 +161,7 @@ func createTestData(t *testing.T) {
 	bytes, err := ioutil.ReadAll(f2)
 	assert.T(t, err == nil)
 
-	assert.Tf(t, testcsv == string(bytes), "Wanted equal got %s", bytes)
+	assert.Tf(t, tu.ArticleCsv == string(bytes), "Wanted equal got %s", bytes)
 }
 
 func TestShowTables(t *testing.T) {
@@ -208,7 +170,7 @@ func TestShowTables(t *testing.T) {
 	data := struct {
 		Table string `db:"Table"`
 	}{}
-	validateQuerySpec(t, QuerySpec{
+	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "show tables;",
 		ExpectRowCt: -1,
 		ValidateRowData: func() {
@@ -221,4 +183,76 @@ func TestShowTables(t *testing.T) {
 		RowData: &data,
 	})
 	assert.Tf(t, found, "Must have found article table with show")
+}
+func TestSimpleRowSelect(t *testing.T) {
+	data := struct {
+		Title   string
+		Count   int
+		Deleted bool
+		//Category *datasource.StringArray
+	}{}
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select title, count, deleted from article WHERE `author` = \"aaron\" ",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			//u.Infof("%v", data)
+			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
+			assert.Tf(t, data.Title == "article1", "%v", data)
+		},
+		RowData: &data,
+	})
+
+	return
+
+	// The problem here is ??  related to the mysql/mysqlx/type etc, the values are being written
+	dataComplex := struct {
+		Title   string
+		Count   int
+		Deleted bool
+	}{}
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select title, count, deleted from article WHERE `author` = \"aaron\" ",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			//u.Infof("%v", dataComplex)
+			assert.Tf(t, dataComplex.Deleted == false, "Not deleted? %v", dataComplex)
+			assert.Tf(t, dataComplex.Title == "article1", "%v", dataComplex)
+		},
+		RowData: &dataComplex,
+	})
+
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select title, count, deleted from article WHERE `author` = \"aaron\" AND count = 22 ",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			//u.Infof("%v", data)
+			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
+			assert.Tf(t, data.Title == "article1", "%v", data)
+		},
+		RowData: &data,
+	})
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select title, count, deleted from article WHERE `author` = \"notarealname\" OR count = 22 ",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			//u.Infof("%v", data)
+			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
+			assert.Tf(t, data.Title == "article1", "%v", data)
+		},
+		RowData: &data,
+	})
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select title, count,deleted from article WHERE count = 22;",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			assert.Tf(t, data.Title == "article1", "%v", data)
+		},
+		RowData: &data,
+	})
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:             "select title, count, deleted from article LIMIT 10;",
+		ExpectRowCt:     4,
+		ValidateRowData: func() {},
+		RowData:         &data,
+	})
 }

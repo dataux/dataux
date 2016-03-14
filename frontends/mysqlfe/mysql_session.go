@@ -47,7 +47,7 @@ func NewMySqlGlobalVars() *datasource.ContextSimple {
 	ctx.Data["@@system_time_zone"] = value.NewStringValue("UTC")
 	ctx.Data["@@time_zone"] = value.NewStringValue("SYSTEM")
 	ctx.Data["@@tx_isolation"] = value.NewStringValue("REPEATABLE-READ")
-	ctx.Data["@@version_comment"] = value.NewStringValue("DataUX (MIT), Release .0.9")
+	ctx.Data["@@version_comment"] = value.NewStringValue("DataUX (MIT), Release .13")
 	ctx.Data["@@wait_timeout"] = value.NewIntValue(28800)
 	return ctx
 }

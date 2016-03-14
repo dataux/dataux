@@ -11,6 +11,7 @@ import (
 
 	// Backend Registrations Side-Effect imports
 	_ "github.com/dataux/dataux/backends/elasticsearch"
+	_ "github.com/dataux/dataux/backends/files"
 	_ "github.com/dataux/dataux/backends/mongo"
 
 	u "github.com/araddon/gou"
