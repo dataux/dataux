@@ -22,7 +22,7 @@ import (
 
 # to run Google Cloud tests you must have
 # 1)   have run "gcloud auth login"
-# 2)   set flag
+# 2)   set env variable "TESTINT=1"
 
 export TESTINT=1
 

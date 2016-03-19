@@ -84,7 +84,7 @@ func (m *GoogleDSDataSource) Setup(ss *schema.SourceSchema) error {
 	if m.schema.Conf == nil {
 		return fmt.Errorf("Schema conf not found")
 	}
-	jh := u.JsonHelper(conf.Settings)
+	jh := u.JsonHelper(m.conf.Settings)
 	if pid := jh.String("projectid"); pid != "" {
 		m.cloudProjectId = pid
 	}

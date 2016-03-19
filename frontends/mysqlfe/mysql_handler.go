@@ -16,8 +16,13 @@ import (
 
 	"github.com/dataux/dataux/models"
 	"github.com/dataux/dataux/vendored/mixer/mysql"
-	"github.com/dataux/dataux/vendored/mixer/proxy"
+	mysqlproxy "github.com/dataux/dataux/vendored/mixer/proxy"
 )
+
+func init() {
+	// Load our Frontend Listener's
+	models.ListenerRegister(mysqlproxy.ListenerType, &MySqlConnCreator{})
+}
 
 const (
 	// Default Max Allowed packets for connections
@@ -30,51 +35,66 @@ var (
 	_ = pretty.Diff
 
 	// Ensure we meet our interfaces
-	_ models.ConnectionHandle = (*MySqlHandler)(nil)
-	_ models.Handler          = (*MySqlHandler)(nil)
+	_ models.Listener         = (*MySqlConnCreator)(nil)
+	_ models.StatementHandler = (*mySqlHandler)(nil)
 )
-
-// MySqlHandler shared across connections, used to create
-//   connection specific connections
-type MySqlHandlerShared struct {
-	svr *models.ServerCtx
-}
 
 // MySql connection handler, a single connection session
 //  not threadsafe, not shared
-type MySqlHandler struct {
-	*MySqlHandlerShared
-	sess   expr.ContextReader // session info
-	conn   *proxy.Conn        // Connection to client, inbound mysql conn
-	schema *schema.Schema
+type MySqlConnCreator struct {
+	svr  *models.ServerCtx
+	conf *models.ListenerConfig
+	l    models.Listener
 }
 
-func NewMySqlHandler(svr *models.ServerCtx) (models.ConnectionHandle, error) {
-	sharedHandler := &MySqlHandlerShared{svr: svr}
-	err := sharedHandler.Init()
-	connHandler := &MySqlHandler{MySqlHandlerShared: sharedHandler}
-	return connHandler, err
+func (m *MySqlConnCreator) Init(conf *models.ListenerConfig, svr *models.ServerCtx) error {
+	u.Debugf("mysql conn creator")
+	l, err := mysqlproxy.ListenerInit(conf, svr.Config, m)
+	if err != nil {
+		u.Errorf("could not get mysql listener: %v", err)
+		return err
+	}
+	m.l = l
+	m.svr = svr
+	m.conf = conf
+	return nil
 }
 
-func (m *MySqlHandlerShared) Init() error { return nil }
-
-// Open/Clone this handler as each handler is a per-client/conn copy of handler
+// Open handler is a per-client/conn copy of handler
 // - this occurs once when a new tcp-conn is established
 // - it re-uses the HandlerShard with has schema, etc on it
-func (m *MySqlHandler) Open(connI interface{}) models.Handler {
+func (m *MySqlConnCreator) Open(connI interface{}) models.StatementHandler {
 
-	handler := MySqlHandler{MySqlHandlerShared: m.MySqlHandlerShared}
+	u.Infof("Open: ")
+	handler := mySqlHandler{svr: m.svr}
 	handler.sess = NewMySqlSessionVars()
 
-	if conn, ok := connI.(*proxy.Conn); ok {
+	if conn, ok := connI.(*mysqlproxy.Conn); ok {
 		//u.Debugf("Cloning Mysql handler %v", conn)
 		handler.conn = conn
 		return &handler
 	}
 	panic(fmt.Sprintf("not proxy.Conn? %T", connI))
 }
+func (m *MySqlConnCreator) Run(stop chan bool) error {
+	return m.l.Run(stop)
+}
 
-func (m *MySqlHandler) Close() error {
+func (m *MySqlConnCreator) Close() error {
+	// TODO, think i need to keep reference to all connections and close?
+	return nil
+}
+
+// MySql connection creator
+// - per connection, ie session specific
+type mySqlHandler struct {
+	svr    *models.ServerCtx
+	sess   expr.ContextReader // session info
+	conn   *mysqlproxy.Conn   // Connection to client, inbound mysql conn
+	schema *schema.Schema
+}
+
+func (m *mySqlHandler) Close() error {
 	if m.conn != nil {
 		err := m.conn.Close()
 		m.conn = nil
@@ -84,12 +104,12 @@ func (m *MySqlHandler) Close() error {
 }
 
 // Implement the Handle interface for frontends
-func (m *MySqlHandler) Handle(writer models.ResultWriter, req *models.Request) error {
+func (m *mySqlHandler) Handle(writer models.ResultWriter, req *models.Request) error {
 	return m.chooseCommand(writer, req)
 }
 
 // Session level schema Use command of sql
-func (m *MySqlHandler) SchemaUse(db string) *schema.Schema {
+func (m *mySqlHandler) SchemaUse(db string) *schema.Schema {
 	schema, ok := m.svr.Schema(db)
 	if schema == nil || !ok {
 		u.Warnf("Could not find schema for db=%s", db)
@@ -99,7 +119,7 @@ func (m *MySqlHandler) SchemaUse(db string) *schema.Schema {
 	return schema
 }
 
-func (m *MySqlHandler) chooseCommand(writer models.ResultWriter, req *models.Request) error {
+func (m *mySqlHandler) chooseCommand(writer models.ResultWriter, req *models.Request) error {
 
 	// First byte of mysql is a "command" type
 	cmd := req.Raw[0]
@@ -136,7 +156,7 @@ func (m *MySqlHandler) chooseCommand(writer models.ResultWriter, req *models.Req
 	return nil
 }
 
-func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err error) {
+func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err error) {
 
 	//u.Debugf("handleQuery: %v", sql)
 	if !m.svr.Config.SupressRecover {
@@ -222,7 +242,7 @@ func (m *MySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	return err
 }
 
-func (m *MySqlHandler) writeOK(r *mysql.Result) error {
+func (m *mySqlHandler) writeOK(r *mysql.Result) error {
 	return m.conn.WriteOK(r)
 }
 

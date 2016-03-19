@@ -2,7 +2,9 @@ package files
 
 import (
 	"fmt"
+	"io"
 	"strings"
+	"sync"
 	"time"
 
 	u "github.com/araddon/gou"
@@ -14,6 +16,10 @@ import (
 )
 
 var (
+	// the global file-scanners registry mutex
+	registryMu sync.Mutex
+	registry   = newScannerRegistry()
+
 	// implement interfaces
 	_ schema.DataSource = (*FileSource)(nil)
 
@@ -27,7 +33,10 @@ const (
 func init() {
 	// We need to register our DataSource provider here
 	datasource.Register(SourceType, NewFileSource())
+	Register("csv", csvMaker)
 }
+
+type FileScannerMaker func(*FileInfo) (schema.Scanner, error)
 
 var _ = u.EMPTY
 
@@ -80,6 +89,61 @@ func createConfStore(ss *schema.SourceSchema) (cloudstorage.Store, error) {
 	return cloudstorage.NewStore(config)
 }
 
+// Register makes a file scanner available by the provided @scannerType
+//
+func Register(scannerType string, scanner FileScannerMaker) {
+	if scanner == nil {
+		panic("File scanners must not be nil")
+	}
+	scannerType = strings.ToLower(scannerType)
+	u.Debugf("global file-scanner register: %v %T scanner:%p", scannerType, scanner, scanner)
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	if _, dupe := registry.scanners[scannerType]; dupe {
+		panic("Register called twice for scanner type " + scannerType)
+	}
+	registry.scanners[scannerType] = scanner
+}
+
+func scannerGet(scannerType string) (FileScannerMaker, bool) {
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	scannerType = strings.ToLower(scannerType)
+	scanner, ok := registry.scanners[scannerType]
+	return scanner, ok
+}
+
+// Our internal map of different types of datasources that are registered
+// for our runtime system to use
+type scannerRegistry struct {
+	// Map of scanner name, to maker
+	scanners map[string]FileScannerMaker
+}
+
+func newScannerRegistry() *scannerRegistry {
+	return &scannerRegistry{
+		scanners: make(map[string]FileScannerMaker),
+	}
+}
+
+func csvMaker(f *FileInfo) (schema.Scanner, error) {
+	csv, err := datasource.NewCsvSource(f.Table, 0, f.F, f.Exit)
+	if err != nil {
+		u.Errorf("Could not open file for csv reading %v", err)
+		return nil, err
+	}
+	return csv, nil
+}
+
+// File DataSource for reading files, and scanning them allowing
+//  the rows to be treated as a scannable dataset, like doing a full
+//  scan in mysql.
+//
+// - readers:      s3, gcs, local-fs
+// - tablesource:  translate lists of files into tables.  Normally we would have
+//                 multiple files per table (ie partitioned, per-day, etc)
+// - scanners:     responsible for file-specific
+//
 type FileSource struct {
 	ss             *schema.SourceSchema
 	lastLoad       time.Time
@@ -89,6 +153,14 @@ type FileSource struct {
 	files          map[string][]string
 	path           string
 	tablePerFolder bool
+	fileType       string // csv, json, proto, customname
+}
+type FileInfo struct {
+	Name     string
+	Table    string
+	Exit     chan bool
+	FileType string // csv, json, etc
+	F        io.Reader
 }
 
 func NewFileSource() schema.DataSource {
@@ -109,13 +181,14 @@ func (m *FileSource) Setup(ss *schema.SourceSchema) error {
 }
 
 func (m *FileSource) Open(tableName string) (schema.SourceConn, error) {
-	u.Warnf("open %q", tableName)
 
+	u.Debugf("files open %q", tableName)
 	files := m.files[tableName]
-	u.Debugf("filenames: ct=%d  %v", len(files), files)
+	//u.Debugf("filenames: ct=%d  %v", len(files), files)
 	if len(files) == 0 {
 		return nil, fmt.Errorf("Not files found for %q", tableName)
 	}
+
 	//Read the object back out of the cloud storage.
 	obj, err := m.store.Get(files[0])
 	if err != nil {
@@ -153,6 +226,9 @@ func (m *FileSource) init() error {
 		conf := m.ss.Conf.Settings
 		if tablePath := conf.String("path"); tablePath != "" {
 			m.path = tablePath
+		}
+		if fileType := conf.String("format"); fileType != "" {
+			m.fileType = fileType
 		}
 	}
 	return nil
@@ -210,7 +286,6 @@ func (m *FileSource) loadSchema() {
 func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 
 	u.Infof("Table(%q)", tableName)
-	//tableName = strings.ToLower(tableName)
 	if t, ok := m.tables[tableName]; ok {
 		return t, nil
 	}
@@ -237,17 +312,29 @@ func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 	u.Infof("found file/table: %s   %p", obj.Name(), f)
 
 	exit := make(chan bool)
-	csv, err := datasource.NewCsvSource(tableName, 0, f, exit)
+	fi := &FileInfo{
+		F:     f,
+		Exit:  exit,
+		Table: tableName,
+	}
+
+	// TODO:   if no m.fileType inspect file name?
+	scannerMaker, exists := scannerGet(m.fileType)
+	if !exists || scannerMaker == nil {
+		return nil, fmt.Errorf("Could not find scanner for filetype %q", m.fileType)
+	}
+	scanner, err := scannerMaker(fi)
 	if err != nil {
-		u.Errorf("Could not open file for csv reading %v", err)
+		u.Errorf("Could not open file scanner %v err=%v", m.fileType, err)
 		return nil, err
 	}
 
 	t := schema.NewTable(tableName, nil)
-	t.SetColumns(csv.Columns())
+	t.SetColumns(scanner.Columns())
 
-	iter := csv.CreateIterator(nil)
+	iter := scanner.CreateIterator(nil)
 
+	// we are going to look at ~10 rows to create schema for it
 	if err = datasource.IntrospectTable(t, iter); err != nil {
 		u.Errorf("Could not introspect schema %v", err)
 		return nil, err

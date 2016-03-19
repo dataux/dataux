@@ -9,18 +9,19 @@ import (
 	"github.com/bmizerany/assert"
 	"github.com/lytics/sereno/embeddedetcd"
 
+	// Frontend's side-effect imports
+	_ "github.com/dataux/dataux/frontends/mysqlfe"
+
 	"github.com/araddon/qlbridge/schema"
-	"github.com/dataux/dataux/frontends/mysqlfe"
 	"github.com/dataux/dataux/models"
 	"github.com/dataux/dataux/planner"
+	"github.com/dataux/dataux/proxy"
 	"github.com/dataux/dataux/vendored/mixer/client"
-	mysqlproxy "github.com/dataux/dataux/vendored/mixer/proxy"
 )
 
 var (
 	_              = u.EMPTY
 	testServerOnce sync.Once
-	testListener   *TestListenerWraper
 	testDBOnce     sync.Once
 	testDB         *client.DB
 	Conf           *models.Config
@@ -101,6 +102,7 @@ sources : [
       type             : gcs
       gcsbucket        : "lytics-dataux-tests"
       path             : "tables/"
+      format           : "csv"
     }
   },
   {
@@ -110,6 +112,7 @@ sources : [
       type             : gcs
       gcsbucket        : "lytics-dataux-tests"
       path             : "baseball/"
+      format           : "csv"
     }
   },
   {
@@ -148,11 +151,7 @@ nodes : [
 
 `
 
-type TestListenerWraper struct {
-	*mysqlproxy.MysqlListener
-}
-
-func NewTestServer(t *testing.T) *TestListenerWraper {
+func NewTestServer(t *testing.T) {
 	f := func() {
 
 		assert.Tf(t, Conf != nil, "must load config without err: %v", Conf)
@@ -170,29 +169,16 @@ func NewTestServer(t *testing.T) *TestListenerWraper {
 
 		Schema, _ = ServerCtx.Schema("datauxtest")
 
-		handler, err := mysqlfe.NewMySqlHandler(ServerCtx)
-		assert.Tf(t, err == nil, "must create es handler without err: %v", err)
+		svr, err := proxy.NewServer(ServerCtx)
+		assert.T(t, err == nil, "must start without error ", err)
 
-		// Load our Frontend Listener's
-		models.ListenerRegister(mysqlproxy.ListenerType,
-			mysqlproxy.ListenerInit,
-			handler,
-		)
-
-		myl, err := mysqlproxy.NewMysqlListener(Conf.Frontends[0], Conf)
-		assert.Tf(t, err == nil, "must create listener without err: %v", err)
-
-		testListener = &TestListenerWraper{myl}
-
-		go testListener.Run(handler, make(chan bool))
+		go svr.Run()
 
 		// delay to ensure we have time to connect
 		time.Sleep(100 * time.Millisecond)
 	}
 
 	testServerOnce.Do(f)
-
-	return testListener
 }
 
 func RunTestServer(t *testing.T) {

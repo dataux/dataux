@@ -8,28 +8,29 @@ import (
 	"sync/atomic"
 
 	u "github.com/araddon/gou"
+
 	"github.com/dataux/dataux/models"
 )
 
 var (
 	// Ensure that we implement the interfaces we expect
-	_ models.Listener = (*MysqlListener)(nil)
+	_ models.Listener = (*mysqlListener)(nil)
 
-	// The "backend_type" for backends
-	// or the listener type for frontends
+	// or the listener type/name for this frontend connection
 	ListenerType = "mysql"
 
 	_ = u.EMPTY
 )
 
-func ListenerInit(feConf *models.ListenerConfig, conf *models.Config) (models.Listener, error) {
-	return NewMysqlListener(feConf, conf)
+func ListenerInit(feConf *models.ListenerConfig, conf *models.Config, sc models.StatementHandlerCreator) (models.Listener, error) {
+	return newMysqlListener(feConf, conf, sc)
 }
 
-func NewMysqlListener(feConf *models.ListenerConfig, conf *models.Config) (*MysqlListener, error) {
+func newMysqlListener(feConf *models.ListenerConfig, conf *models.Config, sc models.StatementHandlerCreator) (*mysqlListener, error) {
 
-	myl := new(MysqlListener)
+	myl := new(mysqlListener)
 
+	myl.sc = sc
 	myl.cfg = conf
 	myl.feconf = feConf
 	myl.addr = feConf.Addr
@@ -51,24 +52,30 @@ func NewMysqlListener(feConf *models.ListenerConfig, conf *models.Config) (*Mysq
 	return myl, nil
 }
 
-// MysqlListener implements proxy.Listener interface for
+// mysqlListener implements proxy.Listener interface for
 //  running listener connections for mysql
-type MysqlListener struct {
+type mysqlListener struct {
 	cfg         *models.Config
 	feconf      *models.ListenerConfig
+	sc          models.StatementHandlerCreator
+	handler     interface{}
 	connCt      int32 // current connection count
 	addr        string
 	user        string
 	password    string
 	running     bool
 	netlistener net.Listener
-	handle      models.ConnectionHandle
 }
 
-func (m *MysqlListener) Run(handle models.ConnectionHandle, stop chan bool) error {
+func (m *mysqlListener) Init(conf *models.ListenerConfig, svr *models.ServerCtx) error {
+	// m.svr = svr
+	// m.conf = conf
+	u.Warnf("has listener")
+	return nil
+}
 
-	m.handle = handle
-	//u.Debugf("using handler:  %T", handle)
+func (m *mysqlListener) Run(stop chan bool) error {
+
 	m.running = true
 
 	for m.running {
@@ -84,7 +91,7 @@ func (m *MysqlListener) Run(handle models.ConnectionHandle, stop chan bool) erro
 	return nil
 }
 
-func (m *MysqlListener) Close() error {
+func (m *mysqlListener) Close() error {
 	m.running = false
 	if m.netlistener != nil {
 		return m.netlistener.Close()
@@ -93,7 +100,7 @@ func (m *MysqlListener) Close() error {
 }
 
 // For each new client tcp connection to this proxy
-func (m *MysqlListener) OnConn(c net.Conn) {
+func (m *mysqlListener) OnConn(c net.Conn) {
 
 	conn := newConn(m, c)
 
@@ -122,23 +129,23 @@ func (m *MysqlListener) OnConn(c net.Conn) {
 	conn.Run()
 }
 
-func (m *MysqlListener) UpMaster(node string, addr string) error {
+func (m *mysqlListener) UpMaster(node string, addr string) error {
 
-	if shardHandler, ok := m.handle.(*HandlerSharded); ok {
+	if shardHandler, ok := m.handler.(*HandlerSharded); ok {
 		n := shardHandler.getNode(node)
 		if n == nil {
 			return fmt.Errorf("invalid node %s", node)
 		}
 		return n.upMaster(addr)
 	} else {
-		u.Warnf("UpMaster not implemented for T:%T", m.handle)
+		u.Warnf("UpMaster not implemented for T:%T", m.handler)
 	}
 	return nil
 }
 
-func (m *MysqlListener) UpSlave(node string, addr string) error {
+func (m *mysqlListener) UpSlave(node string, addr string) error {
 
-	if shardHandler, ok := m.handle.(*HandlerSharded); ok {
+	if shardHandler, ok := m.handler.(*HandlerSharded); ok {
 		n := shardHandler.getNode(node)
 		if n == nil {
 			return fmt.Errorf("invalid node %s", node)
@@ -146,13 +153,13 @@ func (m *MysqlListener) UpSlave(node string, addr string) error {
 
 		return n.upSlave(addr)
 	} else {
-		u.Warnf("UpSlave not implemented for T:%T", m.handle)
+		u.Warnf("UpSlave not implemented for T:%T", m.handler)
 	}
 	return nil
 }
-func (m *MysqlListener) DownMaster(node string) error {
+func (m *mysqlListener) DownMaster(node string) error {
 
-	if shardHandler, ok := m.handle.(*HandlerSharded); ok {
+	if shardHandler, ok := m.handler.(*HandlerSharded); ok {
 		n := shardHandler.getNode(node)
 		if n == nil {
 			return fmt.Errorf("invalid node %s", node)
@@ -160,14 +167,14 @@ func (m *MysqlListener) DownMaster(node string) error {
 		n.db = nil
 		return n.downMaster()
 	} else {
-		u.Warnf("DownMaster not implemented for T:%T", m.handle)
+		u.Warnf("DownMaster not implemented for T:%T", m.handler)
 	}
 	return nil
 }
 
-func (m *MysqlListener) DownSlave(node string) error {
+func (m *mysqlListener) DownSlave(node string) error {
 
-	if shardHandler, ok := m.handle.(*HandlerSharded); ok {
+	if shardHandler, ok := m.handler.(*HandlerSharded); ok {
 		return nil
 		n := shardHandler.getNode(node)
 		if n == nil {
@@ -175,7 +182,7 @@ func (m *MysqlListener) DownSlave(node string) error {
 		}
 		return n.downSlave()
 	} else {
-		u.Warnf("DownSlave not implemented for T:%T", m.handle)
+		u.Warnf("DownSlave not implemented for T:%T", m.handler)
 	}
 	return nil
 }

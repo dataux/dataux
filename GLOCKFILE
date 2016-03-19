@@ -1,6 +1,6 @@
 github.com/araddon/dateparse 2f41da3eb28d713ca2f45682fae66173fad5e85b
 github.com/araddon/gou c4d51044125da629d6f2aa594f25b45c451a7d2a
-github.com/araddon/qlbridge b145767e17ef5666eef977c0f79226dc3d252318
+github.com/araddon/qlbridge 3b765e2e2137814e43772c05f9807a3c13f9f5f4
 github.com/bitly/go-hostpool d0e59c22a56e8dadfed24f74f452cea5a52722d2
 github.com/bmizerany/assert e17e99893cb6509f428e1728281c2ad60a6b31e3
 github.com/coreos/etcd 207c92b62785d220edc74ed791fd8a22a18e378e
@@ -14,7 +14,7 @@ github.com/jmoiron/sqlx 398dd5876282499cdfd4cb8ea0f31a672abe9495
 github.com/kr/pretty e6ac2fc51e89a3249e82157fa0bb7a18ef9dd5bb
 github.com/kr/text bb797dc4fb8320488f47bf11de07a733d7233e1f
 github.com/leekchan/timeutil 28917288c48df3d2c1cfe468c273e0b2adda0aa5
-github.com/lytics/cloudstorage 9fd4b9eee08742c05f8be1f6943f2ff354e1714d
+github.com/lytics/cloudstorage 6e53bda60adbcbdb8b9184bef1fbd1fd2f6aae3d
 github.com/lytics/confl fc7bee8fab5c930d8947e22c9da6fd6948b6e3a7
 github.com/lytics/datemath 988020f3ad34814005ab10b6c7863e31672b5f63
 github.com/lytics/dfa 63e35f788f7fa5203fcd2dcd7e318da5a1b981e5
