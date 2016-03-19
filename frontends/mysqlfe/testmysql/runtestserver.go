@@ -33,7 +33,7 @@ var (
 func init() {
 	u.SetupLogging("debug")
 	u.SetColorOutput()
-	conf, err := models.LoadConfig(testConfigData)
+	conf, err := models.LoadConfig(TestConfigData)
 	if err != nil {
 		panic("must load confiig")
 	}
@@ -44,7 +44,7 @@ func SchemaLoader(name string) (*schema.Schema, error) {
 	return Schema, nil
 }
 
-var testConfigData = `
+var TestConfigData = `
 
 supress_recover: true
 
@@ -100,7 +100,7 @@ sources : [
     type     : cloudstore
     settings : {
       type             : gcs
-      gcsbucket        : "lytics-dataux-tests"
+      bucket           : "lytics-dataux-tests"
       path             : "tables/"
       format           : "csv"
     }
@@ -110,7 +110,7 @@ sources : [
     type     : cloudstore
     settings : {
       type             : gcs
-      gcsbucket        : "lytics-dataux-tests"
+      bucket           : "lytics-dataux-tests"
       path             : "baseball/"
       format           : "csv"
     }

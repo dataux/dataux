@@ -62,6 +62,7 @@ type FileSource struct {
 	ss             *schema.SourceSchema
 	lastLoad       time.Time
 	store          cloudstorage.Store
+	fh             FileHandler
 	tablenames     []string
 	tables         map[string]*schema.Table
 	files          map[string][]string
@@ -99,35 +100,8 @@ func (m *FileSource) Setup(ss *schema.SourceSchema) error {
 
 func (m *FileSource) Open(tableName string) (schema.SourceConn, error) {
 
-	u.Debugf("files open %q", tableName)
-	files := m.files[tableName]
-	//u.Debugf("filenames: ct=%d  %v", len(files), files)
-	if len(files) == 0 {
-		return nil, fmt.Errorf("Not files found for %q", tableName)
-	}
-
-	//Read the object back out of the cloud storage.
-	obj, err := m.store.Get(files[0])
-	if err != nil {
-		u.Errorf("could not read %q table %v", tableName, err)
-		return nil, err
-	}
-
-	f, err := obj.Open(cloudstorage.ReadOnly)
-	if err != nil {
-		u.Errorf("could not read %q table %v", tableName, err)
-		return nil, err
-	}
-	u.Infof("found file/table: %s   %p", obj.Name(), f)
-
-	exit := make(chan bool)
-	csv, err := datasource.NewCsvSource(tableName, 0, f, exit)
-	if err != nil {
-		u.Errorf("Could not open file for csv reading %v", err)
-		return nil, err
-	}
-
-	return csv, nil
+	u.Warnf("files open %q", tableName)
+	return m.loadScanner(tableName)
 }
 func (m *FileSource) Close() error     { return nil }
 func (m *FileSource) Tables() []string { return m.tablenames }
@@ -147,8 +121,34 @@ func (m *FileSource) init() error {
 		if fileType := conf.String("format"); fileType != "" {
 			m.fileType = fileType
 		}
+		// TODO:   if no m.fileType inspect file name?
+		fileHandler, exists := scannerGet(m.fileType)
+		if !exists || fileHandler == nil {
+			return fmt.Errorf("Could not find scanner for filetype %q", m.fileType)
+		}
+		m.fh = fileHandler
 	}
 	return nil
+}
+
+func FileInterpret(path string, obj cloudstorage.Object) (string, bool) {
+	fileName := obj.Name()
+	//u.Debugf("file %s", fileName)
+	fileName = strings.Replace(fileName, path, "", 1)
+	// Look for Folders
+	parts := strings.Split(fileName, "/")
+	if len(parts) > 1 {
+		return parts[0], true
+	} else {
+		parts = strings.Split(fileName, ".")
+		if len(parts) > 1 {
+			tableName := strings.ToLower(parts[0])
+			return tableName, true
+		} else {
+			u.Errorf("table not readable from filename %q  %#v", fileName, obj)
+		}
+	}
+	return "", false
 }
 
 func (m *FileSource) loadSchema() {
@@ -169,80 +169,32 @@ func (m *FileSource) loadSchema() {
 	tableList := make([]string, 0)
 	//u.Debugf("found %d files", len(objs))
 	for _, obj := range objs {
-		fileName := obj.Name()
-		//u.Debugf("file %s", fileName)
-		fileName = strings.Replace(fileName, m.path, "", 1)
-		parts := strings.Split(fileName, "/")
-		if len(parts) > 1 {
-			if _, exists := tables[parts[0]]; !exists {
-				//u.Infof("Nice, found new table: %q", parts[0])
-				tables[parts[0]] = struct{}{}
-				tableList = append(tableList, parts[0])
+		table, isFile := FileInterpret(m.path, obj)
+		if isFile {
+			if _, tableExists := tables[table]; !tableExists {
+				u.Debugf("Nice, found new table: %q", table)
+				tables[table] = struct{}{}
+				m.files[table] = make([]string, 0)
+				tableList = append(tableList, table)
 			}
-			m.files[parts[0]] = append(m.files[parts[0]], obj.Name())
-		} else {
-			parts = strings.Split(fileName, ".")
-			if len(parts) > 1 {
-				tableName := strings.ToLower(parts[0])
-				if _, exists := tables[tableName]; !exists {
-					//u.Infof("Nice, found new table: %q", tableName)
-					tables[parts[0]] = struct{}{}
-					tableList = append(tableList, tableName)
-				}
-				m.files[tableName] = append(m.files[tableName], obj.Name())
-			} else {
-				u.Errorf("table not readable from filename %#v", obj)
-			}
+			m.files[table] = append(m.files[table], obj.Name())
 		}
 	}
 	m.tablenames = tableList
-	u.Debugf("tables:  %v", tableList)
+	//u.Debugf("tables:  %v", tableList)
 	//u.Debugf("files: %v", m.files)
 }
 
 func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 
-	u.Infof("Table(%q)", tableName)
+	u.Debugf("Table(%q)", tableName)
 	if t, ok := m.tables[tableName]; ok {
 		return t, nil
 	}
 
-	//Read the object back out of the cloud storage and introspect
-	files := m.files[tableName]
-	if len(files) == 0 {
-		return nil, schema.ErrNotFound
-	}
-	fileName := files[0]
-	// fileName = "tables/article/article1.csv"
-	u.Debugf("opening: %q", fileName)
-	obj, err := m.store.Get(fileName)
+	scanner, err := m.loadScanner(tableName)
 	if err != nil {
-		u.Errorf("could not read %q table %v", tableName, err)
-		return nil, err
-	}
-
-	f, err := obj.Open(cloudstorage.ReadOnly)
-	if err != nil {
-		u.Errorf("could not read %q table %v", tableName, err)
-		return nil, err
-	}
-	u.Infof("found file/table: %s   %p", obj.Name(), f)
-
-	exit := make(chan bool)
-	fi := &FileInfo{
-		F:     f,
-		Exit:  exit,
-		Table: tableName,
-	}
-
-	// TODO:   if no m.fileType inspect file name?
-	scannerMaker, exists := scannerGet(m.fileType)
-	if !exists || scannerMaker == nil {
-		return nil, fmt.Errorf("Could not find scanner for filetype %q", m.fileType)
-	}
-	scanner, err := scannerMaker(fi)
-	if err != nil {
-		u.Errorf("Could not open file scanner %v err=%v", m.fileType, err)
+		u.Errorf("could not find scanner for table %q table err:%v", tableName, err)
 		return nil, err
 	}
 
@@ -259,6 +211,47 @@ func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 
 	m.tables[tableName] = t
 	return t, nil
+}
+
+func (m *FileSource) loadScanner(tableName string) (schema.Scanner, error) {
+
+	u.Debugf("loadScanner(%q)", tableName)
+
+	// Read the object from cloud storage
+	files := m.files[tableName]
+	if len(files) == 0 {
+		return nil, schema.ErrNotFound
+	}
+
+	// TODO:   page, partition
+	fileName := files[0]
+	u.Debugf("opening: %q", fileName)
+	obj, err := m.store.Get(fileName)
+	if err != nil {
+		u.Errorf("could not read %q table %v", tableName, err)
+		return nil, err
+	}
+
+	f, err := obj.Open(cloudstorage.ReadOnly)
+	if err != nil {
+		u.Errorf("could not read %q table %v", tableName, err)
+		return nil, err
+	}
+	u.Infof("found file: %s   %p", obj.Name(), f)
+
+	fi := &FileInfo{
+		F:     f,
+		Exit:  make(chan bool),
+		Table: tableName,
+	}
+
+	scanner, err := m.fh.Scanner(m.store, fi)
+	if err != nil {
+		u.Errorf("Could not open file scanner %v err=%v", m.fileType, err)
+		return nil, err
+	}
+
+	return scanner, err
 }
 
 func createConfStore(ss *schema.SourceSchema) (cloudstorage.Store, error) {
@@ -292,5 +285,6 @@ func createConfStore(ss *schema.SourceSchema) (cloudstorage.Store, error) {
 		c := localFilesConfig
 		config = &c
 	}
+	u.Infof("creating cloudstore from %#v", config)
 	return cloudstorage.NewStore(config)
 }
