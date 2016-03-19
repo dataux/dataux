@@ -107,6 +107,7 @@ func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
 	RunTestServer(t)
 	tu.ValidateQuerySpec(t, testSpec)
 }
+
 func createTestData(t *testing.T) {
 	store, err := createTestStore()
 	assert.T(t, err == nil)
@@ -184,6 +185,7 @@ func TestShowTables(t *testing.T) {
 	})
 	assert.Tf(t, found, "Must have found article table with show")
 }
+
 func TestSimpleRowSelect(t *testing.T) {
 	data := struct {
 		Title   string

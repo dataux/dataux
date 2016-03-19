@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"encoding/base64"
 	"encoding/gob"
 	"os"
 	"strconv"
@@ -119,7 +120,12 @@ func (m *SqlActor) Starting() dfa.Letter {
 	if err == nil && nodeCt64 > 0 {
 		nodeCt = int(nodeCt64)
 	}
-	pb := m.def.RawData["pb"]
+
+	//pb := m.def.RawData["pb"]
+	pb, err := base64.URLEncoding.DecodeString(m.def.Settings["pb64"])
+	if err != nil {
+		u.Errorf("Could not read sql pb %v", err)
+	}
 
 	p, err := plan.SelectPlanFromPbBytes(pb, m.conf.SchemaLoader)
 	if err != nil {

@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/signal"
@@ -51,11 +52,12 @@ type Server struct {
 	lastTaskId uint64
 }
 
-func (m *Server) startSqlActor(nodeCt, nodeId int, partition string, pb []byte, flow Flow, def *grid.ActorDef, p *plan.Select) error {
+func (m *Server) startSqlActor(nodeCt, nodeId int, partition string, pb string, flow Flow, def *grid.ActorDef, p *plan.Select) error {
 	//def := grid.NewActorDef(flow.NewContextualName("sqlactor"))
 	def.DefineType("sqlactor")
 	def.Define("flow", flow.Name())
-	def.RawData["pb"] = pb
+	//def.RawData["pb"] = pb
+	def.Settings["pb64"] = pb
 	def.Settings["partition"] = partition
 	def.Settings["node_ct"] = strconv.Itoa(nodeCt)
 	//u.Debugf("%p submitting start actor %s  nodeI=%d", m, def.ID(), nodeId)
@@ -77,8 +79,8 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 		u.Errorf("Could not protbuf marshal %v for %s", err, p.Stmt)
 		return err
 	}
-	//pbsBase := base64.URLEncoding.EncodeToString(pb)
-	//sqlNode.Settings["pb"] = pbsBase
+	// TODO:  send the instructions as a grid message NOT part of actor-def
+	pb64 := base64.URLEncoding.EncodeToString(pb)
 
 	nodeCt := 1
 	partitions := []string{""}
@@ -103,7 +105,7 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 	rp := ring.New(flow.NewContextualName("sqlactor"), nodeCt)
 	for i, def := range rp.ActorDefs() {
 		go func(ad *grid.ActorDef, nodeId int) {
-			if err = m.startSqlActor(nodeCt, nodeId, partitions[nodeId], pb, flow, ad, p); err != nil {
+			if err = m.startSqlActor(nodeCt, nodeId, partitions[nodeId], pb64, flow, ad, p); err != nil {
 				u.Errorf("Could not create sql actor %v", err)
 			}
 		}(def, i)

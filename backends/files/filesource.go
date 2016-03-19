@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"sync"
 	"time"
 
 	u "github.com/araddon/gou"
@@ -16,14 +15,29 @@ import (
 )
 
 var (
-	// the global file-scanners registry mutex
-	registryMu sync.Mutex
-	registry   = newScannerRegistry()
-
-	// implement interfaces
+	// ensure we implement interfaces
 	_ schema.DataSource = (*FileSource)(nil)
 
 	schemaRefreshInterval = time.Minute * 5
+
+	_ = u.EMPTY
+
+	// TODO:   move to test files
+	localFilesConfig = cloudstorage.CloudStoreContext{
+		LogggingContext: "unittest",
+		TokenSource:     cloudstorage.LocalFileSource,
+		LocalFS:         "/tmp/mockcloud",
+		TmpDir:          "/tmp/localcache",
+	}
+
+	// TODO:   complete manufacture this from config
+	gcsConfig = cloudstorage.CloudStoreContext{
+		LogggingContext: "dataux",
+		TokenSource:     cloudstorage.GCEDefaultOAuthToken,
+		Project:         "lytics-dev",
+		Bucket:          "lytics-dataux-tests",
+		TmpDir:          "/tmp/localcache",
+	}
 )
 
 const (
@@ -33,106 +47,6 @@ const (
 func init() {
 	// We need to register our DataSource provider here
 	datasource.Register(SourceType, NewFileSource())
-	Register("csv", csvMaker)
-}
-
-type FileScannerMaker func(*FileInfo) (schema.Scanner, error)
-
-var _ = u.EMPTY
-
-var localFilesConfig = cloudstorage.CloudStoreContext{
-	LogggingContext: "unittest",
-	TokenSource:     cloudstorage.LocalFileSource,
-	LocalFS:         "/tmp/mockcloud",
-	TmpDir:          "/tmp/localcache",
-}
-
-var gcsConfig = cloudstorage.CloudStoreContext{
-	LogggingContext: "dataux",
-	TokenSource:     cloudstorage.GCEDefaultOAuthToken,
-	Project:         "lytics-dev",
-	Bucket:          "lytics-dataux-tests",
-	TmpDir:          "/tmp/localcache",
-}
-
-func createConfStore(ss *schema.SourceSchema) (cloudstorage.Store, error) {
-
-	if ss == nil || ss.Conf == nil {
-		return nil, fmt.Errorf("No config info for files source")
-	}
-	u.Infof("json conf:\n%s", ss.Conf.Settings.PrettyJson())
-	cloudstorage.LogConstructor = func(prefix string) logging.Logger {
-		return logging.NewStdLogger(true, logging.DEBUG, prefix)
-	}
-
-	var config *cloudstorage.CloudStoreContext
-	conf := ss.Conf.Settings
-	switch ss.Conf.Settings.String("type") {
-	case "gcs", "":
-		c := gcsConfig
-		if proj := conf.String("project"); proj != "" {
-			c.Project = proj
-		}
-		if bkt := conf.String("bucket"); bkt != "" {
-			c.Bucket = bkt
-		}
-		if jwt := conf.String("jwt"); jwt != "" {
-			c.JwtFile = jwt
-		}
-		config = &c
-	case "localfs":
-		//os.RemoveAll("/tmp/mockcloud")
-		//os.RemoveAll("/tmp/localcache")
-		c := localFilesConfig
-		config = &c
-	}
-	return cloudstorage.NewStore(config)
-}
-
-// Register makes a file scanner available by the provided @scannerType
-//
-func Register(scannerType string, scanner FileScannerMaker) {
-	if scanner == nil {
-		panic("File scanners must not be nil")
-	}
-	scannerType = strings.ToLower(scannerType)
-	u.Debugf("global file-scanner register: %v %T scanner:%p", scannerType, scanner, scanner)
-	registryMu.Lock()
-	defer registryMu.Unlock()
-	if _, dupe := registry.scanners[scannerType]; dupe {
-		panic("Register called twice for scanner type " + scannerType)
-	}
-	registry.scanners[scannerType] = scanner
-}
-
-func scannerGet(scannerType string) (FileScannerMaker, bool) {
-	registryMu.Lock()
-	defer registryMu.Unlock()
-	scannerType = strings.ToLower(scannerType)
-	scanner, ok := registry.scanners[scannerType]
-	return scanner, ok
-}
-
-// Our internal map of different types of datasources that are registered
-// for our runtime system to use
-type scannerRegistry struct {
-	// Map of scanner name, to maker
-	scanners map[string]FileScannerMaker
-}
-
-func newScannerRegistry() *scannerRegistry {
-	return &scannerRegistry{
-		scanners: make(map[string]FileScannerMaker),
-	}
-}
-
-func csvMaker(f *FileInfo) (schema.Scanner, error) {
-	csv, err := datasource.NewCsvSource(f.Table, 0, f.F, f.Exit)
-	if err != nil {
-		u.Errorf("Could not open file for csv reading %v", err)
-		return nil, err
-	}
-	return csv, nil
 }
 
 // File DataSource for reading files, and scanning them allowing
@@ -155,12 +69,15 @@ type FileSource struct {
 	tablePerFolder bool
 	fileType       string // csv, json, proto, customname
 }
+
+// Struct of file info to supply to ScannerMakers
 type FileInfo struct {
-	Name     string
-	Table    string
-	Exit     chan bool
-	FileType string // csv, json, etc
-	F        io.Reader
+	Name      string    // Name, Path of file
+	Table     string    // Table name this file participates in
+	FileType  string    // csv, json, etc
+	Partition int       // which partition
+	F         io.Reader // Actual file reader
+	Exit      chan bool // exit channel to shutdown reader
 }
 
 func NewFileSource() schema.DataSource {
@@ -342,4 +259,38 @@ func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 
 	m.tables[tableName] = t
 	return t, nil
+}
+
+func createConfStore(ss *schema.SourceSchema) (cloudstorage.Store, error) {
+
+	if ss == nil || ss.Conf == nil {
+		return nil, fmt.Errorf("No config info for files source")
+	}
+	u.Infof("json conf:\n%s", ss.Conf.Settings.PrettyJson())
+	cloudstorage.LogConstructor = func(prefix string) logging.Logger {
+		return logging.NewStdLogger(true, logging.DEBUG, prefix)
+	}
+
+	var config *cloudstorage.CloudStoreContext
+	conf := ss.Conf.Settings
+	switch ss.Conf.Settings.String("type") {
+	case "gcs", "":
+		c := gcsConfig
+		if proj := conf.String("project"); proj != "" {
+			c.Project = proj
+		}
+		if bkt := conf.String("bucket"); bkt != "" {
+			c.Bucket = bkt
+		}
+		if jwt := conf.String("jwt"); jwt != "" {
+			c.JwtFile = jwt
+		}
+		config = &c
+	case "localfs":
+		//os.RemoveAll("/tmp/mockcloud")
+		//os.RemoveAll("/tmp/localcache")
+		c := localFilesConfig
+		config = &c
+	}
+	return cloudstorage.NewStore(config)
 }
