@@ -65,7 +65,7 @@ func (m *MySqlConnCreator) Init(conf *models.ListenerConfig, svr *models.ServerC
 // - it re-uses the HandlerShard with has schema, etc on it
 func (m *MySqlConnCreator) Open(connI interface{}) models.StatementHandler {
 
-	u.Infof("Open: ")
+	//u.Infof("Open: ")
 	handler := mySqlHandler{svr: m.svr}
 	handler.sess = NewMySqlSessionVars()
 

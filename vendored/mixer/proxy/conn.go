@@ -65,7 +65,7 @@ func newConn(m *mysqlListener, co net.Conn) *Conn {
 	c.pkg = mysql.NewPacketIO(co)
 
 	c.listener = m
-	u.Debugf("has sc? %#v", m.sc)
+	//u.Debugf("has sc? %#v", m.sc)
 	c.handler = m.sc.Open(c)
 
 	c.noRecover = c.listener.cfg.SupressRecover

@@ -100,10 +100,13 @@ func (m *FileSource) Setup(ss *schema.SourceSchema) error {
 
 func (m *FileSource) Open(tableName string) (schema.SourceConn, error) {
 
-	u.Warnf("files open %q", tableName)
+	//u.Debugf("files open %q", tableName)
 	return m.loadScanner(tableName)
 }
-func (m *FileSource) Close() error     { return nil }
+func (m *FileSource) Close() error {
+	u.Warnf("in filesource close")
+	return nil
+}
 func (m *FileSource) Tables() []string { return m.tablenames }
 func (m *FileSource) init() error {
 	if m.store == nil {
@@ -190,6 +193,7 @@ func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 
 	u.Debugf("Table(%q)", tableName)
 	if t, ok := m.tables[tableName]; ok {
+		u.Warnf("%p table?  %#v", t)
 		return t, nil
 	}
 
@@ -203,9 +207,9 @@ func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 
 	if schemaSource, hasSchema := scanner.(schema.SchemaProvider); hasSchema {
 
-		t, err := schemaSource.Table(tableName)
+		t, err = schemaSource.Table(tableName)
 		if err != nil {
-			u.Errorf("could not get table %v", err)
+			u.Errorf("could not get %T P:%p table %q %v", schemaSource, schemaSource, tableName, err)
 			return nil, err
 		}
 
@@ -222,14 +226,22 @@ func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 			return nil, err
 		}
 	}
-
+	if t == nil {
+		u.Warnf("wtf? nil")
+	}
 	m.tables[tableName] = t
 	return t, nil
 }
 
 func (m *FileSource) loadScanner(tableName string) (schema.Scanner, error) {
 
-	u.Debugf("loadScanner(%q)", tableName)
+	// t, ok := m.tables[tableName]
+	// if !ok {
+	// 	u.Warnf("%p no table?  %v", m, tableName)
+	// 	//return t, nil
+	// }
+
+	//u.Debugf("loadScanner(%q)  %#v", tableName, t)
 
 	// Read the object from cloud storage
 	files := m.files[tableName]
@@ -251,10 +263,11 @@ func (m *FileSource) loadScanner(tableName string) (schema.Scanner, error) {
 		u.Errorf("could not read %q table %v", tableName, err)
 		return nil, err
 	}
-	u.Infof("found file: %s   %p", obj.Name(), f)
+	//u.Infof("found file: %s   %p", obj.Name(), f)
 
 	fi := &FileInfo{
 		F:     f,
+		Name:  obj.Name(),
 		Exit:  make(chan bool),
 		Table: tableName,
 	}

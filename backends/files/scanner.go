@@ -14,7 +14,7 @@ import (
 var (
 	// the global file-scanners registry mutex
 	registryMu sync.Mutex
-	registry   = newScannerRegistry()
+	scanners   = make(map[string]FileHandler)
 
 	_ FileHandler = (*csvFiles)(nil)
 )
@@ -38,30 +38,17 @@ func RegisterFileScanner(scannerType string, fh FileHandler) {
 	u.Debugf("global FileHandler register: %v %T FileHandler:%p", scannerType, fh, fh)
 	registryMu.Lock()
 	defer registryMu.Unlock()
-	if _, dupe := registry.scanners[scannerType]; dupe {
+	if _, dupe := scanners[scannerType]; dupe {
 		panic("Register called twice for FileHandler type " + scannerType)
 	}
-	registry.scanners[scannerType] = fh
-}
-
-// Our internal map of different types of datasources that are registered
-// for our runtime system to use
-type scannerRegistry struct {
-	// Map of scanner name, to maker
-	scanners map[string]FileHandler
-}
-
-func newScannerRegistry() *scannerRegistry {
-	return &scannerRegistry{
-		scanners: make(map[string]FileHandler),
-	}
+	scanners[scannerType] = fh
 }
 
 func scannerGet(scannerType string) (FileHandler, bool) {
 	registryMu.Lock()
 	defer registryMu.Unlock()
 	scannerType = strings.ToLower(scannerType)
-	scanner, ok := registry.scanners[scannerType]
+	scanner, ok := scanners[scannerType]
 	return scanner, ok
 }
 

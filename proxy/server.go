@@ -143,7 +143,7 @@ func (m *Server) loadFrontends() error {
 					return err
 				}
 				m.listeners = append(m.listeners, listener)
-				u.Infof("Loaded listener %s ", name)
+				//u.Infof("Loaded listener %s ", name)
 			}
 		}
 	}

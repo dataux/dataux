@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -98,6 +99,17 @@ func (a *Article) Header() string {
 }
 func (a *Article) Row() string {
 	return fmt.Sprintf("%s,%s,%v,%v,%v,%v,%v", a.Title, a.Author, a.Count, a.Deleted, a.Created, a.Updated, a.F)
+}
+func (a *Article) UrlMsg() url.Values {
+	msg := url.Values{}
+	msg.Add("title", a.Title)
+	msg.Add("author", a.Author)
+	msg.Add("count", fmt.Sprintf("%v", a.Count))
+	msg.Add("deleted", fmt.Sprintf("%v", a.Deleted))
+	msg.Add("created", fmt.Sprintf("%v", a.Created))
+	msg.Add("updated", fmt.Sprintf("%v", a.Updated))
+	msg.Add("f", fmt.Sprintf("%v", a.F))
+	return msg
 }
 
 type User struct {

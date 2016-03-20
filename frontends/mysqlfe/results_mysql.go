@@ -81,7 +81,7 @@ func schemaWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 	return func(_ *plan.Context, msg schema.Message) bool {
 
-		//u.Debugf("in schemaWrite:  %#v", msg)
+		u.Debugf("in schemaWrite:  %#v", msg)
 		if !m.wroteHeaders {
 			m.WriteHeaders()
 		}
@@ -131,6 +131,9 @@ func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 	return func(_ *plan.Context, msg schema.Message) bool {
 
+		if msg == nil {
+			return false
+		}
 		//u.Debugf("in resultWrite:  %#v", msg)
 		if !m.wroteHeaders {
 			m.WriteHeaders()
