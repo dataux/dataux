@@ -151,7 +151,7 @@ nodes : [
 
 `
 
-func NewTestServer(t *testing.T) {
+func NewTestServerForDb(t *testing.T, db string) {
 	f := func() {
 
 		assert.Tf(t, Conf != nil, "must load config without err: %v", Conf)
@@ -167,7 +167,7 @@ func NewTestServer(t *testing.T) {
 		ServerCtx = models.NewServerCtx(Conf)
 		ServerCtx.Init()
 
-		Schema, _ = ServerCtx.Schema("datauxtest")
+		Schema, _ = ServerCtx.Schema(db)
 
 		svr, err := proxy.NewServer(ServerCtx)
 		assert.T(t, err == nil, "must start without error ", err)
@@ -179,6 +179,10 @@ func NewTestServer(t *testing.T) {
 	}
 
 	testServerOnce.Do(f)
+}
+
+func NewTestServer(t *testing.T) {
+	NewTestServerForDb(t, "datauxtest")
 }
 
 func RunTestServer(t *testing.T) {

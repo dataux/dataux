@@ -169,7 +169,8 @@ func (m *FileSource) loadSchema() {
 	tableList := make([]string, 0)
 	//u.Debugf("found %d files", len(objs))
 	for _, obj := range objs {
-		table, isFile := FileInterpret(m.path, obj)
+		//table, isFile := FileInterpret(m.path, obj)
+		table, isFile := m.fh.File(m.path, obj)
 		if isFile {
 			if _, tableExists := tables[table]; !tableExists {
 				u.Debugf("Nice, found new table: %q", table)
@@ -198,15 +199,28 @@ func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 		return nil, err
 	}
 
-	t := schema.NewTable(tableName, nil)
-	t.SetColumns(scanner.Columns())
+	var t *schema.Table
 
-	iter := scanner.CreateIterator(nil)
+	if schemaSource, hasSchema := scanner.(schema.SchemaProvider); hasSchema {
 
-	// we are going to look at ~10 rows to create schema for it
-	if err = datasource.IntrospectTable(t, iter); err != nil {
-		u.Errorf("Could not introspect schema %v", err)
-		return nil, err
+		t, err := schemaSource.Table(tableName)
+		if err != nil {
+			u.Errorf("could not get table %v", err)
+			return nil, err
+		}
+
+	} else {
+
+		t = schema.NewTable(tableName, nil)
+		t.SetColumns(scanner.Columns())
+
+		iter := scanner.CreateIterator(nil)
+
+		// we are going to look at ~10 rows to create schema for it
+		if err = datasource.IntrospectTable(t, iter); err != nil {
+			u.Errorf("Could not introspect schema %v", err)
+			return nil, err
+		}
 	}
 
 	m.tables[tableName] = t
