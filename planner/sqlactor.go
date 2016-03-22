@@ -114,7 +114,6 @@ func (a *SqlActor) Act(g grid.Grid, exit <-chan bool) bool {
 func (m *SqlActor) Starting() dfa.Letter {
 
 	//u.Debugf("%p settings: %v", m, m.def.Settings)
-	//u.LogTracef(u.WARN, "wat")
 	nodeCt := 1
 	nodeCt64, err := strconv.ParseInt(m.def.Settings["node_ct"], 10, 64)
 	if err == nil && nodeCt64 > 0 {
@@ -122,10 +121,12 @@ func (m *SqlActor) Starting() dfa.Letter {
 	}
 
 	//pb := m.def.RawData["pb"]
-	pb, err := base64.URLEncoding.DecodeString(m.def.Settings["pb64"])
+	pb64 := m.def.Settings["pb64"]
+	pb, err := base64.URLEncoding.DecodeString(pb64)
 	if err != nil {
 		u.Errorf("Could not read sql pb %v", err)
 	}
+	//u.Infof("pb64:  %s", pb64)
 
 	p, err := plan.SelectPlanFromPbBytes(pb, m.conf.SchemaLoader)
 	if err != nil {
@@ -177,8 +178,6 @@ func (m *SqlActor) Starting() dfa.Letter {
 
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-
-	//time.Sleep(3 * time.Second)
 
 	//u.Debugf("%p starting actor %#v  settings:%v", m, m.flow.Name(), m.def.Settings)
 

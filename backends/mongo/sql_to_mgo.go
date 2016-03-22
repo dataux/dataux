@@ -194,14 +194,16 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 					if pt.Id == partitionId {
 						//u.Debugf("partition: %s   %#v", partitionId, pt)
 						m.partition = pt
+						var partitionFilter bson.M
+						if pt.Left == "" {
+							partitionFilter = bson.M{p.Tbl.Partition.Keys[0]: bson.M{"$lt": pt.Right}}
+						} else if pt.Right == "" {
+							partitionFilter = bson.M{p.Tbl.Partition.Keys[0]: bson.M{"$gte": pt.Left}}
+						}
 						if len(m.filter) == 0 {
-							if pt.Left == "" {
-								m.filter = bson.M{p.Tbl.Partition.Keys[0]: bson.M{"$lt": pt.Right}}
-							} else if pt.Right == "" {
-								m.filter = bson.M{p.Tbl.Partition.Keys[0]: bson.M{"$gte": pt.Left}}
-							} else {
-
-							}
+							m.filter = partitionFilter
+						} else {
+							m.filter = bson.M{"$and": []bson.M{partitionFilter, m.filter}}
 						}
 					}
 				}

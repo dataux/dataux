@@ -50,8 +50,8 @@ func init() {
 }
 
 // File DataSource for reading files, and scanning them allowing
-//  the rows to be treated as a scannable dataset, like doing a full
-//  scan in mysql.
+//  the contents to be treated as a scannable dataset, like doing a full
+//  table scan in mysql.  But, you can partition across files.
 //
 // - readers:      s3, gcs, local-fs
 // - tablesource:  translate lists of files into tables.  Normally we would have
@@ -65,24 +65,34 @@ type FileSource struct {
 	fh             FileHandler
 	tablenames     []string
 	tables         map[string]*schema.Table
-	files          map[string][]string
+	files          map[string][]*FileInfo
 	path           string
 	tablePerFolder bool
 	fileType       string // csv, json, proto, customname
+	Partitioner    string // random, ??  (date, keyed?)
+}
+
+// Struct of file info
+type FileInfo struct {
+	Name      string // Name, Path of file
+	Table     string // Table name this file participates in
+	FileType  string // csv, json, etc
+	Partition int    // which partition
 }
 
 // Struct of file info to supply to ScannerMakers
-type FileInfo struct {
-	Name      string    // Name, Path of file
-	Table     string    // Table name this file participates in
-	FileType  string    // csv, json, etc
-	Partition int       // which partition
-	F         io.Reader // Actual file reader
-	Exit      chan bool // exit channel to shutdown reader
+type FileReader struct {
+	*FileInfo
+	F    io.Reader // Actual file reader
+	Exit chan bool // exit channel to shutdown reader
 }
 
 func NewFileSource() schema.DataSource {
-	m := FileSource{tables: make(map[string]*schema.Table)}
+	m := FileSource{
+		tables:     make(map[string]*schema.Table),
+		files:      make(map[string][]*FileInfo),
+		tablenames: make([]string, 0),
+	}
 	return &m
 }
 
@@ -99,14 +109,10 @@ func (m *FileSource) Setup(ss *schema.SourceSchema) error {
 }
 
 func (m *FileSource) Open(tableName string) (schema.SourceConn, error) {
-
 	//u.Debugf("files open %q", tableName)
 	return m.loadScanner(tableName)
 }
-func (m *FileSource) Close() error {
-	u.Warnf("in filesource close")
-	return nil
-}
+func (m *FileSource) Close() error     { return nil }
 func (m *FileSource) Tables() []string { return m.tablenames }
 func (m *FileSource) init() error {
 	if m.store == nil {
@@ -124,6 +130,9 @@ func (m *FileSource) init() error {
 		if fileType := conf.String("format"); fileType != "" {
 			m.fileType = fileType
 		}
+		if partitioner := conf.String("partitioner"); partitioner != "" {
+			m.Partitioner = partitioner
+		}
 		// TODO:   if no m.fileType inspect file name?
 		fileHandler, exists := scannerGet(m.fileType)
 		if !exists || fileHandler == nil {
@@ -134,24 +143,24 @@ func (m *FileSource) init() error {
 	return nil
 }
 
-func FileInterpret(path string, obj cloudstorage.Object) (string, bool) {
+func FileInterpret(path string, obj cloudstorage.Object) *FileInfo {
 	fileName := obj.Name()
 	//u.Debugf("file %s", fileName)
 	fileName = strings.Replace(fileName, path, "", 1)
 	// Look for Folders
 	parts := strings.Split(fileName, "/")
 	if len(parts) > 1 {
-		return parts[0], true
+		return &FileInfo{Table: parts[0], Name: obj.Name()}
 	} else {
 		parts = strings.Split(fileName, ".")
 		if len(parts) > 1 {
 			tableName := strings.ToLower(parts[0])
-			return tableName, true
+			return &FileInfo{Table: tableName, Name: obj.Name()}
 		} else {
 			u.Errorf("table not readable from filename %q  %#v", fileName, obj)
 		}
 	}
-	return "", false
+	return nil
 }
 
 func (m *FileSource) loadSchema() {
@@ -161,32 +170,25 @@ func (m *FileSource) loadSchema() {
 	q := cloudstorage.NewQuery(m.path)
 	//q.LimitMatch = ".csv"
 	//q.Delimiter = "/"
-	q.Sorted()
+	q.Sorted() // We need to sort this by reverse to go back to front?
 	objs, err := m.store.List(q)
 	if err != nil {
 		u.Errorf("could not open list err=%v", err)
 		return
 	}
-	tables := make(map[string]struct{})
-	m.files = make(map[string][]string)
-	tableList := make([]string, 0)
 	//u.Debugf("found %d files", len(objs))
 	for _, obj := range objs {
 		//table, isFile := FileInterpret(m.path, obj)
-		table, isFile := m.fh.File(m.path, obj)
-		if isFile {
-			if _, tableExists := tables[table]; !tableExists {
-				u.Debugf("Nice, found new table: %q", table)
-				tables[table] = struct{}{}
-				m.files[table] = make([]string, 0)
-				tableList = append(tableList, table)
+		fi := m.fh.File(m.path, obj)
+		if fi != nil && fi.Name != "" {
+			if _, tableExists := m.files[fi.Table]; !tableExists {
+				u.Debugf("Nice, found new table: %q", fi.Table)
+				m.files[fi.Table] = make([]*FileInfo, 0)
+				m.tablenames = append(m.tablenames, fi.Table)
 			}
-			m.files[table] = append(m.files[table], obj.Name())
+			m.files[fi.Table] = append(m.files[fi.Table], fi)
 		}
 	}
-	m.tablenames = tableList
-	//u.Debugf("tables:  %v", tableList)
-	//u.Debugf("files: %v", m.files)
 }
 
 func (m *FileSource) Table(tableName string) (*schema.Table, error) {
@@ -235,14 +237,6 @@ func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 
 func (m *FileSource) loadScanner(tableName string) (schema.Scanner, error) {
 
-	// t, ok := m.tables[tableName]
-	// if !ok {
-	// 	u.Warnf("%p no table?  %v", m, tableName)
-	// 	//return t, nil
-	// }
-
-	//u.Debugf("loadScanner(%q)  %#v", tableName, t)
-
 	// Read the object from cloud storage
 	files := m.files[tableName]
 	if len(files) == 0 {
@@ -250,9 +244,9 @@ func (m *FileSource) loadScanner(tableName string) (schema.Scanner, error) {
 	}
 
 	// TODO:   page, partition
-	fileName := files[0]
-	u.Debugf("opening: %q", fileName)
-	obj, err := m.store.Get(fileName)
+	fi := files[0]
+	u.Debugf("opening: %q", fi.Name)
+	obj, err := m.store.Get(fi.Name)
 	if err != nil {
 		u.Errorf("could not read %q table %v", tableName, err)
 		return nil, err
@@ -265,14 +259,13 @@ func (m *FileSource) loadScanner(tableName string) (schema.Scanner, error) {
 	}
 	//u.Infof("found file: %s   %p", obj.Name(), f)
 
-	fi := &FileInfo{
-		F:     f,
-		Name:  obj.Name(),
-		Exit:  make(chan bool),
-		Table: tableName,
+	fr := &FileReader{
+		F:        f,
+		Exit:     make(chan bool),
+		FileInfo: fi,
 	}
 
-	scanner, err := m.fh.Scanner(m.store, fi)
+	scanner, err := m.fh.Scanner(m.store, fr)
 	if err != nil {
 		u.Errorf("Could not open file scanner %v err=%v", m.fileType, err)
 		return nil, err
@@ -286,15 +279,16 @@ func createConfStore(ss *schema.SourceSchema) (cloudstorage.Store, error) {
 	if ss == nil || ss.Conf == nil {
 		return nil, fmt.Errorf("No config info for files source")
 	}
-	u.Infof("json conf:\n%s", ss.Conf.Settings.PrettyJson())
+	//u.Infof("json conf:\n%s", ss.Conf.Settings.PrettyJson())
 	cloudstorage.LogConstructor = func(prefix string) logging.Logger {
 		return logging.NewStdLogger(true, logging.DEBUG, prefix)
 	}
 
 	var config *cloudstorage.CloudStoreContext
 	conf := ss.Conf.Settings
-	switch ss.Conf.Settings.String("type") {
-	case "gcs", "":
+	storeType := ss.Conf.Settings.String("type")
+	switch storeType {
+	case "gcs":
 		c := gcsConfig
 		if proj := conf.String("project"); proj != "" {
 			c.Project = proj
@@ -311,7 +305,9 @@ func createConfStore(ss *schema.SourceSchema) (cloudstorage.Store, error) {
 		//os.RemoveAll("/tmp/localcache")
 		c := localFilesConfig
 		config = &c
+	default:
+		return nil, fmt.Errorf("Unrecognized filestore type %q expected [gcs,localfs]", storeType)
 	}
-	u.Infof("creating cloudstore from %#v", config)
+	//u.Debugf("creating cloudstore from %#v", config)
 	return cloudstorage.NewStore(config)
 }

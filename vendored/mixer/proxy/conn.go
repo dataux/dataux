@@ -327,7 +327,7 @@ func (c *Conn) WriteOK(r *mysql.Result) error {
 		data = append(data, 0, 0)
 	}
 	if c.capability&mysql.CLIENT_SESSION_TRACK > 0 {
-		u.Debugf("supports Session Track?")
+		//u.Debugf("supports Session Track?")
 		//data = append(data, byte(r.Status), byte(r.Status>>8))
 		//data = append(data, 0, 0)
 	}

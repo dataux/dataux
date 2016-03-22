@@ -25,8 +25,8 @@ func init() {
 
 // a factory to create Scanners for a speciffic format type such as csv, json
 type FileHandler interface {
-	File(path string, obj cloudstorage.Object) (table string, isFile bool)
-	Scanner(store cloudstorage.Store, f *FileInfo) (schema.Scanner, error)
+	File(path string, obj cloudstorage.Object) *FileInfo
+	Scanner(store cloudstorage.Store, f *FileReader) (schema.Scanner, error)
 }
 
 // Register a file scanner maker available by the provided @scannerType
@@ -55,10 +55,10 @@ func scannerGet(scannerType string) (FileHandler, bool) {
 type csvFiles struct {
 }
 
-func (m *csvFiles) File(path string, obj cloudstorage.Object) (string, bool) {
+func (m *csvFiles) File(path string, obj cloudstorage.Object) *FileInfo {
 	return FileInterpret(path, obj)
 }
-func (m *csvFiles) Scanner(store cloudstorage.Store, f *FileInfo) (schema.Scanner, error) {
+func (m *csvFiles) Scanner(store cloudstorage.Store, f *FileReader) (schema.Scanner, error) {
 	csv, err := datasource.NewCsvSource(f.Table, 0, f.F, f.Exit)
 	if err != nil {
 		u.Errorf("Could not open file for csv reading %v", err)

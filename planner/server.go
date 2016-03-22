@@ -52,15 +52,15 @@ type Server struct {
 	lastTaskId uint64
 }
 
-func (m *Server) startSqlActor(nodeCt, nodeId int, partition string, pb string, flow Flow, def *grid.ActorDef, p *plan.Select) error {
+func (m *Server) startSqlActor(actorCt, actorId int, partition string, pb string, flow Flow, def *grid.ActorDef, p *plan.Select) error {
 	//def := grid.NewActorDef(flow.NewContextualName("sqlactor"))
 	def.DefineType("sqlactor")
 	def.Define("flow", flow.Name())
 	//def.RawData["pb"] = pb
 	def.Settings["pb64"] = pb
 	def.Settings["partition"] = partition
-	def.Settings["node_ct"] = strconv.Itoa(nodeCt)
-	//u.Debugf("%p submitting start actor %s  nodeI=%d", m, def.ID(), nodeId)
+	def.Settings["node_ct"] = strconv.Itoa(actorCt)
+	//u.Debugf("%p submitting start actor %s  nodeI=%d", m, def.ID(), actorId)
 	err := m.Grid.StartActor(def)
 	//u.Debugf("%p after submit start actor", m)
 	if err != nil {
@@ -71,7 +71,7 @@ func (m *Server) startSqlActor(nodeCt, nodeId int, partition string, pb string, 
 
 func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select) error {
 
-	//u.Debugf("%p master starting job %s", m, flow)
+	u.Debugf("%p master starting job %s", m, p.Stmt.String())
 
 	// marshal plan to Protobuf for transport
 	pb, err := p.Marshal()
@@ -81,8 +81,9 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 	}
 	// TODO:  send the instructions as a grid message NOT part of actor-def
 	pb64 := base64.URLEncoding.EncodeToString(pb)
+	//u.Infof("pb64:  %s", pb64)
 
-	nodeCt := 1
+	actorCt := 1
 	partitions := []string{""}
 	if len(p.Stmt.With) > 0 && p.Stmt.With.Bool("distributed") {
 		//u.Warnf("distribution instructions node_ct:%v", p.Stmt.With.Int("node_ct"))
@@ -90,7 +91,7 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 			if f.Tbl != nil {
 				if f.Tbl.Partition != nil {
 					partitions = make([]string, len(f.Tbl.Partition.Partitions))
-					nodeCt = len(f.Tbl.Partition.Partitions)
+					actorCt = len(f.Tbl.Partition.Partitions)
 					for i, part := range f.Tbl.Partition.Partitions {
 						//u.Warnf("Found Partitions for %q = %#v", f.Tbl.Name, part)
 						partitions[i] = part.Id
@@ -102,10 +103,11 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 		u.Warnf("TODO:  NOT Distributed, don't start tasks!")
 	}
 
-	rp := ring.New(flow.NewContextualName("sqlactor"), nodeCt)
+	rp := ring.New(flow.NewContextualName("sqlactor"), actorCt)
+	u.Infof("running distributed sql query with %d actors", actorCt)
 	for i, def := range rp.ActorDefs() {
-		go func(ad *grid.ActorDef, nodeId int) {
-			if err = m.startSqlActor(nodeCt, nodeId, partitions[nodeId], pb64, flow, ad, p); err != nil {
+		go func(ad *grid.ActorDef, actorId int) {
+			if err = m.startSqlActor(actorCt, actorId, partitions[actorId], pb64, flow, ad, p); err != nil {
 				u.Errorf("Could not create sql actor %v", err)
 			}
 		}(def, i)
