@@ -9,24 +9,26 @@ import (
 	"github.com/araddon/qlbridge/plan"
 )
 
-var _ = u.EMPTY
+var (
+	_ exec.Task = (*SourceNats)(nil)
+)
 
-// Nats Net-Channel Sink
+// A SinkNats task that receives messages that optionally may have been
+//   hashed to be sent via nats to a nats source consumer.
+//
+//   taska-1 ->  hash-key -> nats-sink--> \                 / --> nats-source -->
+//                                         \               /
+//                                          --> gnatsd  -->
+//                                         /               \
+//   taska-2 ->  hash-key -> nats-sink--> /                 \ --> nats-source -->
+//
 type SinkNats struct {
 	*exec.TaskBase
 	tx          grid.Sender
 	destination string
 }
 
-// A SinkNats task that receives messages that optionally may have been
-//   hashed to be sent via nats to a source consumer.
-//
-//   taska-1 ->  hash-key  \                / --> nats-source -->
-//                          \              /
-//                           --nats-sink-->   --> nats-source -->
-//                          /              \
-//   taska-2 ->  hash-key  /                \ --> nats-source -->
-//
+// New nats sink
 func NewSinkNats(ctx *plan.Context, destination string, tx grid.Sender) *SinkNats {
 	return &SinkNats{
 		TaskBase:    exec.NewTaskBase(ctx),
@@ -35,9 +37,7 @@ func NewSinkNats(ctx *plan.Context, destination string, tx grid.Sender) *SinkNat
 	}
 }
 
-func (m *SinkNats) Copy() *SinkNats { return &SinkNats{} }
-func (m *SinkNats) Close() error    { return m.TaskBase.Close() }
-
+func (m *SinkNats) Close() error { return m.TaskBase.Close() }
 func (m *SinkNats) Run() error {
 
 	inCh := m.MessageIn()

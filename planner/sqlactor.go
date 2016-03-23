@@ -152,6 +152,9 @@ func (m *SqlActor) Starting() dfa.Letter {
 
 	//u.Debugf("nodeCt:%v  run executor walk select %#v from ct? %v", nodeCt, p.Stmt.With, len(p.From))
 	for _, f := range p.From {
+		if len(f.Custom) == 0 {
+			f.Custom = make(u.JsonHelper)
+		}
 		f.Custom["partition"] = m.def.Settings["partition"]
 		//u.Infof("from: %#v", f.Custom)
 	}
