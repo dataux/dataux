@@ -39,7 +39,7 @@ type SqlToMgo struct {
 	p              *plan.Source
 	tbl            *schema.Table
 	sel            *rel.SqlSelect
-	schema         *schema.SourceSchema
+	schema         *schema.SchemaSource
 	sess           *mgo.Session
 	filter         bson.M
 	aggs           bson.M
@@ -56,7 +56,7 @@ type SqlToMgo struct {
 func NewSqlToMgo(table *schema.Table, sess *mgo.Session) *SqlToMgo {
 	sm := &SqlToMgo{
 		tbl:    table,
-		schema: table.SourceSchema,
+		schema: table.SchemaSource,
 		sess:   sess,
 	}
 	//u.Debugf("new SqlToMgo %p", sm)

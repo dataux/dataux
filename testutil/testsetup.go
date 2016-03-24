@@ -167,6 +167,7 @@ func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
 		}
 
 	case len(testSpec.Sql) > 0:
+		//u.Debugf("----ABOUT TO QUERY")
 		rows, err := dbx.Queryx(testSpec.Sql)
 		assert.Tf(t, err == nil, "%v", err)
 		defer rows.Close()

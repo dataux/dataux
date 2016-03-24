@@ -71,7 +71,7 @@ func (m *ServerCtx) loadConfig() error {
 		// find the Source config for eached named db/source
 		for _, sourceName := range schemaConf.Sources {
 
-			var sourceConf *schema.SourceConfig
+			var sourceConf *schema.ConfigSource
 			// we must find a source conf by name
 			for _, sc := range m.Config.Sources {
 				//u.Debugf("sc: %s %#v", sourceName, sc)
@@ -85,7 +85,7 @@ func (m *ServerCtx) loadConfig() error {
 				return fmt.Errorf("Could not find Source Config for %v", sourceName)
 			}
 
-			ss := schema.NewSourceSchema(sourceName, sourceConf.SourceType)
+			ss := schema.NewSchemaSource(sourceName, sourceConf.SourceType)
 			ss.Conf = sourceConf
 			ss.Schema = sch
 			//u.Infof("found sourceName: %q schema.Name=%q conf=%+v", sourceName, ss.Name, sourceConf)

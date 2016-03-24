@@ -13,7 +13,7 @@ import (
 
 var (
 	// implement interfaces
-	_ schema.DataSource = (*ElasticsearchDataSource)(nil)
+	_ schema.Source = (*ElasticsearchDataSource)(nil)
 )
 
 const (
@@ -26,11 +26,11 @@ func init() {
 }
 
 type ElasticsearchDataSource struct {
-	srcschema *schema.SourceSchema
-	conf      *schema.SourceConfig
+	srcschema *schema.SchemaSource
+	conf      *schema.ConfigSource
 }
 
-func (m *ElasticsearchDataSource) Setup(ss *schema.SourceSchema) error {
+func (m *ElasticsearchDataSource) Setup(ss *schema.SchemaSource) error {
 
 	if m.srcschema != nil {
 		return nil
@@ -59,7 +59,7 @@ func (m *ElasticsearchDataSource) Setup(ss *schema.SourceSchema) error {
 	return nil
 }
 
-func (m *ElasticsearchDataSource) Open(schemaName string) (schema.SourceConn, error) {
+func (m *ElasticsearchDataSource) Open(schemaName string) (schema.Conn, error) {
 	//u.Debugf("Open(%v)", schemaName)
 	tbl, err := m.srcschema.Table(schemaName)
 	if err != nil {
@@ -76,7 +76,7 @@ func (m *ElasticsearchDataSource) Open(schemaName string) (schema.SourceConn, er
 
 func (m *ElasticsearchDataSource) Close() error { return nil }
 
-func (m *ElasticsearchDataSource) DataSource() schema.DataSource {
+func (m *ElasticsearchDataSource) DataSource() schema.Source {
 	return m
 }
 
@@ -196,7 +196,7 @@ func (m *ElasticsearchDataSource) loadTableSchema(table string) (*schema.Table, 
 	return tbl, nil
 }
 
-func buildEsFields(s *schema.SourceSchema, tbl *schema.Table, jh u.JsonHelper, prefix string, depth int) {
+func buildEsFields(s *schema.SchemaSource, tbl *schema.Table, jh u.JsonHelper, prefix string, depth int) {
 	for field, _ := range jh {
 
 		if h := jh.Helper(field); len(h) > 0 {

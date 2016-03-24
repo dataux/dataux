@@ -88,7 +88,7 @@ func createTestStore() (cloudstorage.Store, error) {
 }
 
 func clearStore(t *testing.T, store cloudstorage.Store) {
-	q := cloudstorage.NewQuery("")
+	q := cloudstorage.Query{}
 	q.Sorted()
 	objs, err := store.List(q)
 	assert.T(t, err == nil)

@@ -34,7 +34,7 @@ var (
 	ErrNoSchema = fmt.Errorf("No schema or configuration exists")
 
 	// Ensure our Google DataStore implements datasource.DataSource interface
-	_ schema.DataSource = (*GoogleDSDataSource)(nil)
+	_ schema.Source = (*GoogleDSDataSource)(nil)
 )
 
 func init() {
@@ -55,8 +55,8 @@ type GoogleDSDataSource struct {
 	authConfig     *jwt.Config
 	dsCtx          context.Context
 	dsClient       *datastore.Client
-	conf           *schema.SourceConfig
-	schema         *schema.SourceSchema
+	conf           *schema.ConfigSource
+	schema         *schema.SchemaSource
 	mu             sync.Mutex
 	closed         bool
 }
@@ -67,7 +67,7 @@ type DatastoreMutator struct {
 	ds  *GoogleDSDataSource
 }
 
-func (m *GoogleDSDataSource) Setup(ss *schema.SourceSchema) error {
+func (m *GoogleDSDataSource) Setup(ss *schema.SchemaSource) error {
 
 	if m.schema != nil {
 		return nil
@@ -158,14 +158,14 @@ func (m *GoogleDSDataSource) connect() error {
 	return nil
 }
 
-func (m *GoogleDSDataSource) DataSource() schema.DataSource {
+func (m *GoogleDSDataSource) DataSource() schema.Source {
 	return m
 }
 func (m *GoogleDSDataSource) Tables() []string {
 	return m.schema.Tables()
 }
 
-func (m *GoogleDSDataSource) Open(tableName string) (schema.SourceConn, error) {
+func (m *GoogleDSDataSource) Open(tableName string) (schema.Conn, error) {
 	u.Debugf("Open(%v)", tableName)
 	if m.schema == nil {
 		u.Warnf("no schema?")

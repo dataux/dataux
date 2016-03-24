@@ -1,3 +1,7 @@
+// A cloud (gcs, tbd s3) and local file datasource that translates
+// json, csv, files into appropriate interface for qlbridge DataSource
+// so we can run queries.  Provides FileHandler interface to allow
+// custom file type handling
 package files
 
 import (
@@ -26,7 +30,7 @@ func init() {
 // a factory to create Scanners for a speciffic format type such as csv, json
 type FileHandler interface {
 	File(path string, obj cloudstorage.Object) *FileInfo
-	Scanner(store cloudstorage.Store, f *FileReader) (schema.Scanner, error)
+	Scanner(store cloudstorage.Store, fr *FileReader) (schema.ConnScanner, error)
 }
 
 // Register a file scanner maker available by the provided @scannerType
@@ -58,8 +62,8 @@ type csvFiles struct {
 func (m *csvFiles) File(path string, obj cloudstorage.Object) *FileInfo {
 	return FileInterpret(path, obj)
 }
-func (m *csvFiles) Scanner(store cloudstorage.Store, f *FileReader) (schema.Scanner, error) {
-	csv, err := datasource.NewCsvSource(f.Table, 0, f.F, f.Exit)
+func (m *csvFiles) Scanner(store cloudstorage.Store, fr *FileReader) (schema.ConnScanner, error) {
+	csv, err := datasource.NewCsvSource(fr.Table, 0, fr.F, fr.Exit)
 	if err != nil {
 		u.Errorf("Could not open file for csv reading %v", err)
 		return nil, err

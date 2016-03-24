@@ -40,7 +40,7 @@ func init() {
 	Conf = conf
 }
 func SchemaLoader(name string) (*schema.Schema, error) {
-	u.Infof("SchemaLoader")
+	//u.Infof("SchemaLoader")
 	return Schema, nil
 }
 

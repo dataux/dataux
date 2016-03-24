@@ -11,12 +11,20 @@ import (
 	"github.com/lytics/cloudstorage/logging"
 
 	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/exec"
+	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/schema"
 )
 
 var (
 	// ensure we implement interfaces
-	_ schema.DataSource = (*FileSource)(nil)
+	_ schema.Source = (*FileSource)(nil)
+
+	// Our file-pager wraps our file-scanners to move onto next file
+	_ PartitionedFileReader = (*FilePager)(nil)
+	_ schema.ConnScanner    = (*FilePager)(nil)
+	_ exec.ExecutorSource   = (*FilePager)(nil)
+	//_ exec.RequiresContext  = (*FilePager)(nil)
 
 	schemaRefreshInterval = time.Minute * 5
 
@@ -38,6 +46,8 @@ var (
 		Bucket:          "lytics-dataux-tests",
 		TmpDir:          "/tmp/localcache",
 	}
+
+	FileStoreLoader func(ss *schema.SchemaSource) (cloudstorage.Store, error)
 )
 
 const (
@@ -47,6 +57,12 @@ const (
 func init() {
 	// We need to register our DataSource provider here
 	datasource.Register(SourceType, NewFileSource())
+	FileStoreLoader = createConfStore
+}
+
+type PartitionedFileReader interface {
+	// NextFile returns io.EOF on last file
+	NextFile() (*FileReader, error)
 }
 
 // File DataSource for reading files, and scanning them allowing
@@ -59,7 +75,7 @@ func init() {
 // - scanners:     responsible for file-specific
 //
 type FileSource struct {
-	ss             *schema.SourceSchema
+	ss             *schema.SchemaSource
 	lastLoad       time.Time
 	store          cloudstorage.Store
 	fh             FileHandler
@@ -87,7 +103,7 @@ type FileReader struct {
 	Exit chan bool // exit channel to shutdown reader
 }
 
-func NewFileSource() schema.DataSource {
+func NewFileSource() schema.Source {
 	m := FileSource{
 		tables:     make(map[string]*schema.Table),
 		files:      make(map[string][]*FileInfo),
@@ -96,7 +112,7 @@ func NewFileSource() schema.DataSource {
 	return &m
 }
 
-func (m *FileSource) Setup(ss *schema.SourceSchema) error {
+func (m *FileSource) Setup(ss *schema.SchemaSource) error {
 	m.ss = ss
 	if err := m.init(); err != nil {
 		return err
@@ -108,15 +124,24 @@ func (m *FileSource) Setup(ss *schema.SourceSchema) error {
 	return nil
 }
 
-func (m *FileSource) Open(tableName string) (schema.SourceConn, error) {
-	//u.Debugf("files open %q", tableName)
-	return m.loadScanner(tableName)
+func (m *FileSource) Open(tableName string) (schema.Conn, error) {
+	pg, err := m.createPager(tableName, 0)
+	if err != nil {
+		u.Errorf("could not get pager: %v", err)
+		return nil, err
+	}
+	_, err = pg.NextScanner()
+	if err != nil {
+		u.Warnf("why error? %v", err)
+		return nil, err
+	}
+	return pg, nil
 }
 func (m *FileSource) Close() error     { return nil }
 func (m *FileSource) Tables() []string { return m.tablenames }
 func (m *FileSource) init() error {
 	if m.store == nil {
-		store, err := createConfStore(m.ss)
+		store, err := FileStoreLoader(m.ss)
 		if err != nil {
 			u.Errorf("Could not create cloudstore %v", err)
 			return err
@@ -133,6 +158,7 @@ func (m *FileSource) init() error {
 		if partitioner := conf.String("partitioner"); partitioner != "" {
 			m.Partitioner = partitioner
 		}
+
 		// TODO:   if no m.fileType inspect file name?
 		fileHandler, exists := scannerGet(m.fileType)
 		if !exists || fileHandler == nil {
@@ -165,49 +191,50 @@ func FileInterpret(path string, obj cloudstorage.Object) *FileInfo {
 
 func (m *FileSource) loadSchema() {
 
-	u.Infof("%p  load schema %+v", m, m.ss.Conf)
+	u.Infof("%p  load schema %#v", m, m.ss.Conf)
 
-	q := cloudstorage.NewQuery(m.path)
-	//q.LimitMatch = ".csv"
-	//q.Delimiter = "/"
+	q := cloudstorage.Query{Prefix: m.path}
 	q.Sorted() // We need to sort this by reverse to go back to front?
 	objs, err := m.store.List(q)
 	if err != nil {
 		u.Errorf("could not open list err=%v", err)
 		return
 	}
-	//u.Debugf("found %d files", len(objs))
+	nextPartId := 0
+
 	for _, obj := range objs {
-		//table, isFile := FileInterpret(m.path, obj)
 		fi := m.fh.File(m.path, obj)
 		if fi != nil && fi.Name != "" {
 			if _, tableExists := m.files[fi.Table]; !tableExists {
-				u.Debugf("Nice, found new table: %q", fi.Table)
+				//u.Debugf("Nice, found new table: %q", fi.Table)
 				m.files[fi.Table] = make([]*FileInfo, 0)
 				m.tablenames = append(m.tablenames, fi.Table)
 			}
+			u.Debugf("%d found file %s", len(m.files[fi.Table])+1, fi.Name)
 			m.files[fi.Table] = append(m.files[fi.Table], fi)
+		}
+		if fi.Partition == 0 && m.ss.Conf.PartitionCt > 0 {
+			// assign a partition
+			fi.Partition = nextPartId
+			nextPartId++
+			if nextPartId >= m.ss.Conf.PartitionCt {
+				nextPartId = 0
+			}
 		}
 	}
 }
 
 func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 
-	u.Debugf("Table(%q)", tableName)
-	if t, ok := m.tables[tableName]; ok {
-		u.Warnf("%p table?  %#v", t)
+	var err error
+	//u.Debugf("Table(%q)", tableName)
+	t, ok := m.tables[tableName]
+	if ok {
 		return t, nil
 	}
 
-	scanner, err := m.loadScanner(tableName)
-	if err != nil {
-		u.Errorf("could not find scanner for table %q table err:%v", tableName, err)
-		return nil, err
-	}
-
-	var t *schema.Table
-
-	if schemaSource, hasSchema := scanner.(schema.SchemaProvider); hasSchema {
+	// Its possible that the file handle implements schema handling
+	if schemaSource, hasSchema := m.fh.(schema.SourceTableSchema); hasSchema {
 
 		t, err = schemaSource.Table(tableName)
 		if err != nil {
@@ -217,25 +244,56 @@ func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 
 	} else {
 
-		t = schema.NewTable(tableName, nil)
-		t.SetColumns(scanner.Columns())
-
-		iter := scanner.CreateIterator(nil)
-
-		// we are going to look at ~10 rows to create schema for it
-		if err = datasource.IntrospectTable(t, iter); err != nil {
-			u.Errorf("Could not introspect schema %v", err)
+		t, err = m.buildTable(tableName)
+		if err != nil {
 			return nil, err
 		}
+
 	}
+
 	if t == nil {
-		u.Warnf("wtf? nil")
+		u.Warnf("Nil Table, should not be possible? %q", tableName)
+		return nil, fmt.Errorf("Missing table for %q", tableName)
 	}
+
 	m.tables[tableName] = t
 	return t, nil
 }
 
-func (m *FileSource) loadScanner(tableName string) (schema.Scanner, error) {
+func (m *FileSource) buildTable(tableName string) (*schema.Table, error) {
+
+	// Since we don't have a table schema, lets create one via introspection
+	u.Debugf("We are introspecting table %q for schema, provide a schema if you want better schema", tableName)
+	pager, err := m.createPager(tableName, 0)
+	if err != nil {
+		u.Errorf("could not find scanner for table %q table err:%v", tableName, err)
+		return nil, err
+	}
+
+	scanner, err := pager.NextScanner()
+	if err != nil {
+		u.Errorf("what, no scanner? %v", err)
+		return nil, err
+	}
+
+	colScanner, hasColumns := scanner.(schema.ConnColumns)
+	if !hasColumns {
+		return nil, fmt.Errorf("Must have Columns to Introspect Tables")
+	}
+
+	t := schema.NewTable(tableName, nil)
+	t.SetColumns(colScanner.Columns())
+
+	// we are going to look at ~10 rows to create schema for it
+	if err = datasource.IntrospectTable(t, scanner); err != nil {
+		u.Errorf("Could not introspect schema %v", err)
+		return nil, err
+	}
+
+	return t, nil
+}
+
+func (m *FileSource) createPager(tableName string, partition int) (*FilePager, error) {
 
 	// Read the object from cloud storage
 	files := m.files[tableName]
@@ -243,18 +301,91 @@ func (m *FileSource) loadScanner(tableName string) (schema.Scanner, error) {
 		return nil, schema.ErrNotFound
 	}
 
-	// TODO:   page, partition
-	fi := files[0]
-	u.Debugf("opening: %q", fi.Name)
-	obj, err := m.store.Get(fi.Name)
+	pg := &FilePager{
+		files: files,
+		fs:    m,
+		table: tableName,
+	}
+	return pg, nil
+}
+
+// File Pager acts like a Conn, wrapping underlying FileSource
+// and paging through looking at partitions
+type FilePager struct {
+	cursor    int
+	rowct     int64
+	table     string
+	fs        *FileSource
+	files     []*FileInfo
+	partition *schema.Partition
+	partid    string
+	tbl       *schema.Table
+	p         *plan.Source
+	schema.ConnScanner
+}
+
+// func (m *FilePager) SetContext(ctx *plan.Context) {
+// 	m.ctx = ctx
+// }
+func (m *FilePager) WalkExecSource(p *plan.Source) (exec.Task, error) {
+
+	if m.p == nil {
+		m.p = p
+		u.Debugf("custom? %v", p.Custom)
+		if partitionId := p.Custom.String("partition"); partitionId != "" {
+			m.partid = partitionId
+		}
+	}
+
+	//u.Debugf("WalkExecSource():  %T  %#v", p, p)
+	return exec.NewSource(p.Context(), p)
+}
+
+func (m *FilePager) Columns() []string {
+	if m.tbl == nil {
+		t, err := m.fs.Table(m.table)
+		if err != nil {
+			u.Warnf("wat? %v", err)
+			return nil
+		}
+		m.tbl = t
+	}
+	return m.tbl.Columns()
+}
+func (m *FilePager) NextScanner() (schema.ConnScanner, error) {
+
+	u.Debugf("%p next scanner for FileSource: %p partid:%q", m, m.fs, m.partid)
+	fr, err := m.NextFile()
+	if err == io.EOF {
+		return nil, err
+	}
+
+	scanner, err := m.fs.fh.Scanner(m.fs.store, fr)
 	if err != nil {
-		u.Errorf("could not read %q table %v", tableName, err)
+		u.Errorf("Could not open file scanner %v err=%v", m.fs.fileType, err)
+		return nil, err
+	}
+	m.ConnScanner = scanner
+	return scanner, err
+}
+
+func (m *FilePager) NextFile() (*FileReader, error) {
+
+	if m.cursor >= len(m.files) {
+		return nil, io.EOF
+	}
+	fi := m.files[m.cursor]
+	m.cursor++
+	u.Debugf("%p opening: partition:%v desiredpart:%v file: %q ", m, fi.Partition, m.partid, fi.Name)
+	obj, err := m.fs.store.Get(fi.Name)
+	if err != nil {
+		u.Errorf("could not read %q table %v", err)
 		return nil, err
 	}
 
 	f, err := obj.Open(cloudstorage.ReadOnly)
 	if err != nil {
-		u.Errorf("could not read %q table %v", tableName, err)
+		u.Errorf("could not read %q table %v", m.table, err)
 		return nil, err
 	}
 	//u.Infof("found file: %s   %p", obj.Name(), f)
@@ -264,22 +395,42 @@ func (m *FileSource) loadScanner(tableName string) (schema.Scanner, error) {
 		Exit:     make(chan bool),
 		FileInfo: fi,
 	}
-
-	scanner, err := m.fh.Scanner(m.store, fr)
-	if err != nil {
-		u.Errorf("Could not open file scanner %v err=%v", m.fileType, err)
-		return nil, err
-	}
-
-	return scanner, err
+	return fr, nil
 }
 
-func createConfStore(ss *schema.SourceSchema) (cloudstorage.Store, error) {
+func (m *FilePager) Next() schema.Message {
+	for {
+		msg := m.ConnScanner.Next()
+		//u.Debugf("%#v", row.Msg.Row())
+		if msg == nil {
+			_, err := m.NextScanner()
+			if err != nil && err == io.EOF {
+				return nil
+			} else if err != nil {
+				u.Errorf("unexpected end of scan %v", err)
+				return nil
+			}
+			// now that we have a new scanner, lets try again
+			if m.ConnScanner != nil {
+				msg = m.ConnScanner.Next()
+			}
+		}
+
+		m.rowct++
+
+		return msg
+	}
+}
+func (m *FilePager) Close() error {
+	return nil
+}
+
+func createConfStore(ss *schema.SchemaSource) (cloudstorage.Store, error) {
 
 	if ss == nil || ss.Conf == nil {
 		return nil, fmt.Errorf("No config info for files source")
 	}
-	//u.Infof("json conf:\n%s", ss.Conf.Settings.PrettyJson())
+	u.Infof("json conf:\n%s", ss.Conf.Settings.PrettyJson())
 	cloudstorage.LogConstructor = func(prefix string) logging.Logger {
 		return logging.NewStdLogger(true, logging.DEBUG, prefix)
 	}
@@ -308,6 +459,6 @@ func createConfStore(ss *schema.SourceSchema) (cloudstorage.Store, error) {
 	default:
 		return nil, fmt.Errorf("Unrecognized filestore type %q expected [gcs,localfs]", storeType)
 	}
-	//u.Debugf("creating cloudstore from %#v", config)
+	u.Debugf("creating cloudstore from %#v", config)
 	return cloudstorage.NewStore(config)
 }

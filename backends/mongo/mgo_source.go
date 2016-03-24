@@ -18,7 +18,7 @@ import (
 
 var (
 	// implement interfaces
-	_ schema.DataSource = (*MongoDataSource)(nil)
+	_ schema.Source = (*MongoDataSource)(nil)
 )
 
 const (
@@ -36,7 +36,7 @@ func init() {
 type MongoDataSource struct {
 	db             string   // the underlying mongo database name
 	databases      []string // all available database names from this mongo instance
-	srcschema      *schema.SourceSchema
+	srcschema      *schema.SchemaSource
 	mu             sync.Mutex
 	sess           *mgo.Session
 	closed         bool
@@ -44,11 +44,11 @@ type MongoDataSource struct {
 	tablesNotFound map[string]string
 }
 
-func NewMongoDataSource() schema.DataSource {
+func NewMongoDataSource() schema.Source {
 	return &MongoDataSource{tablesNotFound: make(map[string]string)}
 }
 
-func (m *MongoDataSource) Setup(ss *schema.SourceSchema) error {
+func (m *MongoDataSource) Setup(ss *schema.SchemaSource) error {
 
 	if m.srcschema != nil {
 		return nil
@@ -91,7 +91,7 @@ func (m *MongoDataSource) Close() error {
 	return nil
 }
 
-func (m *MongoDataSource) DataSource() schema.DataSource { return m }
+func (m *MongoDataSource) DataSource() schema.Source { return m }
 func (m *MongoDataSource) Tables() []string {
 	if m.srcschema == nil {
 		return nil
@@ -115,7 +115,7 @@ func (m *MongoDataSource) Table(table string) (*schema.Table, error) {
 	return nil, schema.ErrNotFound
 }
 
-func (m *MongoDataSource) Open(collectionName string) (schema.SourceConn, error) {
+func (m *MongoDataSource) Open(collectionName string) (schema.Conn, error) {
 	//u.Debugf("Open(%v)", collectionName)
 	tbl, err := m.srcschema.Table(collectionName)
 	if err != nil {
@@ -146,7 +146,7 @@ func (m *MongoDataSource) loadSchema() error {
 }
 
 // TODO:  this is horrible, use mgo's built in gossip with mongo for cluster info
-func chooseBackend(source string, schema *schema.SourceSchema) string {
+func chooseBackend(source string, schema *schema.SchemaSource) string {
 	//u.Infof("check backends: %v", len(schema.Nodes))
 	for _, node := range schema.Nodes {
 		//u.Debugf("check node:%q =? %+v", source, node)

@@ -43,7 +43,7 @@ var _ = value.ErrValue
 // Schema is the schema for a named database, shared
 // across multiple nodes
 type SchemaSharded struct {
-	*schema.SourceSchema
+	*schema.SchemaSource
 	mysqlnodes map[string]*Node
 	rule       *router.Router
 }
@@ -105,7 +105,7 @@ func (m *HandlerSharded) SchemaUse(db string) *schema.Schema {
 	schema, ok := m.schemas[db]
 	if ok {
 		m.schema = schema
-		return schema.SourceSchema.Schema
+		return schema.SchemaSource.Schema
 	}
 
 	u.Errorf("Could not find schema for db=%s", db)

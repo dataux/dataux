@@ -111,7 +111,7 @@ func includeNode(nodes []string, node string) bool {
 	return false
 }
 
-func includeNodeConfig(nodes []*schema.NodeConfig, node string) bool {
+func includeNodeConfig(nodes []*schema.ConfigNode, node string) bool {
 	for _, n := range nodes {
 		if n.Name == node {
 			return true

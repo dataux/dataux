@@ -4,7 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"time"
+	//"time"
 
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -146,7 +146,7 @@ func (m *ResultReader) Run() error {
 		u.Errorf("WTF?  no cols? %v", cols)
 	}
 
-	n := time.Now()
+	//n := time.Now()
 	iter := m.query.Iter()
 	for {
 		var bm bson.M
@@ -199,6 +199,6 @@ func (m *ResultReader) Run() error {
 		u.Errorf("could not iter: %v", err)
 		return err
 	}
-	u.Debugf("finished query, took: %v for %v rows", time.Now().Sub(n), len(m.Vals))
+	//u.Debugf("finished query, took: %v for %v rows", time.Now().Sub(n), len(m.Vals))
 	return nil
 }

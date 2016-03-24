@@ -14,7 +14,7 @@ github.com/jmoiron/sqlx 398dd5876282499cdfd4cb8ea0f31a672abe9495
 github.com/kr/pretty e6ac2fc51e89a3249e82157fa0bb7a18ef9dd5bb
 github.com/kr/text bb797dc4fb8320488f47bf11de07a733d7233e1f
 github.com/leekchan/timeutil 28917288c48df3d2c1cfe468c273e0b2adda0aa5
-github.com/lytics/cloudstorage 6e53bda60adbcbdb8b9184bef1fbd1fd2f6aae3d
+github.com/lytics/cloudstorage 4a9d8bef3c40cf806b442e79c0ef2234262fd184
 github.com/lytics/confl f12b6bace2ff295fc6730f6dbaf009289e2f6e80
 github.com/lytics/datemath 988020f3ad34814005ab10b6c7863e31672b5f63
 github.com/lytics/dfa 63e35f788f7fa5203fcd2dcd7e318da5a1b981e5

@@ -133,8 +133,13 @@ func (m *SqlActor) Starting() dfa.Letter {
 		u.Errorf("error %v", err)
 		return Failure
 	}
+
 	m.p = p
 	p.Ctx.DisableRecover = m.conf.SupressRecover
+
+	if p.ChildDag == false {
+		u.Errorf("%p This MUST BE CHILD DAG", p)
+	}
 
 	if m.conf == nil {
 		u.Warnf("no conf?")
@@ -156,9 +161,9 @@ func (m *SqlActor) Starting() dfa.Letter {
 			f.Custom = make(u.JsonHelper)
 		}
 		f.Custom["partition"] = m.def.Settings["partition"]
-		//u.Infof("from: %#v", f.Custom)
+		u.Infof("actor from custom has part?: %#v", f.Custom)
 	}
-	//u.Infof("%p starting executor %#v", m, executor)
+	u.Infof("%p plan.Select:%p sqlactor calling executor %p", m, p, executor)
 	sqlTask, err := executor.WalkSelectPartition(p, nil)
 	//sqlTask, err := executor.WalkPlan(p)
 	if err != nil {
@@ -215,7 +220,7 @@ func (m *SqlActor) Starting() dfa.Letter {
 				return Failure
 			}
 		case <-started:
-			//u.Debugf("%p everybody started", m)
+			u.Debugf("%p everybody started", m)
 			return EverybodyStarted
 		case <-finished:
 			u.Warnf("everybody finished?")

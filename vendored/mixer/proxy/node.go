@@ -22,7 +22,7 @@ const (
 type Node struct {
 	sync.Mutex
 
-	conf *schema.SourceConfig
+	conf *schema.ConfigSource
 
 	// client.DB's are connection managers
 	// each client.DB represents a server/address/database combo

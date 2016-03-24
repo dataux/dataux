@@ -27,7 +27,7 @@ func BuildSqlJob(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
 	baseJob.Executor = job
 	job.GridServer = gs
 	job.Ctx = ctx
-	//u.Debugf("buildsqljob: %T  %T", job, job.Executor)
+	u.Debugf("buildsqljob: %T  %T", job, job.JobExecutor)
 	//u.Debugf("buildsqljob2: %T  %T", baseJob, baseJob.Executor)
 	task, err := exec.BuildSqlJobPlanned(job.Planner, job, ctx)
 	if err != nil {
@@ -80,7 +80,8 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 		//u.Debugf("ExecutorGrid.WalkSelect ?  %s", p.Stmt.Raw)
 	}
 
-	if len(p.Stmt.With) > 0 && p.Stmt.With.Bool("distributed") {
+	//u.WarnT(10)
+	if !p.ChildDag && len(p.Stmt.With) > 0 && p.Stmt.With.Bool("distributed") {
 		u.Warnf("%p has distributed!!!!!: %#v", m, p.Stmt.With)
 
 		// We are going to run tasks remotely, so need a local grid source for them
@@ -120,10 +121,12 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 		}()
 		return localTask, nil
 	}
-
+	u.Infof("%p  %p childdag? %v", m, p, p.ChildDag)
 	return m.JobExecutor.WalkSelect(p)
 }
 func (m *ExecutorGrid) WalkSelectPartition(p *plan.Select, part *schema.Partition) (exec.Task, error) {
 
+	u.Infof("WTF:  %#v", m.JobExecutor)
+	u.Infof("%p  %p childdag? %v", m, p, p.ChildDag)
 	return m.JobExecutor.WalkSelect(p)
 }

@@ -53,10 +53,9 @@ type Server struct {
 }
 
 func (m *Server) startSqlActor(actorCt, actorId int, partition string, pb string, flow Flow, def *grid.ActorDef, p *plan.Select) error {
-	//def := grid.NewActorDef(flow.NewContextualName("sqlactor"))
+
 	def.DefineType("sqlactor")
 	def.Define("flow", flow.Name())
-	//def.RawData["pb"] = pb
 	def.Settings["pb64"] = pb
 	def.Settings["partition"] = partition
 	def.Settings["node_ct"] = strconv.Itoa(actorCt)
@@ -71,8 +70,8 @@ func (m *Server) startSqlActor(actorCt, actorId int, partition string, pb string
 
 func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select) error {
 
-	u.Debugf("%p master starting job %s", m, p.Stmt.String())
-
+	u.Debugf("%p master submitting job childdag?%v  %s", m, p.ChildDag, p.Stmt.String())
+	//u.LogTracef(u.WARN, "hello")
 	// marshal plan to Protobuf for transport
 	pb, err := p.Marshal()
 	if err != nil {
@@ -96,6 +95,15 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 						//u.Warnf("Found Partitions for %q = %#v", f.Tbl.Name, part)
 						partitions[i] = part.Id
 					}
+				} else if f.Tbl.PartitionCt > 0 {
+					partitions = make([]string, f.Tbl.PartitionCt)
+					actorCt = f.Tbl.PartitionCt
+					for i := 0; i < actorCt; i++ {
+						//u.Warnf("Found Partitions for %q = %#v", f.Tbl.Name, i)
+						partitions[i] = fmt.Sprintf("%d", i)
+					}
+				} else {
+					u.Warnf("partition? %#v", f.Tbl.Partition)
 				}
 			}
 		}
@@ -104,7 +112,8 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 	}
 
 	rp := ring.New(flow.NewContextualName("sqlactor"), actorCt)
-	u.Infof("running distributed sql query with %d actors", actorCt)
+	u.Infof("%p master?? submitting distributed sql query with %d actors", m, actorCt)
+	//u.WarnT(18)
 	for i, def := range rp.ActorDefs() {
 		go func(ad *grid.ActorDef, actorId int) {
 			if err = m.startSqlActor(actorCt, actorId, partitions[actorId], pb64, flow, ad, p); err != nil {
