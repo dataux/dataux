@@ -2,6 +2,7 @@ package files
 
 import (
 	"fmt"
+	"github.com/lytics/lio/src/custdata/records"
 	"io"
 	"strings"
 	"time"
@@ -130,11 +131,11 @@ func (m *FileSource) Open(tableName string) (schema.Conn, error) {
 		u.Errorf("could not get pager: %v", err)
 		return nil, err
 	}
-	_, err = pg.NextScanner()
-	if err != nil {
-		u.Warnf("why error? %v", err)
-		return nil, err
-	}
+	// _, err = pg.NextScanner()
+	// if err != nil {
+	// 	u.Warnf("why error? %v", err)
+	// 	return nil, err
+	// }
 	return pg, nil
 }
 func (m *FileSource) Close() error     { return nil }
@@ -191,7 +192,7 @@ func FileInterpret(path string, obj cloudstorage.Object) *FileInfo {
 
 func (m *FileSource) loadSchema() {
 
-	u.Infof("%p  load schema %#v", m, m.ss.Conf)
+	//u.Infof("%p  load schema %#v", m, m.ss.Conf)
 
 	q := cloudstorage.Query{Prefix: m.path}
 	q.Sorted() // We need to sort this by reverse to go back to front?
@@ -210,12 +211,13 @@ func (m *FileSource) loadSchema() {
 				m.files[fi.Table] = make([]*FileInfo, 0)
 				m.tablenames = append(m.tablenames, fi.Table)
 			}
-			u.Debugf("%d found file %s", len(m.files[fi.Table])+1, fi.Name)
+
 			m.files[fi.Table] = append(m.files[fi.Table], fi)
 		}
 		if fi.Partition == 0 && m.ss.Conf.PartitionCt > 0 {
 			// assign a partition
 			fi.Partition = nextPartId
+			//u.Debugf("%d found file part:%d  %s", len(m.files[fi.Table]), fi.Partition, fi.Name)
 			nextPartId++
 			if nextPartId >= m.ss.Conf.PartitionCt {
 				nextPartId = 0
@@ -318,7 +320,7 @@ type FilePager struct {
 	fs        *FileSource
 	files     []*FileInfo
 	partition *schema.Partition
-	partid    string
+	partid    int
 	tbl       *schema.Table
 	p         *plan.Source
 	schema.ConnScanner
@@ -331,10 +333,12 @@ func (m *FilePager) WalkExecSource(p *plan.Source) (exec.Task, error) {
 
 	if m.p == nil {
 		m.p = p
-		u.Debugf("custom? %v", p.Custom)
-		if partitionId := p.Custom.String("partition"); partitionId != "" {
+		//u.Debugf("%p custom? %v", m, p.Custom)
+		if partitionId, ok := p.Custom.IntSafe("partition"); ok {
 			m.partid = partitionId
 		}
+	} else {
+		u.Warnf("not nil?  custom? %v", p.Custom)
 	}
 
 	//u.Debugf("WalkExecSource():  %T  %#v", p, p)
@@ -345,7 +349,7 @@ func (m *FilePager) Columns() []string {
 	if m.tbl == nil {
 		t, err := m.fs.Table(m.table)
 		if err != nil {
-			u.Warnf("wat? %v", err)
+			u.Warnf("error getting table? %v", err)
 			return nil
 		}
 		m.tbl = t
@@ -354,12 +358,18 @@ func (m *FilePager) Columns() []string {
 }
 func (m *FilePager) NextScanner() (schema.ConnScanner, error) {
 
-	u.Debugf("%p next scanner for FileSource: %p partid:%q", m, m.fs, m.partid)
 	fr, err := m.NextFile()
 	if err == io.EOF {
 		return nil, err
 	}
 
+	// if m.p == nil {
+	// 	u.Debugf("%p MASTER next file partid:%d %v", m, m.partid, fr.Name)
+	// 	u.WarnT(12)
+	// } else {
+	// 	u.Debugf("%p ACTOR next file partid:%d  custom:%v %v", m, m.partid, m.p.Custom, fr.Name)
+	// }
+	//u.Debugf("%p next file partid:%d  custom:%v %v", m, m.partid, m.p.Custom, fr.Name)
 	scanner, err := m.fs.fh.Scanner(m.fs.store, fr)
 	if err != nil {
 		u.Errorf("Could not open file scanner %v err=%v", m.fs.fileType, err)
@@ -371,12 +381,19 @@ func (m *FilePager) NextScanner() (schema.ConnScanner, error) {
 
 func (m *FilePager) NextFile() (*FileReader, error) {
 
-	if m.cursor >= len(m.files) {
-		return nil, io.EOF
+	var fi *FileInfo
+	for {
+		if m.cursor >= len(m.files) {
+			return nil, io.EOF
+		}
+		fi = m.files[m.cursor]
+		m.cursor++
+		if fi.Partition == m.partid {
+			break
+		}
 	}
-	fi := m.files[m.cursor]
-	m.cursor++
-	u.Debugf("%p opening: partition:%v desiredpart:%v file: %q ", m, fi.Partition, m.partid, fi.Name)
+
+	//u.Debugf("%p opening: partition:%v desiredpart:%v file: %q ", m, fi.Partition, m.partid, fi.Name)
 	obj, err := m.fs.store.Get(fi.Name)
 	if err != nil {
 		u.Errorf("could not read %q table %v", err)
@@ -399,9 +416,11 @@ func (m *FilePager) NextFile() (*FileReader, error) {
 }
 
 func (m *FilePager) Next() schema.Message {
+	if m.ConnScanner == nil {
+		m.NextScanner()
+	}
 	for {
 		msg := m.ConnScanner.Next()
-		//u.Debugf("%#v", row.Msg.Row())
 		if msg == nil {
 			_, err := m.NextScanner()
 			if err != nil && err == io.EOF {
@@ -412,8 +431,18 @@ func (m *FilePager) Next() schema.Message {
 			}
 			// now that we have a new scanner, lets try again
 			if m.ConnScanner != nil {
+				u.Debugf("next page")
 				msg = m.ConnScanner.Next()
 			}
+		}
+
+		//u.Infof("msg: %#v", msg.Body())
+		if rec, ok := msg.Body().(*records.Record); ok {
+			uv := rec.GetBodyUv()
+			if len(uv) > 0 {
+
+			}
+			//u.Debugf("part:%v ct:%d ts:%v cc:%-3s     %v %v %v", m.partid, m.rowct, rec.Ts, uv.Get("_ts"), uv.Get("_cc"), uv.Get("_uida"), uv.Get("url"))
 		}
 
 		m.rowct++

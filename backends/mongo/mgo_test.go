@@ -25,8 +25,10 @@ var (
 )
 
 func init() {
+	u.DiscardStandardLogger()
 	tu.Setup()
 	loadTestData()
+	u.DiscardStandardLogger()
 }
 
 func loadTestData() {
@@ -44,9 +46,9 @@ func loadTestData() {
 }
 
 func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
-	// func BuildSqlJob(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
 	ctx.Schema = testmysql.Schema
-	return planner.BuildSqlJob(ctx, testmysql.ServerCtx.Grid)
+	//u.Warnf("jobMaker, going to do a full plan?")
+	return planner.BuildExecutorUnPlanned(ctx, testmysql.ServerCtx.Grid)
 }
 
 func RunTestServer(t *testing.T) {

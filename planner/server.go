@@ -58,8 +58,8 @@ func (m *Server) startSqlActor(actorCt, actorId int, partition string, pb string
 	def.Define("flow", flow.Name())
 	def.Settings["pb64"] = pb
 	def.Settings["partition"] = partition
-	def.Settings["node_ct"] = strconv.Itoa(actorCt)
-	//u.Debugf("%p submitting start actor %s  nodeI=%d", m, def.ID(), actorId)
+	def.Settings["actor_ct"] = strconv.Itoa(actorCt)
+	u.Debugf("%p submitting start actor %s  nodeI=%d", m, def.ID(), actorId)
 	err := m.Grid.StartActor(def)
 	//u.Debugf("%p after submit start actor", m)
 	if err != nil {
@@ -70,7 +70,7 @@ func (m *Server) startSqlActor(actorCt, actorId int, partition string, pb string
 
 func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select) error {
 
-	u.Debugf("%p master submitting job childdag?%v  %s", m, p.ChildDag, p.Stmt.String())
+	//u.Debugf("%p master submitting job childdag?%v  %s", m, p.ChildDag, p.Stmt.String())
 	//u.LogTracef(u.WARN, "hello")
 	// marshal plan to Protobuf for transport
 	pb, err := p.Marshal()
@@ -111,6 +111,11 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 		u.Warnf("TODO:  NOT Distributed, don't start tasks!")
 	}
 
+	w := condition.NewCountWatch(m.Grid.Etcd(), m.Grid.Name(), flow.Name(), "sqlcomplete")
+	defer w.Stop()
+
+	finished := w.WatchUntil(actorCt)
+
 	rp := ring.New(flow.NewContextualName("sqlactor"), actorCt)
 	u.Infof("%p master?? submitting distributed sql query with %d actors", m, actorCt)
 	//u.WarnT(18)
@@ -122,13 +127,18 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 		}(def, i)
 	}
 
+	//u.Infof("submitted actors, waiting for completion signal")
 	select {
+	case <-finished:
+		u.Warnf("%s got all! finished signal?", flow.Name())
+		return nil
 	case <-localTask.SigChan():
 		u.Warnf("%s YAAAAAY finished", flow.String())
 
 	case <-time.After(30 * time.Second):
 		u.Warnf("%s exiting bc timeout", flow)
 	}
+	u.Warnf("what is going on?")
 	return nil
 }
 func (m *Server) RunWorker() error {

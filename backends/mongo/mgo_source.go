@@ -232,7 +232,7 @@ func (m *MongoDataSource) loadTableNames() error {
 
 	for _, tableName := range tables {
 		m.srcschema.AddTableName(tableName)
-		u.Debugf("found table %q", tableName)
+		//u.Debugf("found table %q", tableName)
 	}
 	//u.Debugf("found tables: %v", tables)
 	return nil

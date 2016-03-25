@@ -27,7 +27,7 @@ func BuildSqlJob(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
 	baseJob.Executor = job
 	job.GridServer = gs
 	job.Ctx = ctx
-	u.Debugf("buildsqljob: %T  %T", job, job.JobExecutor)
+	u.Debugf("buildsqljob: %T p:%p  %T p:%p", job, job, job.Executor, job.JobExecutor)
 	//u.Debugf("buildsqljob2: %T  %T", baseJob, baseJob.Executor)
 	task, err := exec.BuildSqlJobPlanned(job.Planner, job, ctx)
 	if err != nil {
@@ -39,6 +39,19 @@ func BuildSqlJob(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
 	}
 	job.RootTask = taskRunner
 	return job, err
+}
+
+// Build a Sql Job which may be a Grid/Distributed job
+func BuildExecutorUnPlanned(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
+
+	baseJob := exec.NewExecutor(ctx, nil)
+
+	job := &ExecutorGrid{JobExecutor: baseJob}
+	baseJob.Executor = job
+	job.GridServer = gs
+	job.Ctx = ctx
+	//u.Infof("Grid Actor Executor: %T p:%p  %T p:%p", job, job, job.Executor, job.JobExecutor)
+	return job, nil
 }
 
 // Sql job that wraps the generic qlbridge job builder
@@ -71,7 +84,7 @@ func (m *ExecutorGrid) WalkSource(p *plan.Source) (exec.Task, error) {
 	return exec.NewSource(m.Ctx, p)
 }
 func (m *ExecutorGrid) WalkGroupBy(p *plan.GroupBy) (exec.Task, error) {
-	//u.Warnf("partial groupby")
+	u.Warnf("partial groupby")
 	p.Partial = true
 	return exec.NewGroupBy(m.Ctx, p), nil
 }
@@ -82,7 +95,7 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 
 	//u.WarnT(10)
 	if !p.ChildDag && len(p.Stmt.With) > 0 && p.Stmt.With.Bool("distributed") {
-		u.Warnf("%p has distributed!!!!!: %#v", m, p.Stmt.With)
+		//u.Warnf("%p has distributed!!!!!: %#v", m, p.Stmt.With)
 
 		// We are going to run tasks remotely, so need a local grid source for them
 		//  remoteSink  -> nats ->  localSource
@@ -102,8 +115,9 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 		natsSource := NewSourceNats(m.Ctx, rx)
 		localTask.Add(natsSource)
 
+		u.Infof("isAgg? %v", p.Stmt.IsAggQuery())
 		if p.Stmt.IsAggQuery() {
-			//u.Debugf("Adding aggregate/group by?")
+			u.Debugf("Adding aggregate/group by?")
 			gbplan := plan.NewGroupBy(p.Stmt)
 			gb := exec.NewGroupByFinal(m.Ctx, gbplan)
 			localTask.Add(gb)
@@ -117,16 +131,18 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 			}
 			// need to send signal to quit
 			ch := natsSource.MessageOut()
+			u.Warnf("closing Source due to a task (first?) completing")
 			close(ch)
+			localTask.Close()
 		}()
 		return localTask, nil
 	}
-	u.Infof("%p  %p childdag? %v", m, p, p.ChildDag)
+	//u.Warnf("%p  %p childdag? %v  %v", m, p, p.ChildDag, p.Stmt.String())
 	return m.JobExecutor.WalkSelect(p)
 }
 func (m *ExecutorGrid) WalkSelectPartition(p *plan.Select, part *schema.Partition) (exec.Task, error) {
 
-	u.Infof("WTF:  %#v", m.JobExecutor)
-	u.Infof("%p  %p childdag? %v", m, p, p.ChildDag)
+	//u.Infof("WTF:  %#v", m.JobExecutor)
+	//u.Infof("%p  %p childdag? %v", m, p, p.ChildDag)
 	return m.JobExecutor.WalkSelect(p)
 }

@@ -168,7 +168,7 @@ func NewTestServerForDb(t *testing.T, db string) {
 		ServerCtx.Init()
 
 		Schema, _ = ServerCtx.Schema(db)
-		u.Infof("starting %q schema in test", db)
+		//u.Infof("starting %q schema in test", db)
 
 		svr, err := proxy.NewServer(ServerCtx)
 		assert.T(t, err == nil, "must start without error ", err)

@@ -48,7 +48,7 @@ type MySqlConnCreator struct {
 }
 
 func (m *MySqlConnCreator) Init(conf *models.ListenerConfig, svr *models.ServerCtx) error {
-	u.Debugf("mysql conn creator")
+	//u.Debugf("mysql conn creator")
 	l, err := mysqlproxy.ListenerInit(conf, svr.Config, m)
 	if err != nil {
 		u.Errorf("could not get mysql listener: %v", err)

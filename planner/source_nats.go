@@ -38,7 +38,22 @@ func NewSourceNats(ctx *plan.Context, rx grid.Receiver) *SourceNats {
 	}
 }
 
-func (m *SourceNats) Close() error { return m.TaskBase.Close() }
+func (m *SourceNats) Close() error {
+	u.Infof("SourceNats Close")
+	//time.Sleep(time.Millisecond * 200)
+	return nil
+}
+func (m *SourceNats) CloseFinal() error {
+	defer func() {
+		if r := recover(); r != nil {
+			u.Warnf("error on close %v", r)
+		}
+	}()
+	//close(inCh) we don't close input channels, upstream does
+	//m.Ctx.Recover()
+	m.rx.Close()
+	return m.TaskBase.Close()
+}
 func (m *SourceNats) Run() error {
 
 	outCh := m.MessageOut()
@@ -65,13 +80,13 @@ func (m *SourceNats) Run() error {
 			switch mt := msg.(type) {
 			case *datasource.SqlDriverMessageMap:
 				if len(mt.Vals) == 0 {
-					//u.Infof("NICE EMPTY EOF MESSAGE")
+					u.Infof("NICE EMPTY EOF MESSAGE, CLOSING")
 					return nil
 				}
 				outCh <- mt
 			case datasource.SqlDriverMessageMap:
 				if len(mt.Vals) == 0 {
-					//u.Infof("NICE EMPTY EOF MESSAGE 2")
+					u.Infof("NICE EMPTY EOF MESSAGE 2")
 					return nil
 				}
 				outCh <- &mt

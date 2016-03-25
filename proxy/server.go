@@ -102,7 +102,7 @@ func (m *Server) Run() {
 	}
 
 	for _, listener := range m.listeners {
-		u.Debugf("starting listener: %T", listener)
+		//u.Debugf("starting listener: %T", listener)
 		go func(l models.Listener) {
 			defer func() {
 				if r := recover(); r != nil {
@@ -118,7 +118,7 @@ func (m *Server) Run() {
 	}
 
 	// block until shutdown signal
-	u.Debug("\n", banner(), "\n")
+	//u.Debug("\n", banner(), "\n")
 	<-m.stop
 
 	// after shutdown, ensure they are all closed
@@ -136,7 +136,7 @@ func (m *Server) loadFrontends() error {
 		for _, listenConf := range m.conf.Frontends {
 
 			if listenConf.Type == name {
-				u.Debugf("found listener conf:  %#v", listenConf)
+				//u.Debugf("found listener conf:  %#v", listenConf)
 				err := listener.Init(listenConf, m.ctx)
 				if err != nil {
 					u.Errorf("Could not get frontend", err)

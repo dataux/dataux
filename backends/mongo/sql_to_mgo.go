@@ -70,7 +70,7 @@ func (m *SqlToMgo) Columns() []string {
 // Called by Planner, pre-executor
 func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.Task, error) {
 
-	u.Debugf("WalkSourceSelect %p", m)
+	//u.Debugf("WalkSourceSelect %p", m)
 	p.Conn = m
 
 	if len(p.Custom) == 0 {
@@ -84,15 +84,14 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 	var err error
 	m.p = p
 	req := p.Stmt.Source
-	//u.Infof("mongo.VisitSubSelect %v final:%v", req.String(), sp.Final)
+	//u.Debugf("mongo.VisitSubSelect %v final:%v", req.String(), sp.Final)
 
 	if p.Proj == nil {
-		u.Warnf("%p no projection?  ", p)
+		//u.Debugf("%p no projection?  ", p)
 		proj := plan.NewProjectionInProcess(p.Stmt.Source)
 		p.Proj = proj.Proj
 	} else {
-		u.Infof("%p has projection!!! %s sqltomgo %p", p, p.Stmt, m)
-		//u.LogTraceDf(u.WARN, 12, "hello")
+		//u.Debugf("%p has projection!!! %s sqltomgo %p", p, p.Stmt, m)
 	}
 
 	m.sel = req
