@@ -7,6 +7,8 @@ cd $GOPATH/src/github.com/araddon/gou && git checkout master && git pull
 #cd $GOPATH/src/github.com/araddon/qlbridge && git checkout master && git pull
 cd $GOPATH/src/github.com/bitly/go-hostpool && git checkout master && git pull
 cd $GOPATH/src/github.com/bmizerany/assert && git checkout master && git pull
+# we are pinned to a slightly older version of etcd until
+#  metafora upgrades
 #cd $GOPATH/src/github.com/coreos/etcd && git checkout master && git pull
 #cd $GOPATH/src/github.com/coreos/go-etcd && git checkout master && git pull
 cd $GOPATH/src/github.com/couchbaselabs/goforestdb && git checkout master && git pull
@@ -32,7 +34,9 @@ cd $GOPATH/src/github.com/nats-io/nats && git checkout master && git pull
 cd $GOPATH/src/github.com/pborman/uuid && git checkout master && git pull
 cd $GOPATH/src/github.com/rcrowley/go-metrics && git checkout master && git pull
 cd $GOPATH/src/github.com/sony/sonyflake && git checkout master && git pull
-cd $GOPATH/src/github.com/ugorji/go && git checkout master && git pull
+
+# this one if updated breaks older versions of etcd
+#cd $GOPATH/src/github.com/ugorji/go && git checkout master && git pull
 cd $GOPATH/src/golang.org/x/net && git checkout master && git pull
 cd $GOPATH/src/golang.org/x/oauth2 && git checkout master && git pull
 cd $GOPATH/src/google.golang.org/api && git checkout master && git pull

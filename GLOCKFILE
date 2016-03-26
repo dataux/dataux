@@ -33,7 +33,7 @@ github.com/nats-io/nuid 4f84f5f3b2786224e336af2e13dba0a0a80b76fa
 github.com/nranchev/go-libGeoIP c78e8bd2dd3599feb21fd30886043979e82fe948
 github.com/pborman/uuid c55201b036063326c5b1b89ccfe45a184973d073
 github.com/sony/sonyflake 152b0c313040e9fb0101fcff9285a11965fd42be
-github.com/ugorji/go c062049c1793b01a3cc3fe786108edabbaf7756b
+github.com/ugorji/go 45ce7596ace4534e47b69051a92aef7b64ec7b3f
 github.com/willf/bitset 28a4168144bb8ac95454e1f51c84da1933681ad4
 github.com/willf/bloom b27214d2ef0a240ebb489b37c1cac25a36f51078
 golang.org/x/net 1600a4cd699d70009ec28edfd69d3568f6bd757d
