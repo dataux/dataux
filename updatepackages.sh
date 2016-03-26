@@ -4,7 +4,7 @@
 
 cd $GOPATH/src/github.com/araddon/dateparse && git checkout master && git pull
 cd $GOPATH/src/github.com/araddon/gou && git checkout master && git pull
-cd $GOPATH/src/github.com/araddon/qlbridge && git checkout master && git pull
+#cd $GOPATH/src/github.com/araddon/qlbridge && git checkout master && git pull
 cd $GOPATH/src/github.com/bitly/go-hostpool && git checkout master && git pull
 cd $GOPATH/src/github.com/bmizerany/assert && git checkout master && git pull
 #cd $GOPATH/src/github.com/coreos/etcd && git checkout master && git pull

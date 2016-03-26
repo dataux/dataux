@@ -48,6 +48,11 @@ var TestConfigData = `
 
 supress_recover: true
 
+# etcd = [ ]
+# etcd server list dynamically created and injected
+
+nats  = [ "nats://127.0.0.1:9547" ]
+
 frontends [
   {
     type : mysql
