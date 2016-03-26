@@ -38,9 +38,12 @@ func (m *ServerCtx) Init() error {
 	if err := m.loadConfig(); err != nil {
 		return err
 	}
+
+	planner.GridConf.NatsServers = m.Config.Nats
+	planner.GridConf.EtcdServers = m.Config.Etcd
+
 	// how many worker nodes?
 	m.Grid = planner.NewServerGrid(2, m.Reg)
-	go m.Grid.RunMaster()
 
 	return nil
 }

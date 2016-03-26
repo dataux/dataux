@@ -166,6 +166,9 @@ func NewTestServerForDb(t *testing.T, db string) {
 
 		ServerCtx = models.NewServerCtx(Conf)
 		ServerCtx.Init()
+		go func() {
+			ServerCtx.Grid.RunMaster()
+		}()
 
 		Schema, _ = ServerCtx.Schema(db)
 		//u.Infof("starting %q schema in test", db)

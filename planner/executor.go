@@ -84,7 +84,7 @@ func (m *ExecutorGrid) WalkSource(p *plan.Source) (exec.Task, error) {
 	return exec.NewSource(m.Ctx, p)
 }
 func (m *ExecutorGrid) WalkGroupBy(p *plan.GroupBy) (exec.Task, error) {
-	u.Warnf("partial groupby")
+	//u.Debugf("partial groupby")
 	p.Partial = true
 	return exec.NewGroupBy(m.Ctx, p), nil
 }
@@ -115,9 +115,9 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 		natsSource := NewSourceNats(m.Ctx, rx)
 		localTask.Add(natsSource)
 
-		u.Infof("isAgg? %v", p.Stmt.IsAggQuery())
+		//u.Infof("isAgg? %v", p.Stmt.IsAggQuery())
 		if p.Stmt.IsAggQuery() {
-			u.Debugf("Adding aggregate/group by?")
+			//u.Debugf("Adding aggregate/group by?")
 			gbplan := plan.NewGroupBy(p.Stmt)
 			gb := exec.NewGroupByFinal(m.Ctx, gbplan)
 			localTask.Add(gb)
@@ -131,7 +131,7 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 			}
 			// need to send signal to quit
 			ch := natsSource.MessageOut()
-			u.Warnf("closing Source due to a task (first?) completing")
+			//u.Debugf("closing Source due to a task (first?) completing")
 			close(ch)
 			localTask.Close()
 		}()

@@ -39,8 +39,7 @@ func NewSourceNats(ctx *plan.Context, rx grid.Receiver) *SourceNats {
 }
 
 func (m *SourceNats) Close() error {
-	u.Infof("SourceNats Close")
-	//time.Sleep(time.Millisecond * 200)
+	//u.Debugf("SourceNats Close")
 	return nil
 }
 func (m *SourceNats) CloseFinal() error {
@@ -60,6 +59,7 @@ func (m *SourceNats) Run() error {
 
 	defer func() {
 		m.Ctx.Recover()
+		u.Infof("closing SourceNats Out")
 		close(outCh)
 		m.rx.Close()
 	}()

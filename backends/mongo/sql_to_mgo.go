@@ -175,7 +175,7 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 		return nil, fmt.Errorf("Plan did not include Sql Select Statement?")
 	}
 	if m.p == nil {
-		u.Debugf("custom? %v", p.Custom)
+		//u.Debugf("custom? %v", p.Custom)
 		// If we are operating in distributed mode it hasn't
 		// been planned?   WE probably should allow raw data to be
 		// passed via plan?

@@ -37,7 +37,8 @@ func NewSinkNats(ctx *plan.Context, destination string, tx grid.Sender) *SinkNat
 	}
 }
 func (m *SinkNats) Close() error {
-	u.Infof("SinkNats Close")
+	//inCh := m.MessageIn()
+	//u.Debugf("SinkNats close")
 	return nil
 }
 func (m *SinkNats) CloseFinal() error {
@@ -71,7 +72,7 @@ func (m *SinkNats) Run() error {
 			return nil
 		case msg, ok := <-inCh:
 			if !ok {
-				u.Debugf("NICE, got msg shutdown")
+				//u.Debugf("NICE, got msg shutdown")
 				// eofMsg := datasource.NewSqlDriverMessageMapEmpty()
 				// if err := m.tx.Send(m.destination, eofMsg); err != nil {
 				// 	u.Errorf("Could not send eof message? %v", err)

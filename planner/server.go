@@ -59,7 +59,7 @@ func (m *Server) startSqlActor(actorCt, actorId int, partition string, pb string
 	def.Settings["pb64"] = pb
 	def.Settings["partition"] = partition
 	def.Settings["actor_ct"] = strconv.Itoa(actorCt)
-	u.Debugf("%p submitting start actor %s  nodeI=%d", m, def.ID(), actorId)
+	//u.Debugf("%p submitting start actor %s  nodeI=%d", m, def.ID(), actorId)
 	err := m.Grid.StartActor(def)
 	//u.Debugf("%p after submit start actor", m)
 	if err != nil {
@@ -111,13 +111,22 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 		u.Warnf("TODO:  NOT Distributed, don't start tasks!")
 	}
 
-	w := condition.NewCountWatch(m.Grid.Etcd(), m.Grid.Name(), flow.Name(), "sqlcomplete")
+	_, err = m.Grid.Etcd().CreateDir(fmt.Sprintf("/%v/%v/%v", m.Grid.Name(), flow.Name(), "sqlcomplete"), 100000)
+	if err != nil {
+		u.Errorf("Could not initilize dir %v", err)
+	}
+	_, err = m.Grid.Etcd().CreateDir(fmt.Sprintf("/%v/%v/%v", m.Grid.Name(), flow.Name(), "finished"), 100000)
+	if err != nil {
+		u.Errorf("Could not initilize dir %v", err)
+	}
+
+	w := condition.NewCountWatch(m.Grid.Etcd(), m.Grid.Name(), flow.Name(), "finished")
 	defer w.Stop()
 
 	finished := w.WatchUntil(actorCt)
 
 	rp := ring.New(flow.NewContextualName("sqlactor"), actorCt)
-	u.Infof("%p master?? submitting distributed sql query with %d actors", m, actorCt)
+	u.Debugf("%p master?? submitting distributed sql query with %d actors", m, actorCt)
 	//u.WarnT(18)
 	for i, def := range rp.ActorDefs() {
 		go func(ad *grid.ActorDef, actorId int) {
@@ -127,10 +136,10 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 		}(def, i)
 	}
 
-	//u.Infof("submitted actors, waiting for completion signal")
+	//u.Debugf("submitted actors, waiting for completion signal")
 	select {
 	case <-finished:
-		u.Warnf("%s got all! finished signal?", flow.Name())
+		//u.Debugf("%s got all! finished signal?", flow.Name())
 		return nil
 	case <-localTask.SigChan():
 		u.Warnf("%s YAAAAAY finished", flow.String())
@@ -141,6 +150,7 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 	u.Warnf("what is going on?")
 	return nil
 }
+
 func (m *Server) RunWorker() error {
 	//u.Debugf("%p starting grid worker", m)
 	actor, err := newActorMaker(m.Conf)
@@ -150,10 +160,12 @@ func (m *Server) RunWorker() error {
 	}
 	return m.runMaker(actor)
 }
+
 func (m *Server) RunMaster() error {
 	//u.Debugf("%p start grid master", m)
 	return m.runMaker(&nilMaker{})
 }
+
 func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 
 	// We are going to start a "Grid" with specified maker

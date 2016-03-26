@@ -205,9 +205,12 @@ func (m *FileSource) loadSchema() {
 
 	for _, obj := range objs {
 		fi := m.fh.File(m.path, obj)
-		if fi != nil && fi.Name != "" {
+		if fi == nil {
+			continue
+		}
+		if fi.Name != "" {
 			if _, tableExists := m.files[fi.Table]; !tableExists {
-				//u.Debugf("Nice, found new table: %q", fi.Table)
+				u.Debugf("%p found new table: %q", m, fi.Table)
 				m.files[fi.Table] = make([]*FileInfo, 0)
 				m.tablenames = append(m.tablenames, fi.Table)
 			}

@@ -8,7 +8,9 @@ import (
 	"syscall"
 
 	u "github.com/araddon/gou"
+
 	"github.com/dataux/dataux/models"
+	"github.com/dataux/dataux/planner"
 )
 
 var asciiIntro = `
@@ -21,23 +23,32 @@ var asciiIntro = `
 
 `
 
-func banner() string {
-	return strings.Replace(asciiIntro, "*", "`", -1)
-}
+var Conf *models.Config
 
-func RunDaemon(configFile string) {
+func LoadConfig(configFile string) {
 	// get config
 	conf, err := models.LoadConfigFromFile(configFile)
 	if err != nil {
 		u.Errorf("Could not load config: %v", err)
 		os.Exit(1)
 	}
+	Conf = conf
+}
+func banner() string {
+	return strings.Replace(asciiIntro, "*", "`", -1)
+}
+
+func RunDaemon(listener bool, workerCt int) {
+
+	//u.Infof("conf: %+v", Conf)
+
 	// Make Server Context
-	svrCtx := models.NewServerCtx(conf)
+	svrCtx := models.NewServerCtx(Conf)
 	svrCtx.Init()
 
-	var svr *Server
-	svr, err = NewServer(svrCtx)
+	u.Infof("%+v", planner.GridConf)
+
+	svr, err := NewServer(svrCtx)
 	if err != nil {
 		u.Errorf("%v", err)
 		return
@@ -56,7 +67,14 @@ func RunDaemon(configFile string) {
 		svr.Shutdown(Reason{Reason: "signal", Message: fmt.Sprintf("%v", sig)})
 	}()
 
-	svr.Run()
+	fmt.Println(banner())
+
+	go planner.RunWorkerNodes(workerCt, svrCtx.Reg)
+
+	if listener {
+		svr.RunListeners()
+	}
+
 }
 
 // Server is the main DataUx server, the running process and responsible for:
@@ -92,9 +110,9 @@ func NewServer(ctx *models.ServerCtx) (*Server, error) {
 	return svr, nil
 }
 
-// Run is a blocking runner, that starts listeners
+// a blocking runner, that starts mysql tcplisteners
 // and returns if connection to listeners cannot be established
-func (m *Server) Run() {
+func (m *Server) RunListeners() {
 
 	if len(m.listeners) == 0 {
 		u.Errorf("No frontends found ")
@@ -118,7 +136,6 @@ func (m *Server) Run() {
 	}
 
 	// block until shutdown signal
-	//u.Debug("\n", banner(), "\n")
 	<-m.stop
 
 	// after shutdown, ensure they are all closed
