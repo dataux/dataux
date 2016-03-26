@@ -157,7 +157,7 @@ func (m *ResultReader) Run() error {
 		vals := make([]driver.Value, len(cols))
 		for i, col := range cols {
 			//u.Debugf("col source:%s   %s", col.Col.SourceField, col.Col)
-			if val, ok := bm[col.Col.SourceField]; ok {
+			if val, ok := bm[col.SourceName()]; ok {
 				switch vt := val.(type) {
 				case bson.ObjectId:
 					vals[i] = vt.Hex()

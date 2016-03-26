@@ -7,6 +7,7 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
+	"github.com/lytics/grid/natsunit"
 	"github.com/lytics/sereno/embeddedetcd"
 
 	// Frontend's side-effect imports
@@ -166,6 +167,8 @@ func NewTestServerForDb(t *testing.T, db string) {
 		etcdServers := EtcdCluster.HTTPMembers()[0].ClientURLs
 		//u.Infof("etcdServers: %#v", etcdServers)
 		Conf.Etcd = etcdServers
+
+		natsunit.StartEmbeddedNATS()
 
 		planner.GridConf.EtcdServers = etcdServers
 

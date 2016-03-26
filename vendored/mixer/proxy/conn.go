@@ -171,6 +171,10 @@ func (c *Conn) Handshake() error {
 	return nil
 }
 
+func (c *Conn) ConnId() uint32 {
+	return c.connectionId
+}
+
 func (c *Conn) Close() error {
 	if c.closed {
 		return nil

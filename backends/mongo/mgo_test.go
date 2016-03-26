@@ -68,7 +68,7 @@ func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
 
 func TestInvalidQuery(t *testing.T) {
 	RunTestServer(t)
-	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:4000)/mgo")
+	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
 	assert.T(t, err == nil)
 	// It is parsing the SQL on server side (proxy)
 	//  not in client, so hence that is what this is testing, making sure
@@ -240,6 +240,24 @@ func TestDescribeTable(t *testing.T) {
 		RowData: &data,
 	})
 	assert.Tf(t, describedCt == 6, "Should have found/described 6 but was %v", describedCt)
+}
+
+func TestSelectStar(t *testing.T) {
+	RunTestServer(t)
+	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
+	assert.T(t, err == nil)
+	rows, err := db.Query("select * from article;")
+	assert.Tf(t, err == nil, "did not want err but got %v", err)
+	cols, _ := rows.Columns()
+	assert.Tf(t, len(cols) == 12, "want 12 cols but got %v", cols)
+	assert.Tf(t, rows.Next(), "must get next row but couldn't")
+	readCols := make([]interface{}, len(cols))
+	writeCols := make([]string, len(cols))
+	for i, _ := range writeCols {
+		readCols[i] = &writeCols[i]
+	}
+	rows.Scan(readCols...)
+	//assert.Tf(t, len(rows) == 12, "must get 12 rows but got %d", len(rows))
 }
 func TestSelectCountStar(t *testing.T) {
 	data := struct {

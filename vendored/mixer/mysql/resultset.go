@@ -126,7 +126,8 @@ func ValuesToRowData(values []driver.Value, fields []*Field) (RowData, error) {
 				if err != nil {
 					u.Warnf("could not json marshall err=%v  v=%#v", err, v)
 				} else {
-					buf.Write(by)
+					//buf.Write(by)
+					buf.Write(PutLengthEncodedString(by))
 				}
 			}
 		}

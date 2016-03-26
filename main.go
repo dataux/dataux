@@ -52,6 +52,7 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	proxy.RunDaemon(configFile)
+	proxy.LoadConfig(configFile)
 
+	proxy.RunDaemon(true, 2)
 }

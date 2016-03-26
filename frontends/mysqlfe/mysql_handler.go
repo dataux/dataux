@@ -65,13 +65,14 @@ func (m *MySqlConnCreator) Init(conf *models.ListenerConfig, svr *models.ServerC
 // - it re-uses the HandlerShard with has schema, etc on it
 func (m *MySqlConnCreator) Open(connI interface{}) models.StatementHandler {
 
-	//u.Infof("Open: ")
+	//u.Infof("Open: %#v", connI)
 	handler := mySqlHandler{svr: m.svr}
-	handler.sess = NewMySqlSessionVars()
 
 	if conn, ok := connI.(*mysqlproxy.Conn); ok {
 		//u.Debugf("Cloning Mysql handler %v", conn)
 		handler.conn = conn
+		handler.connId = conn.ConnId()
+		handler.sess = NewMySqlSessionVars("default", conn.ConnId())
 		return &handler
 	}
 	panic(fmt.Sprintf("not proxy.Conn? %T", connI))
@@ -81,7 +82,7 @@ func (m *MySqlConnCreator) Run(stop chan bool) error {
 }
 
 func (m *MySqlConnCreator) Close() error {
-	// TODO, think i need to keep reference to all connections and close?
+	// TODO Better close management
 	return nil
 }
 
@@ -92,6 +93,7 @@ type mySqlHandler struct {
 	sess   expr.ContextReader // session info
 	conn   *mysqlproxy.Conn   // Connection to client, inbound mysql conn
 	schema *schema.Schema
+	connId uint32
 }
 
 func (m *mySqlHandler) Close() error {
@@ -116,6 +118,7 @@ func (m *mySqlHandler) SchemaUse(db string) *schema.Schema {
 		return nil
 	}
 	m.schema = schema
+	m.sess = NewMySqlSessionVars(db, m.connId)
 	return schema
 }
 
@@ -158,7 +161,7 @@ func (m *mySqlHandler) chooseCommand(writer models.ResultWriter, req *models.Req
 
 func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err error) {
 
-	//u.Debugf("handleQuery: %v", sql)
+	u.Debugf("handleQuery: %v", sql)
 	if !m.svr.Config.SupressRecover {
 		//u.Debugf("running recovery? ")
 		defer func() {

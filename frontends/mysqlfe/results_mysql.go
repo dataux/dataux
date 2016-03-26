@@ -45,15 +45,19 @@ func NewMySqlResultWriter(writer models.ResultWriter, ctx *plan.Context) *MySqlR
 
 	m := &MySqlResultWriter{writer: writer, schema: ctx.Schema, complete: make(chan bool)}
 	if ctx.Projection != nil {
-		m.proj = ctx.Projection.Proj
+		if ctx.Projection.Proj != nil {
+			m.proj = ctx.Projection.Proj
+		} else {
+			u.Warnf("no projection????   %#v", ctx.Projection)
+		}
 	} else {
-		u.Warnf("no projection????")
+		u.Warnf("no projection?  %#v", ctx)
 	}
 
 	m.TaskBase = exec.NewTaskBase(ctx)
 	m.Rs = mysql.NewResultSet()
 	m.msghandler = resultWrite(m)
-
+	//u.Infof("new result writer ctx = %p  m.Ctx:%p", ctx, m.Ctx)
 	return m
 }
 
@@ -61,8 +65,9 @@ func NewMySqlSchemaWriter(writer models.ResultWriter, ctx *plan.Context) *MySqlR
 
 	m := &MySqlResultWriter{writer: writer, schema: ctx.Schema, complete: make(chan bool)}
 	m.proj = ctx.Projection.Proj
+	// u.Infof("proj %p  %#v", m.proj, ctx.Projection)
 	// for _, col := range m.proj.Columns {
-	// 	u.Infof("col in mysql riter %+v", col)
+	// 	u.Infof("col in mysql writer %+v", col)
 	// }
 	m.TaskBase = exec.NewTaskBase(ctx)
 	m.Rs = mysql.NewResultSet()
@@ -164,6 +169,9 @@ func (m *MySqlResultWriter) Run() error {
 				}
 				return nil
 			}
+			if msg == nil {
+				return nil
+			}
 
 			if ok := m.msghandler(nil, msg); !ok {
 				u.Warnf("wat, not ok? %v", msg)
@@ -193,9 +201,9 @@ func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 		switch mt := msg.Body().(type) {
 		case *datasource.SqlDriverMessageMap:
-			// u.Infof("write: %#v", mt.Values())
-			// for _, v := range mt.Values() {
-			// 	u.Debugf("v = %T = %v", v, v)
+			//u.Infof("write: %#v", mt.Values())
+			// for i, v := range mt.Values() {
+			// 	u.Debugf("%d v = %T = %v", i, v, v)
 			// }
 			m.Rs.AddRowValues(mt.Values())
 			//u.Debugf( "return from mysql.resultWrite")
@@ -233,6 +241,10 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 	if m.proj == nil {
 		u.Warnf("no projection")
 	}
+	// u.Infof("ctx: %p proj %p cols:%d  %#v", m.Ctx, m.proj, len(m.proj.Columns), m.Ctx.Projection)
+	// for _, col := range m.proj.Columns {
+	// 	u.Infof("col in mysql writer %+v", col)
+	// }
 	cols := m.proj.Columns
 	//u.Debugf("projection: %p writing mysql headers %s", m.projection.Proj, m.projection.Proj)
 	if len(cols) == 0 {
@@ -267,7 +279,7 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 		case value.ByteSliceType:
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_BLOB))
 		default:
-			u.Warnf("Field type not known explicitly mapped type=%v so use json %#v", col.Type.String(), col)
+			u.Debugf("Field type not known explicitly mapped type=%v so use json %#v", col.Type.String(), col)
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_BLOB))
 		}
 		//u.Debugf("added field: %v", col.Name)

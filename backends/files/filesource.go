@@ -2,7 +2,6 @@ package files
 
 import (
 	"fmt"
-	"github.com/lytics/lio/src/custdata/records"
 	"io"
 	"strings"
 	"time"
@@ -440,13 +439,6 @@ func (m *FilePager) Next() schema.Message {
 		}
 
 		//u.Infof("msg: %#v", msg.Body())
-		if rec, ok := msg.Body().(*records.Record); ok {
-			uv := rec.GetBodyUv()
-			if len(uv) > 0 {
-
-			}
-			//u.Debugf("part:%v ct:%d ts:%v cc:%-3s     %v %v %v", m.partid, m.rowct, rec.Ts, uv.Get("_ts"), uv.Get("_cc"), uv.Get("_uida"), uv.Get("url"))
-		}
 
 		m.rowct++
 
@@ -484,9 +476,18 @@ func createConfStore(ss *schema.SchemaSource) (cloudstorage.Store, error) {
 		}
 		config = &c
 	case "localfs":
-		//os.RemoveAll("/tmp/mockcloud")
+
+		c := cloudstorage.CloudStoreContext{
+			LogggingContext: "localfiles",
+			TokenSource:     cloudstorage.LocalFileSource,
+			LocalFS:         "/tmp/mockcloud",
+			TmpDir:          "/tmp/localcache",
+		}
+		if path := conf.String("path"); path != "" {
+			c.LocalFS = path
+		}
 		//os.RemoveAll("/tmp/localcache")
-		c := localFilesConfig
+
 		config = &c
 	default:
 		return nil, fmt.Errorf("Unrecognized filestore type %q expected [gcs,localfs]", storeType)

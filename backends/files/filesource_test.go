@@ -2,6 +2,7 @@ package files_test
 
 import (
 	"bufio"
+	"database/sql"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -184,6 +185,24 @@ func TestShowTables(t *testing.T) {
 		RowData: &data,
 	})
 	assert.Tf(t, found, "Must have found article table with show")
+}
+
+func TestSelectStar(t *testing.T) {
+	RunTestServer(t)
+	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
+	assert.T(t, err == nil)
+	rows, err := db.Query("select * from article;")
+	assert.Tf(t, err == nil, "did not want err but got %v", err)
+	cols, _ := rows.Columns()
+	assert.Tf(t, len(cols) == 7, "want 7 cols but got %v", cols)
+	assert.Tf(t, rows.Next(), "must get next row but couldn't")
+	readCols := make([]interface{}, len(cols))
+	writeCols := make([]string, len(cols))
+	for i, _ := range writeCols {
+		readCols[i] = &writeCols[i]
+	}
+	rows.Scan(readCols...)
+	//assert.Tf(t, len(rows) == 7, "must get 7 rows but got %d", len(rows))
 }
 
 func TestSimpleRowSelect(t *testing.T) {
