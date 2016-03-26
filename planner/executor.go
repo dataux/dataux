@@ -59,7 +59,8 @@ func BuildExecutorUnPlanned(ctx *plan.Context, gs *Server) (*ExecutorGrid, error
 //   distribute tasks across servers
 type ExecutorGrid struct {
 	*exec.JobExecutor
-	GridServer *Server
+	distributed bool
+	GridServer  *Server
 }
 
 // Finalize is after the Dag of Relational-algebra tasks have been assembled
@@ -84,8 +85,11 @@ func (m *ExecutorGrid) WalkSource(p *plan.Source) (exec.Task, error) {
 	return exec.NewSource(m.Ctx, p)
 }
 func (m *ExecutorGrid) WalkGroupBy(p *plan.GroupBy) (exec.Task, error) {
-	//u.Debugf("partial groupby")
-	p.Partial = true
+
+	if m.distributed {
+		//u.Debugf("%p partial groupby distributed? %v", m, m.distributed)
+		p.Partial = true
+	}
 	return exec.NewGroupBy(m.Ctx, p), nil
 }
 func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
@@ -96,7 +100,6 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 	//u.WarnT(10)
 	if !p.ChildDag && len(p.Stmt.With) > 0 && p.Stmt.With.Bool("distributed") {
 		//u.Warnf("%p has distributed!!!!!: %#v", m, p.Stmt.With)
-
 		// We are going to run tasks remotely, so need a local grid source for them
 		//  remoteSink  -> nats ->  localSource
 		localTask := exec.NewTaskSequential(m.Ctx)
@@ -144,5 +147,6 @@ func (m *ExecutorGrid) WalkSelectPartition(p *plan.Select, part *schema.Partitio
 
 	//u.Infof("WTF:  %#v", m.JobExecutor)
 	//u.Infof("%p  %p childdag? %v", m, p, p.ChildDag)
+	m.distributed = true
 	return m.JobExecutor.WalkSelect(p)
 }

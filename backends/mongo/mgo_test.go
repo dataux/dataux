@@ -172,26 +172,26 @@ func TestShowColumns(t *testing.T) {
 		Sql:         fmt.Sprintf("show full columns from `article` from `%s` LIKE '%%'", tu.DbName),
 		ExpectRowCt: 12,
 		ValidateRowData: func() {
-			//u.Infof("%#v", data)
+			u.Infof("%#v", data)
 			assert.Tf(t, data.Field != "", "%v", data)
 			switch data.Field {
 			case "embedded":
-				assert.Tf(t, data.Type == "text", "%#v", data)
+				assert.Tf(t, data.Type == "text", "wanted text got %v", data.Type)
 				describedCt++
 			case "author":
-				assert.T(t, data.Type == "varchar(255)")
+				assert.Tf(t, data.Type == "varchar(255)", "wanted varchar(255) got %q", data.Type)
 				describedCt++
 			case "created":
-				assert.T(t, data.Type == "datetime")
+				assert.Tf(t, data.Type == "datetime", "Wanted datetime, got %q")
 				describedCt++
 			case "category":
-				assert.T(t, data.Type == "text")
+				assert.Tf(t, data.Type == "text", `wanted "text" got %q`, data.Type)
 				describedCt++
 			case "body":
-				assert.T(t, data.Type == "text")
+				assert.Tf(t, data.Type == "text", "wanted text got %q")
 				describedCt++
 			case "deleted":
-				assert.T(t, data.Type == "boolean", "type?", data.Type)
+				assert.Tf(t, data.Type == "boolean", "Wanted boolean got? %q", data.Type)
 				describedCt++
 			}
 		},

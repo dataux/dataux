@@ -109,6 +109,9 @@ func NewServer(ctx *models.ServerCtx) (*Server, error) {
 
 	return svr, nil
 }
+func (m *Server) Run() {
+	m.RunListeners()
+}
 
 // a blocking runner, that starts mysql tcplisteners
 // and returns if connection to listeners cannot be established
