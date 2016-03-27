@@ -105,6 +105,7 @@ func TestSchemaQueries(t *testing.T) {
   			@@character_set_client as character_set_client, 
   			@@character_set_connection as character_set_connection`,
 		ExpectRowCt: 1,
+		ExpectColCt: 3,
 		ValidateRow: func(row []interface{}) {
 			u.Infof("%v", row)
 			assert.T(t, len(row) == 3)

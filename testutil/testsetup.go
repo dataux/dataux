@@ -201,7 +201,9 @@ func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
 				rowVals, err := rows.SliceScan()
 				//u.Infof("rowVals: %#v", rowVals)
 				assert.Tf(t, err == nil, "%v", err)
-				assert.Tf(t, len(rowVals) == testSpec.ExpectColCt, "wanted cols but got %v", len(rowVals))
+				if testSpec.ExpectColCt > 0 {
+					assert.Tf(t, len(rowVals) == testSpec.ExpectColCt, "wanted %d cols but got %v", testSpec.ExpectColCt, len(rowVals))
+				}
 				rowCt++
 				if testSpec.ValidateRow != nil {
 					testSpec.ValidateRow(rowVals)
