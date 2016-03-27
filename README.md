@@ -1,18 +1,23 @@
 
-##  Sql Query Proxy to Elasticsearch, Mongo, Etc
+##  Sql Query Proxy to Elasticsearch, Mongo, etc.
 
-Mysql compatible proxy to Elasticsearch, Mongo, Google Datastore backend sources, including join.
+Mysql compatible query engine to Elasticsearch, Mongo, Google Datastore, File-based backend sources, including join.
 
-Make data more accessible and usable by querying data existing datasources using mysql protocol.  
-This proxy translates from mysql to backend protocol (elasticsearch, mongo, etc) by implementing a full
-relational algebra layer to run sql queries and poly-fill missing features.  So, a 
-backend key-value storage such as redis can now have aggregate functions, where etc.
+The goal of DataUX is to make data more accessible and usable by querying data where it
+lives (Elasticsearch, Mongo, MySql, Files) by implementing full relational algebra and distributed
+query engine to query these even if they don't implement SQL.  
+This query engine hosts a mysql protocol listener, then translates to native (elasticsearch, mongo, etc).
+It works by implementing a full relational algebra layer to run sql queries and poly-fill missing features
+from underlying sources.  So, a backend key-value storage such as redis can now have aggregate functions, where etc.
+
+Most similar to [prestodb](http://prestodb.io/) but in Golang, and focused on
+easy to hack, add custom data sources.
 
 
 ## Features
 
 * *Distributed*  run queries across multiple servers
-* *Hackable DataSources*  Very easy to add a new DataSource for your custom data, files, json, csv, storage.
+* *Hackable Sources*  Very easy to add a new Source for your custom data, files, json, csv, storage.
 * *Hackable Functions* Add custom go functions to extend the sql language.
 * *Joins* Get join functionality between heterogeneous sources.
 * *Frontends* currently only MySql protocol is supported but RethinkDB (for real-time api) is planned, and are pluggable.
@@ -62,7 +67,7 @@ go build
 
 Roadmap(ish)
 ------------------------------
-* **Backends**: Redis, CSV, Json-Files, Kafka, Rest api's
+* **Backends**: Json-Files, Cassandra, Big-Query
 * Pub-Sub for Writes
 
 
