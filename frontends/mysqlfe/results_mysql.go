@@ -2,6 +2,7 @@ package mysqlfe
 
 import (
 	"database/sql/driver"
+	"time"
 
 	u "github.com/araddon/gou"
 
@@ -23,10 +24,12 @@ var (
 
 type MySqlResultWriter struct {
 	writer       models.ResultWriter
+	msghandler   exec.MessageHandler
 	schema       *schema.Schema
 	proj         *rel.Projection
 	Rs           *mysql.Resultset
-	ctx          *plan.Context
+	complete     chan bool
+	isComplete   bool
 	wroteHeaders bool
 	*exec.TaskBase
 }
@@ -35,53 +38,73 @@ type MySqlExecResultWriter struct {
 	writer models.ResultWriter
 	schema *schema.Schema
 	Rs     *mysql.Result
-	ctx    *plan.Context
 	*exec.TaskBase
 }
 
 func NewMySqlResultWriter(writer models.ResultWriter, ctx *plan.Context) *MySqlResultWriter {
 
-	m := &MySqlResultWriter{writer: writer, ctx: ctx, schema: ctx.Schema}
+	m := &MySqlResultWriter{writer: writer, schema: ctx.Schema, complete: make(chan bool)}
 	if ctx.Projection != nil {
-		m.proj = ctx.Projection.Proj
+		if ctx.Projection.Proj != nil {
+			m.proj = ctx.Projection.Proj
+		} else {
+			u.Warnf("no projection????   %#v", ctx.Projection)
+		}
 	} else {
-		u.Warnf("no projection????")
+		u.Warnf("no projection?  %#v", ctx)
 	}
 
 	m.TaskBase = exec.NewTaskBase(ctx)
 	m.Rs = mysql.NewResultSet()
-
-	m.Handler = resultWrite(m)
+	m.msghandler = resultWrite(m)
+	//u.Infof("new result writer ctx = %p  m.Ctx:%p", ctx, m.Ctx)
 	return m
 }
 
 func NewMySqlSchemaWriter(writer models.ResultWriter, ctx *plan.Context) *MySqlResultWriter {
 
-	m := &MySqlResultWriter{writer: writer, ctx: ctx, schema: ctx.Schema}
+	m := &MySqlResultWriter{writer: writer, schema: ctx.Schema, complete: make(chan bool)}
 	m.proj = ctx.Projection.Proj
+	// u.Infof("proj %p  %#v", m.proj, ctx.Projection)
+	// for _, col := range m.proj.Columns {
+	// 	u.Infof("col in mysql writer %+v", col)
+	// }
 	m.TaskBase = exec.NewTaskBase(ctx)
 	m.Rs = mysql.NewResultSet()
 
-	m.Handler = schemaWrite(m)
+	m.msghandler = schemaWrite(m)
 	return m
 }
 
 func (m *MySqlResultWriter) Close() error {
 
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	//u.Infof("%p mysql Close() waiting for complete", m)
+	select {
+	case <-ticker.C:
+		u.Warnf("timeout???? ")
+	case <-m.complete:
+		//u.Warnf("%p got mysql result complete", m)
+	}
+
 	if m.Rs == nil || len(m.Rs.Fields) == 0 {
-		m.Rs = NewEmptyResultset(m.ctx.Projection)
-		//u.Infof("nil resultwriter Close() has RS?%v rowct:%v", m.Rs == nil, len(m.Rs.RowDatas))
-	} else {
-		//u.Infof("in mysql resultwriter Close() has RS?%v rowct:%v", m.Rs == nil, len(m.Rs.RowDatas))
+		m.Rs = NewEmptyResultset(m.Ctx.Projection)
 	}
 	m.writer.WriteResult(m.Rs)
+
+	if err := m.TaskBase.Close(); err != nil {
+		return err
+	}
+
 	return nil
 }
 func schemaWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 	return func(_ *plan.Context, msg schema.Message) bool {
 
-		//u.Debugf("in schemaWrite:  %#v", msg)
+		u.Debugf("in schemaWrite:  %#v", msg)
 		if !m.wroteHeaders {
 			m.WriteHeaders()
 		}
@@ -127,10 +150,43 @@ func schemaWrite(m *MySqlResultWriter) exec.MessageHandler {
 	}
 }
 
+func (m *MySqlResultWriter) Run() error {
+	defer m.Ctx.Recover()
+	inCh := m.MessageIn()
+
+	for {
+
+		select {
+		case <-m.SigChan():
+			u.Debugf("got signal quit")
+			return nil
+		case msg, ok := <-inCh:
+			if !ok {
+				//u.Debugf("%p MYSQL INPUT CLOSED, got msg shutdown", m)
+				if !m.isComplete {
+					m.isComplete = true
+					close(m.complete)
+				}
+				return nil
+			}
+			if msg == nil {
+				return nil
+			}
+
+			if ok := m.msghandler(nil, msg); !ok {
+				u.Warnf("wat, not ok? %v", msg)
+			}
+		}
+	}
+	return nil
+}
 func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 	return func(_ *plan.Context, msg schema.Message) bool {
 
+		if msg == nil {
+			return false
+		}
 		//u.Debugf("in resultWrite:  %#v", msg)
 		if !m.wroteHeaders {
 			m.WriteHeaders()
@@ -146,8 +202,8 @@ func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 		switch mt := msg.Body().(type) {
 		case *datasource.SqlDriverMessageMap:
 			//u.Infof("write: %#v", mt.Values())
-			// for _, v := range mt.Values() {
-			// 	u.Debugf("v = %T = %v", v, v)
+			// for i, v := range mt.Values() {
+			// 	u.Debugf("%d v = %T = %v", i, v, v)
 			// }
 			m.Rs.AddRowValues(mt.Values())
 			//u.Debugf( "return from mysql.resultWrite")
@@ -158,7 +214,7 @@ func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 				if val, ok := mt[col.As]; !ok {
 					u.Warnf("could not find result val: %v name=%s", col.As, col.Name)
 				} else {
-					u.Debugf("found col: %#v    val=%#v", col, val)
+					//u.Debugf("found col: %#v    val=%#v", col, val)
 					vals[col.ColPos] = val
 				}
 			}
@@ -185,6 +241,10 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 	if m.proj == nil {
 		u.Warnf("no projection")
 	}
+	// u.Infof("ctx: %p proj %p cols:%d  %#v", m.Ctx, m.proj, len(m.proj.Columns), m.Ctx.Projection)
+	// for _, col := range m.proj.Columns {
+	// 	u.Infof("col in mysql writer %+v", col)
+	// }
 	cols := m.proj.Columns
 	//u.Debugf("projection: %p writing mysql headers %s", m.projection.Proj, m.projection.Proj)
 	if len(cols) == 0 {
@@ -219,7 +279,7 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 		case value.ByteSliceType:
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_BLOB))
 		default:
-			u.Warnf("Field type not known explicitly mapped type=%v so use json %#v", col.Type.String(), col)
+			u.Debugf("Field type not known explicitly mapped type=%v so use json %#v", col.Type.String(), col)
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_BLOB))
 		}
 		//u.Debugf("added field: %v", col.Name)
@@ -270,7 +330,7 @@ func NewEmptyResultset(pp *plan.Projection) *mysql.Resultset {
 
 func NewMySqlExecResultWriter(writer models.ResultWriter, ctx *plan.Context) *MySqlExecResultWriter {
 
-	m := &MySqlExecResultWriter{writer: writer, ctx: ctx, schema: ctx.Schema}
+	m := &MySqlExecResultWriter{writer: writer, schema: ctx.Schema}
 	m.TaskBase = exec.NewTaskBase(m.Ctx)
 	m.Rs = mysql.NewResult()
 	m.Handler = nilWriter(m)

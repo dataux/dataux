@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/signal"
@@ -51,14 +52,14 @@ type Server struct {
 	lastTaskId uint64
 }
 
-func (m *Server) startSqlActor(nodeCt, nodeId int, partition string, pb []byte, flow Flow, def *grid.ActorDef, p *plan.Select) error {
-	//def := grid.NewActorDef(flow.NewContextualName("sqlactor"))
+func (m *Server) startSqlActor(actorCt, actorId int, partition string, pb string, flow Flow, def *grid.ActorDef, p *plan.Select) error {
+
 	def.DefineType("sqlactor")
 	def.Define("flow", flow.Name())
-	def.RawData["pb"] = pb
+	def.Settings["pb64"] = pb
 	def.Settings["partition"] = partition
-	def.Settings["node_ct"] = strconv.Itoa(nodeCt)
-	//u.Debugf("%p submitting start actor %s  nodeI=%d", m, def.ID(), nodeId)
+	def.Settings["actor_ct"] = strconv.Itoa(actorCt)
+	//u.Debugf("%p submitting start actor %s  nodeI=%d", m, def.ID(), actorId)
 	err := m.Grid.StartActor(def)
 	//u.Debugf("%p after submit start actor", m)
 	if err != nil {
@@ -69,18 +70,19 @@ func (m *Server) startSqlActor(nodeCt, nodeId int, partition string, pb []byte, 
 
 func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select) error {
 
-	//u.Debugf("%p master starting job %s", m, flow)
-
+	//u.Debugf("%p master submitting job childdag?%v  %s", m, p.ChildDag, p.Stmt.String())
+	//u.LogTracef(u.WARN, "hello")
 	// marshal plan to Protobuf for transport
 	pb, err := p.Marshal()
 	if err != nil {
 		u.Errorf("Could not protbuf marshal %v for %s", err, p.Stmt)
 		return err
 	}
-	//pbsBase := base64.URLEncoding.EncodeToString(pb)
-	//sqlNode.Settings["pb"] = pbsBase
+	// TODO:  send the instructions as a grid message NOT part of actor-def
+	pb64 := base64.URLEncoding.EncodeToString(pb)
+	//u.Infof("pb64:  %s", pb64)
 
-	nodeCt := 1
+	actorCt := 1
 	partitions := []string{""}
 	if len(p.Stmt.With) > 0 && p.Stmt.With.Bool("distributed") {
 		//u.Warnf("distribution instructions node_ct:%v", p.Stmt.With.Int("node_ct"))
@@ -88,11 +90,20 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 			if f.Tbl != nil {
 				if f.Tbl.Partition != nil {
 					partitions = make([]string, len(f.Tbl.Partition.Partitions))
-					nodeCt = len(f.Tbl.Partition.Partitions)
+					actorCt = len(f.Tbl.Partition.Partitions)
 					for i, part := range f.Tbl.Partition.Partitions {
 						//u.Warnf("Found Partitions for %q = %#v", f.Tbl.Name, part)
 						partitions[i] = part.Id
 					}
+				} else if f.Tbl.PartitionCt > 0 {
+					partitions = make([]string, f.Tbl.PartitionCt)
+					actorCt = f.Tbl.PartitionCt
+					for i := 0; i < actorCt; i++ {
+						//u.Warnf("Found Partitions for %q = %#v", f.Tbl.Name, i)
+						partitions[i] = fmt.Sprintf("%d", i)
+					}
+				} else {
+					u.Warnf("partition? %#v", f.Tbl.Partition)
 				}
 			}
 		}
@@ -100,24 +111,46 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 		u.Warnf("TODO:  NOT Distributed, don't start tasks!")
 	}
 
-	rp := ring.New(flow.NewContextualName("sqlactor"), nodeCt)
+	_, err = m.Grid.Etcd().CreateDir(fmt.Sprintf("/%v/%v/%v", m.Grid.Name(), flow.Name(), "sqlcomplete"), 100000)
+	if err != nil {
+		u.Errorf("Could not initilize dir %v", err)
+	}
+	_, err = m.Grid.Etcd().CreateDir(fmt.Sprintf("/%v/%v/%v", m.Grid.Name(), flow.Name(), "finished"), 100000)
+	if err != nil {
+		u.Errorf("Could not initilize dir %v", err)
+	}
+
+	w := condition.NewCountWatch(m.Grid.Etcd(), m.Grid.Name(), flow.Name(), "finished")
+	defer w.Stop()
+
+	finished := w.WatchUntil(actorCt)
+
+	rp := ring.New(flow.NewContextualName("sqlactor"), actorCt)
+	u.Debugf("%p master?? submitting distributed sql query with %d actors", m, actorCt)
+	//u.WarnT(18)
 	for i, def := range rp.ActorDefs() {
-		go func(ad *grid.ActorDef, nodeId int) {
-			if err = m.startSqlActor(nodeCt, nodeId, partitions[nodeId], pb, flow, ad, p); err != nil {
+		go func(ad *grid.ActorDef, actorId int) {
+			if err = m.startSqlActor(actorCt, actorId, partitions[actorId], pb64, flow, ad, p); err != nil {
 				u.Errorf("Could not create sql actor %v", err)
 			}
 		}(def, i)
 	}
 
+	//u.Debugf("submitted actors, waiting for completion signal")
 	select {
+	case <-finished:
+		//u.Debugf("%s got all! finished signal?", flow.Name())
+		return nil
 	case <-localTask.SigChan():
 		u.Warnf("%s YAAAAAY finished", flow.String())
 
 	case <-time.After(30 * time.Second):
 		u.Warnf("%s exiting bc timeout", flow)
 	}
+	u.Warnf("what is going on?")
 	return nil
 }
+
 func (m *Server) RunWorker() error {
 	//u.Debugf("%p starting grid worker", m)
 	actor, err := newActorMaker(m.Conf)
@@ -127,10 +160,12 @@ func (m *Server) RunWorker() error {
 	}
 	return m.runMaker(actor)
 }
+
 func (m *Server) RunMaster() error {
 	//u.Debugf("%p start grid master", m)
 	return m.runMaker(&nilMaker{})
 }
+
 func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 
 	// We are going to start a "Grid" with specified maker

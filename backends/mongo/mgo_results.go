@@ -4,7 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"time"
+	//"time"
 
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -146,7 +146,7 @@ func (m *ResultReader) Run() error {
 		u.Errorf("WTF?  no cols? %v", cols)
 	}
 
-	n := time.Now()
+	//n := time.Now()
 	iter := m.query.Iter()
 	for {
 		var bm bson.M
@@ -157,7 +157,7 @@ func (m *ResultReader) Run() error {
 		vals := make([]driver.Value, len(cols))
 		for i, col := range cols {
 			//u.Debugf("col source:%s   %s", col.Col.SourceField, col.Col)
-			if val, ok := bm[col.Col.SourceField]; ok {
+			if val, ok := bm[col.SourceName()]; ok {
 				switch vt := val.(type) {
 				case bson.ObjectId:
 					vals[i] = vt.Hex()
@@ -186,7 +186,7 @@ func (m *ResultReader) Run() error {
 		//u.Debugf("new row ct: %v cols:%v vals:%v", len(m.Vals), colNames, vals)
 		//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
 		msg := datasource.NewSqlDriverMessageMap(uint64(len(m.Vals)), vals, colNames)
-		u.Debugf("mongo result msg out %#v", msg)
+		//u.Debugf("mongo result msg out %#v", msg)
 		select {
 		case <-sigChan:
 			return nil
@@ -199,6 +199,6 @@ func (m *ResultReader) Run() error {
 		u.Errorf("could not iter: %v", err)
 		return err
 	}
-	u.Debugf("finished query, took: %v for %v rows", time.Now().Sub(n), len(m.Vals))
+	//u.Debugf("finished query, took: %v for %v rows", time.Now().Sub(n), len(m.Vals))
 	return nil
 }

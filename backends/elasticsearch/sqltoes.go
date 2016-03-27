@@ -36,7 +36,7 @@ type SqlToEs struct {
 	p              *plan.Source
 	tbl            *schema.Table
 	sel            *rel.SqlSelect
-	schema         *schema.SourceSchema
+	schema         *schema.SchemaSource
 	ctx            *plan.Context
 	partition      *schema.Partition // current partition for this request
 	req            esMap             // Full request
@@ -54,7 +54,7 @@ type SqlToEs struct {
 func NewSqlToEs(table *schema.Table) *SqlToEs {
 	return &SqlToEs{
 		tbl:         table,
-		schema:      table.SourceSchema,
+		schema:      table.SchemaSource,
 		projections: make(map[string]string),
 	}
 }
@@ -65,7 +65,7 @@ func (m *SqlToEs) Host() string {
 	//u.Warnf("TODO:  replace hardcoded es host")
 	return chooseBackend(m.schema)
 }
-func chooseBackend(schema *schema.SourceSchema) string {
+func chooseBackend(schema *schema.SchemaSource) string {
 	for _, node := range schema.Nodes {
 		// TODO:  implement real balancer
 		return node.Address

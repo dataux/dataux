@@ -1,8 +1,8 @@
 package planner
 
 import (
+	"encoding/base64"
 	"encoding/gob"
-	"os"
 	"strconv"
 	"time"
 
@@ -46,6 +46,7 @@ type (
 		p           *plan.Select
 		et          exec.TaskRunner
 		sqlJobMaker interface{}
+		ActorCt     int
 	}
 )
 
@@ -103,7 +104,7 @@ func (a *SqlActor) Act(g grid.Grid, exit <-chan bool) bool {
 	d.SetTransition(Finishing, Exit, Exiting, a.Exiting)
 
 	final, _ := d.Run(a.Starting)
-	u.Warnf("%s sqlactor final: %v", a, final.String())
+	//u.Debugf("%s sqlactor final: %v", a, final.String())
 	if final == Terminating {
 		return true
 	}
@@ -113,21 +114,33 @@ func (a *SqlActor) Act(g grid.Grid, exit <-chan bool) bool {
 func (m *SqlActor) Starting() dfa.Letter {
 
 	//u.Debugf("%p settings: %v", m, m.def.Settings)
-	//u.LogTracef(u.WARN, "wat")
-	nodeCt := 1
-	nodeCt64, err := strconv.ParseInt(m.def.Settings["node_ct"], 10, 64)
+	m.ActorCt = 1
+	nodeCt64, err := strconv.ParseInt(m.def.Settings["actor_ct"], 10, 64)
 	if err == nil && nodeCt64 > 0 {
-		nodeCt = int(nodeCt64)
+		m.ActorCt = int(nodeCt64)
 	}
-	pb := m.def.RawData["pb"]
+
+	//pb := m.def.RawData["pb"]
+	pb64 := m.def.Settings["pb64"]
+	pb, err := base64.URLEncoding.DecodeString(pb64)
+	if err != nil {
+		u.Errorf("Could not read sql pb %v", err)
+	}
+	//u.Infof("pb64:  %s", pb64)
 
 	p, err := plan.SelectPlanFromPbBytes(pb, m.conf.SchemaLoader)
 	if err != nil {
 		u.Errorf("error %v", err)
 		return Failure
 	}
+
 	m.p = p
 	p.Ctx.DisableRecover = m.conf.SupressRecover
+
+	if p.ChildDag == false {
+		u.Errorf("%p This MUST BE CHILD DAG", p)
+	}
+	//u.Infof("about to get executor for actor has child dag")
 
 	if m.conf == nil {
 		u.Warnf("no conf?")
@@ -145,10 +158,14 @@ func (m *SqlActor) Starting() dfa.Letter {
 
 	//u.Debugf("nodeCt:%v  run executor walk select %#v from ct? %v", nodeCt, p.Stmt.With, len(p.From))
 	for _, f := range p.From {
+		if len(f.Custom) == 0 {
+			f.Custom = make(u.JsonHelper)
+		}
 		f.Custom["partition"] = m.def.Settings["partition"]
-		//u.Infof("from: %#v", f.Custom)
+		//u.Infof("actor from custom has part?: %#v", f.Custom)
 	}
-	//u.Infof("%p starting executor %#v", m, executor)
+
+	//u.Infof("%p plan.Select:%p sqlactor calling executor %p", m, p, executor)
 	sqlTask, err := executor.WalkSelectPartition(p, nil)
 	//sqlTask, err := executor.WalkPlan(p)
 	if err != nil {
@@ -172,15 +189,13 @@ func (m *SqlActor) Starting() dfa.Letter {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	//time.Sleep(3 * time.Second)
-
 	//u.Debugf("%p starting actor %#v  settings:%v", m, m.flow.Name(), m.def.Settings)
 
 	// Our Join Barrier that is going to allow us to wait for all
 	//  sql actors to have started
 	j := condition.NewJoin(m.grid.Etcd(), 2*time.Minute, m.grid.Name(), m.flow.Name(), "started", m.ID())
 	if err := j.Rejoin(); err != nil {
-		u.Errorf("wat?  %v", err)
+		u.Errorf("could not rejoin??  %v", err)
 		return Failure
 	}
 	m.started = j
@@ -188,93 +203,27 @@ func (m *SqlActor) Starting() dfa.Letter {
 	w := condition.NewCountWatch(m.grid.Etcd(), m.grid.Name(), m.flow.Name(), "started")
 	defer w.Stop()
 
-	f := condition.NewNameWatch(m.grid.Etcd(), m.grid.Name(), m.flow.Name(), "finished")
-	defer f.Stop()
+	// f := condition.NewNameWatch(m.grid.Etcd(), m.grid.Name(), m.flow.Name(), "finished")
+	// defer f.Stop()
 
-	//started := w.WatchUntil(m.conf.NrConsumers + m.conf.NrProducers + 1)
-	//u.Infof("%p waiting for %v", m, nodeCt)
-	// if 0 == 0 {
-	// 	return EverybodyStarted
-	// }
-	started := w.WatchUntil(nodeCt)
-	finished := f.WatchUntil(m.flow.NewContextualName("sqlactor"))
+	started := w.WatchUntil(m.ActorCt)
+	//finished := f.WatchUntil(m.flow.NewContextualName("sqlactor"))
 	for {
 		select {
 		case <-m.exit:
+			u.Warnf("m.exit???")
 			return Exit
 		case <-ticker.C:
 			if err := m.started.Alive(); err != nil {
+				u.Warnf("failure???")
 				return Failure
 			}
 		case <-started:
 			//u.Debugf("%p everybody started", m)
 			return EverybodyStarted
-		case <-finished:
-			u.Warnf("everybody finished?")
-			return EverybodyFinished
-		}
-	}
-}
-
-func (m *SqlActor) RunSqlDag() {
-
-	natsSink := NewSinkNats(m.p.Ctx, m.flow.Name(), m.tx)
-	m.et.Add(natsSink)
-	m.et.Setup(0)
-
-	err := m.et.Run()
-	if err != nil {
-		u.Errorf("error on Query.Run(): %v", err)
-	}
-
-	j := condition.NewJoin(m.grid.Etcd(), 10*time.Second, m.grid.Name(), m.flow.Name(), "sqlcomplete", m.ID())
-	u.Infof("sending sqlcomplete join message for %#v", m.et)
-	if err = j.Rejoin(); err != nil {
-		u.Errorf("could not join?? %v", err)
-	}
-	u.Warnf("sqlcomplete sql dag")
-	if 22 == 55 {
-		os.Exit(0)
-	}
-}
-
-func (m *SqlActor) Finishing() dfa.Letter {
-
-	u.Warnf("%s sqlactor finishing", m.String())
-	return EverybodyFinished
-
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	j := condition.NewJoin(m.grid.Etcd(), 10*time.Minute, m.grid.Name(), m.flow.Name(), "finished")
-	if err := j.Rejoin(); err != nil {
-		return Failure
-	}
-	m.finished = j
-
-	w := condition.NewCountWatch(m.grid.Etcd(), m.grid.Name(), m.flow.Name(), "finished")
-	defer w.Stop()
-
-	// finished := w.WatchUntil(m.conf.NrConsumers + m.conf.NrProducers + 1)
-	finished := w.WatchUntil(1)
-	for {
-		select {
-		case <-m.exit:
-			return Exit
-		case <-ticker.C:
-			if err := m.started.Alive(); err != nil {
-				return Failure
-			}
-			if err := m.finished.Alive(); err != nil {
-				return Failure
-			}
-		case <-finished:
-			m.started.Exit()
-			m.finished.Alive()
-			return EverybodyFinished
-		case err := <-w.WatchError():
-			u.Errorf("%v: error: %v", m, err)
-			return Failure
+			// case <-finished:
+			// 	u.Warnf("everybody finished?")
+			// 	return EverybodyFinished
 		}
 	}
 }
@@ -294,15 +243,39 @@ func (m *SqlActor) Running() dfa.Letter {
 		}
 	}
 
-	//u.Debugf("%v: running ", m.ID())
+	//u.Debugf("%v: running with %d nodes", m.ID(), m.ActorCt)
 
 	w := condition.NewCountWatch(m.grid.Etcd(), m.grid.Name(), m.flow.Name(), "sqlcomplete")
 	defer w.Stop()
+	finished := w.WatchUntil(m.ActorCt)
 
 	// Now run the Actual worker
-	go m.RunSqlDag()
+	go func() {
+		natsSink := NewSinkNats(m.p.Ctx, m.flow.Name(), m.tx)
+		m.et.Add(natsSink)
+		m.et.Setup(0)
 
-	finished := w.WatchUntil(1)
+		// u.Warnf("starting sqldag %s, printing dag", m.flow.Name())
+		// dagp := m.et.(exec.TaskPrinter)
+		// dagp.PrintDag(0)
+
+		err := m.et.Run()
+		//u.Infof("finished sqldag %s", m.flow.Name())
+		if err != nil {
+			u.Errorf("error on Query.Run(): %v", err)
+		}
+
+		//u.Warnf("about to send sqlcomplete after exec task run")
+		j := condition.NewJoin(m.grid.Etcd(), 10*time.Second, m.grid.Name(), m.flow.Name(), "sqlcomplete", m.ID())
+		defer j.Stop()
+
+		//u.Infof("sending sqlcomplete join message for")
+		if err = j.Rejoin(); err != nil {
+			u.Errorf("could not join?? %v", err)
+		}
+		//u.Warnf("sqlcomplete sql dag")
+	}()
+
 	for {
 		select {
 		case <-m.exit:
@@ -316,7 +289,7 @@ func (m *SqlActor) Running() dfa.Letter {
 			}
 			u.Warnf("%s about to do ticker store", m)
 		case <-finished:
-			u.Warnf("%s sqlactor about to send finished signal?", m)
+			//u.Warnf("%s sqlactor about to send finished signal?", m)
 			return EverybodyFinished
 		case err := <-w.WatchError():
 			u.Errorf("%v: error: %v", m, err)
@@ -336,7 +309,53 @@ func (m *SqlActor) Running() dfa.Letter {
 	}
 }
 
+func (m *SqlActor) Finishing() dfa.Letter {
+
+	//u.Debugf("%s sqlactor finishing   %d", m.String(), m.ActorCt)
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	w := condition.NewCountWatch(m.grid.Etcd(), m.grid.Name(), m.flow.Name(), "finished")
+	defer w.Stop()
+
+	//u.Debugf("about to join finished?")
+	j := condition.NewJoin(m.grid.Etcd(), 10*time.Minute, m.grid.Name(), m.flow.Name(), "finished", m.ID())
+	if err := j.Rejoin(); err != nil {
+		u.Errorf("Exiting to failure? %v", err)
+		return Failure
+	}
+	m.finished = j
+	//u.Debugf("after join finished %v", m.ActorCt)
+
+	finished := w.WatchUntil(m.ActorCt)
+	for {
+		select {
+		case <-m.exit:
+			u.Warnf("exit")
+			return Exit
+		case <-ticker.C:
+			if err := m.started.Alive(); err != nil {
+				return Failure
+			}
+			if err := m.finished.Alive(); err != nil {
+				u.Warnf("finished")
+				return Failure
+			}
+		case <-finished:
+			//u.Debugf("got everybody finished")
+			//m.started.Exit()
+			//m.finished.Alive()
+			return EverybodyFinished
+		case err := <-w.WatchError():
+			u.Errorf("%v: error: %v", m, err)
+			return Failure
+		}
+	}
+}
+
 func (m *SqlActor) Exiting() {
+	//u.Debugf("exiting")
 	if m.started != nil {
 		m.started.Stop()
 	}
@@ -349,7 +368,7 @@ func (m *SqlActor) Exiting() {
 }
 
 func (m *SqlActor) Terminating() {
-	u.Warnf("%s SqlActor terminating", m)
+	//u.Debugf("%s SqlActor terminating", m)
 	m.Exiting()
 
 	if m.state == nil {

@@ -31,13 +31,6 @@ var (
 	_ exec.ExecutorSource = (*SqlToMgo)(nil)
 )
 
-/*
-	SourcePlanner interface {
-		// given our request statement, turn that into a plan.Task.
-		WalkSourceSelect(s *Source) (Task, error)
-	}
-*/
-
 // Sql To Mongo Request
 //   Map sql queries into Mongo bson Requests
 type SqlToMgo struct {
@@ -46,7 +39,7 @@ type SqlToMgo struct {
 	p              *plan.Source
 	tbl            *schema.Table
 	sel            *rel.SqlSelect
-	schema         *schema.SourceSchema
+	schema         *schema.SchemaSource
 	sess           *mgo.Session
 	filter         bson.M
 	aggs           bson.M
@@ -63,7 +56,7 @@ type SqlToMgo struct {
 func NewSqlToMgo(table *schema.Table, sess *mgo.Session) *SqlToMgo {
 	sm := &SqlToMgo{
 		tbl:    table,
-		schema: table.SourceSchema,
+		schema: table.SchemaSource,
 		sess:   sess,
 	}
 	//u.Debugf("new SqlToMgo %p", sm)
@@ -77,7 +70,7 @@ func (m *SqlToMgo) Columns() []string {
 // Called by Planner, pre-executor
 func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.Task, error) {
 
-	u.Debugf("WalkSourceSelect %p", m)
+	//u.Debugf("WalkSourceSelect %p", m)
 	p.Conn = m
 
 	if len(p.Custom) == 0 {
@@ -91,15 +84,14 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 	var err error
 	m.p = p
 	req := p.Stmt.Source
-	//u.Infof("mongo.VisitSubSelect %v final:%v", req.String(), sp.Final)
+	//u.Debugf("mongo.VisitSubSelect %v final:%v", req.String(), sp.Final)
 
 	if p.Proj == nil {
-		u.Warnf("%p no projection?  ", p)
+		//u.Debugf("%p no projection?  ", p)
 		proj := plan.NewProjectionInProcess(p.Stmt.Source)
 		p.Proj = proj.Proj
 	} else {
-		u.Infof("%p has projection!!! %s sqltomgo %p", p, p.Stmt, m)
-		//u.LogTraceDf(u.WARN, 12, "hello")
+		//u.Debugf("%p has projection!!! %s sqltomgo %p", p, p.Stmt, m)
 	}
 
 	m.sel = req
@@ -183,7 +175,7 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 		return nil, fmt.Errorf("Plan did not include Sql Select Statement?")
 	}
 	if m.p == nil {
-		u.Debugf("custom? %v", p.Custom)
+		//u.Debugf("custom? %v", p.Custom)
 		// If we are operating in distributed mode it hasn't
 		// been planned?   WE probably should allow raw data to be
 		// passed via plan?
@@ -201,14 +193,16 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 					if pt.Id == partitionId {
 						//u.Debugf("partition: %s   %#v", partitionId, pt)
 						m.partition = pt
+						var partitionFilter bson.M
+						if pt.Left == "" {
+							partitionFilter = bson.M{p.Tbl.Partition.Keys[0]: bson.M{"$lt": pt.Right}}
+						} else if pt.Right == "" {
+							partitionFilter = bson.M{p.Tbl.Partition.Keys[0]: bson.M{"$gte": pt.Left}}
+						}
 						if len(m.filter) == 0 {
-							if pt.Left == "" {
-								m.filter = bson.M{p.Tbl.Partition.Keys[0]: bson.M{"$lt": pt.Right}}
-							} else if pt.Right == "" {
-								m.filter = bson.M{p.Tbl.Partition.Keys[0]: bson.M{"$gte": pt.Left}}
-							} else {
-
-							}
+							m.filter = partitionFilter
+						} else {
+							m.filter = bson.M{"$and": []bson.M{partitionFilter, m.filter}}
 						}
 					}
 				}

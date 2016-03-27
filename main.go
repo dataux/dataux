@@ -2,22 +2,20 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
-	"os/signal"
 	"runtime"
 	"runtime/pprof"
-	"syscall"
 
-	// Backend Registrations Side-Effect imports
+	// Backend Side-Effect imports
+	_ "github.com/dataux/dataux/backends/datastore"
 	_ "github.com/dataux/dataux/backends/elasticsearch"
+	_ "github.com/dataux/dataux/backends/files"
 	_ "github.com/dataux/dataux/backends/mongo"
+	// Frontend's side-effect imports
+	_ "github.com/dataux/dataux/frontends/mysqlfe"
 
 	u "github.com/araddon/gou"
-	"github.com/dataux/dataux/frontends/mysqlfe"
-	"github.com/dataux/dataux/models"
 	"github.com/dataux/dataux/proxy"
-	mysqlproxy "github.com/dataux/dataux/vendored/mixer/proxy"
 )
 
 var (
@@ -45,49 +43,6 @@ func main() {
 	u.SetupLogging(logLevel)
 	u.SetColorIfTerminal()
 
-	// get config
-	conf, err := models.LoadConfigFromFile(configFile)
-	if err != nil {
-		u.Errorf("Could not load config: %v", err)
-		os.Exit(1)
-	}
-	// Make Server Context
-	svrCtx := models.NewServerCtx(conf)
-	svrCtx.Init()
-
-	// TODO:   these should be started by server through registry, imports
-	mysqlHandler, err := mysqlfe.NewMySqlHandler(svrCtx)
-	if err != nil {
-		u.Errorf("Could not create handlers: %v", err)
-		os.Exit(1)
-	}
-
-	// Load our Frontend Listener's
-	models.ListenerRegister(mysqlproxy.ListenerType,
-		mysqlproxy.ListenerInit,
-		mysqlHandler,
-	)
-
-	var svr *proxy.Server
-	svr, err = proxy.NewServer(svrCtx)
-	if err != nil {
-		u.Errorf("%v", err)
-		return
-	}
-
-	sc := make(chan os.Signal, 1)
-	signal.Notify(sc,
-		syscall.SIGHUP,
-		syscall.SIGINT,
-		syscall.SIGTERM,
-		syscall.SIGQUIT)
-
-	go func() {
-		sig := <-sc
-		u.Infof("Got signal [%d] to exit.", sig)
-		svr.Shutdown(proxy.Reason{Reason: "signal", Message: fmt.Sprintf("%v", sig)})
-	}()
-
 	if cpuProfileFile != "" {
 		f, err := os.Create(cpuProfileFile)
 		if err != nil {
@@ -97,5 +52,7 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	svr.Run()
+	proxy.LoadConfig(configFile)
+
+	proxy.RunDaemon(true, 2)
 }

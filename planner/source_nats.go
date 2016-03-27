@@ -11,23 +11,26 @@ import (
 	"github.com/araddon/qlbridge/plan"
 )
 
-var _ = u.EMPTY
+var (
+	_ exec.Task = (*SourceNats)(nil)
+)
 
-// Nats Channel Source
+// A SourceNats task that receives messages that optionally may have been
+//   hash routed to this node.
+//
+//   taska-1 ->  hash-nats-sink  \                        / --> nats-source -->
+//                                \                      /
+//                                 --nats-route-by-key-->   --> nats-source -->
+//                                /                      \
+//   taska-2 ->  hash-nats-sink  /                        \ --> nats-source -->
+//
 type SourceNats struct {
 	*exec.TaskBase
 	rx grid.Receiver
 }
 
-// A SourceNats task that receives messages that optionally may have been
-//   hash routed to this node.
-//
-//   taska-1 ->  hash-key  \                / --> nats-source -->
-//                          \              /
-//                           --nats-sink-->   --> nats-source -->
-//                          /              \
-//   taska-2 ->  hash-key  /                \ --> nats-source -->
-//
+// Nats Source, the plan already provided info to the nats listener
+// about which key/topic to listen to, Planner holds routing info not here.
 func NewSourceNats(ctx *plan.Context, rx grid.Receiver) *SourceNats {
 	return &SourceNats{
 		TaskBase: exec.NewTaskBase(ctx),
@@ -35,15 +38,28 @@ func NewSourceNats(ctx *plan.Context, rx grid.Receiver) *SourceNats {
 	}
 }
 
-func (m *SourceNats) Copy() *SourceNats { return &SourceNats{} }
-func (m *SourceNats) Close() error      { return m.TaskBase.Close() }
-
+func (m *SourceNats) Close() error {
+	//u.Debugf("SourceNats Close")
+	return nil
+}
+func (m *SourceNats) CloseFinal() error {
+	defer func() {
+		if r := recover(); r != nil {
+			u.Warnf("error on close %v", r)
+		}
+	}()
+	//close(inCh) we don't close input channels, upstream does
+	//m.Ctx.Recover()
+	m.rx.Close()
+	return m.TaskBase.Close()
+}
 func (m *SourceNats) Run() error {
 
 	outCh := m.MessageOut()
 
 	defer func() {
 		m.Ctx.Recover()
+		u.Infof("closing SourceNats Out")
 		close(outCh)
 		m.rx.Close()
 	}()
@@ -64,16 +80,19 @@ func (m *SourceNats) Run() error {
 			switch mt := msg.(type) {
 			case *datasource.SqlDriverMessageMap:
 				if len(mt.Vals) == 0 {
-					//u.Infof("NICE EMPTY EOF MESSAGE")
+					u.Infof("NICE EMPTY EOF MESSAGE, CLOSING")
 					return nil
 				}
 				outCh <- mt
 			case datasource.SqlDriverMessageMap:
 				if len(mt.Vals) == 0 {
-					//u.Infof("NICE EMPTY EOF MESSAGE 2")
+					u.Infof("NICE EMPTY EOF MESSAGE 2")
 					return nil
 				}
 				outCh <- &mt
+			case nil:
+				u.Debugf("got nil, assume this is a shutdown signal?")
+				return nil
 			default:
 				u.Warnf("hm   %#v", mt)
 				return fmt.Errorf("To use SourceNats must use SqlDriverMessageMap but got %T", msg)

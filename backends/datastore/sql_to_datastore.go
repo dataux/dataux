@@ -29,9 +29,9 @@ var (
 
 	// Implement Datasource interface that allows Mongo
 	//  to fully implement a full select statement
-	_ plan.SourcePlanner    = (*SqlToDatstore)(nil)
-	_ exec.ExecutorSource   = (*SqlToDatstore)(nil)
-	_ schema.SourceMutation = (*SqlToDatstore)(nil)
+	_ plan.SourcePlanner  = (*SqlToDatstore)(nil)
+	_ exec.ExecutorSource = (*SqlToDatstore)(nil)
+	_ schema.ConnMutation = (*SqlToDatstore)(nil)
 )
 
 // Sql To Google Datastore Maps a Sql request into an equivalent
@@ -43,7 +43,7 @@ type SqlToDatstore struct {
 	p              *plan.Source
 	sel            *rel.SqlSelect
 	stmt           rel.SqlStatement
-	schema         *schema.SourceSchema
+	schema         *schema.SchemaSource
 	dsCtx          context.Context
 	dsClient       *datastore.Client
 	query          *datastore.Query
@@ -57,7 +57,7 @@ type SqlToDatstore struct {
 func NewSqlToDatstore(table *schema.Table, cl *datastore.Client, ctx context.Context) *SqlToDatstore {
 	m := &SqlToDatstore{
 		tbl:      table,
-		schema:   table.SourceSchema,
+		schema:   table.SchemaSource,
 		dsCtx:    ctx,
 		dsClient: cl,
 	}
@@ -205,7 +205,7 @@ func (m *SqlToDatstore) WalkExecSource(p *plan.Source) (exec.Task, error) {
 
 // interface for SourceMutation
 //CreateMutator(stmt expr.SqlStatement) (Mutator, error)
-func (m *SqlToDatstore) CreateMutator(pc interface{}) (schema.Mutator, error) {
+func (m *SqlToDatstore) CreateMutator(pc interface{}) (schema.ConnMutator, error) {
 	if ctx, ok := pc.(*plan.Context); ok {
 		m.Ctx = ctx
 		return m, nil

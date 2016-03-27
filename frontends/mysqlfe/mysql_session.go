@@ -11,8 +11,11 @@ import (
 // http://dev.mysql.com/doc/refman/5.6/en/server-system-variables.html
 var mysqlGlobalVars *datasource.ContextSimple = NewMySqlGlobalVars()
 
-func NewMySqlSessionVars() expr.ContextReader {
+func NewMySqlSessionVars(db string, connId uint32) expr.ContextReader {
 	ctx := datasource.NewContextSimple()
+	ctx.Data["@@dataux.dialect"] = value.NewStringValue("mysql")
+	ctx.Data["@@database"] = value.NewStringValue(db)
+	ctx.Data["@@connection_id"] = value.NewIntValue(int64(connId))
 	ctx.Data["@@max_allowed_packet"] = value.NewIntValue(MaxAllowedPacket)
 	ctx.Data["@@session.auto_increment_increment"] = value.NewIntValue(1)
 	ctx.Data["@@session.tx_isolation"] = value.NewStringValue("REPEATABLE-READ")
@@ -47,7 +50,7 @@ func NewMySqlGlobalVars() *datasource.ContextSimple {
 	ctx.Data["@@system_time_zone"] = value.NewStringValue("UTC")
 	ctx.Data["@@time_zone"] = value.NewStringValue("SYSTEM")
 	ctx.Data["@@tx_isolation"] = value.NewStringValue("REPEATABLE-READ")
-	ctx.Data["@@version_comment"] = value.NewStringValue("DataUX (MIT), Release .0.9")
+	ctx.Data["@@version_comment"] = value.NewStringValue("DataUX (MIT), Release .13")
 	ctx.Data["@@wait_timeout"] = value.NewIntValue(28800)
 	return ctx
 }

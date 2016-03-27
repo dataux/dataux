@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -33,7 +34,7 @@ const (
 )
 
 func init() {
-	t := time.Now()
+	//t := time.Now()
 	ev := struct {
 		Tag string
 		ICt int
@@ -42,16 +43,17 @@ func init() {
 	t2, _ := dateparse.ParseAny("2011-10-01")
 	t3, _ := dateparse.ParseAny("2012-10-01")
 	t4, _ := dateparse.ParseAny("2013-10-01")
+	ut, _ := dateparse.ParseAny("2016-01-01")
 	body := json.RawMessage([]byte(`{"name":"morestuff"}`))
 
-	Articles = append(Articles, &Article{"article1", "aaron", 22, 75, false, []string{"news", "sports"}, t1, &t, 55.5, ev, &body})
-	Articles = append(Articles, &Article{"qarticle2", "james", 2, 64, true, []string{"news", "sports"}, t2, &t, 55.5, ev, &body})
-	Articles = append(Articles, &Article{"zarticle3", "bjorn", 55, 100, true, []string{"politics"}, t3, &t, 21.5, ev, &body})
-	Articles = append(Articles, &Article{"listicle1", "bjorn", 7, 12, true, []string{"world"}, t4, &t, 21.5, ev, &body})
+	Articles = append(Articles, &Article{"article1", "aaron", 22, 75, false, []string{"news", "sports"}, t1, &ut, 55.5, ev, &body})
+	Articles = append(Articles, &Article{"qarticle2", "james", 2, 64, true, []string{"news", "sports"}, t2, &ut, 55.5, ev, &body})
+	Articles = append(Articles, &Article{"zarticle3", "bjorn", 55, 100, true, []string{"politics"}, t3, &ut, 21.5, ev, &body})
+	Articles = append(Articles, &Article{"listicle1", "bjorn", 7, 12, true, []string{"world"}, t4, &ut, 21.5, ev, &body})
 	// Users
-	Users = append(Users, &User{"user123", "aaron", false, []string{"admin", "author"}, time.Now(), &t})
-	Users = append(Users, &User{"user456", "james", true, []string{"admin", "author"}, time.Now().Add(-time.Hour * 100), &t})
-	Users = append(Users, &User{"user789", "bjorn", true, []string{"author"}, time.Now().Add(-time.Hour * 220), &t})
+	Users = append(Users, &User{"user123", "aaron", false, []string{"admin", "author"}, time.Now(), &ut})
+	Users = append(Users, &User{"user456", "james", true, []string{"admin", "author"}, time.Now().Add(-time.Hour * 100), &ut})
+	Users = append(Users, &User{"user789", "bjorn", true, []string{"author"}, time.Now().Add(-time.Hour * 220), &ut})
 }
 
 func Setup() {
@@ -66,6 +68,14 @@ func Setup() {
 		}
 	})
 }
+
+var (
+	ArticleCsv = `title,author,count,deleted,created,updated,f
+article1,aaron,22,false,2010-10-01 00:00:00 +0000 UTC,2016-01-01 00:00:00 +0000 UTC,55.5
+qarticle2,james,2,true,2011-10-01 00:00:00 +0000 UTC,2016-01-01 00:00:00 +0000 UTC,55.5
+zarticle3,bjorn,55,true,2012-10-01 00:00:00 +0000 UTC,2016-01-01 00:00:00 +0000 UTC,21.5
+listicle1,bjorn,7,true,2013-10-01 00:00:00 +0000 UTC,2016-01-01 00:00:00 +0000 UTC,21.5`
+)
 
 type Article struct {
 	Title    string
@@ -84,6 +94,24 @@ type Article struct {
 	Body *json.RawMessage
 }
 
+func (a *Article) Header() string {
+	return "title,author,count,deleted,created,updated,f"
+}
+func (a *Article) Row() string {
+	return fmt.Sprintf("%s,%s,%v,%v,%v,%v,%v", a.Title, a.Author, a.Count, a.Deleted, a.Created, a.Updated, a.F)
+}
+func (a *Article) UrlMsg() url.Values {
+	msg := url.Values{}
+	msg.Add("title", a.Title)
+	msg.Add("author", a.Author)
+	msg.Add("count", fmt.Sprintf("%v", a.Count))
+	msg.Add("deleted", fmt.Sprintf("%v", a.Deleted))
+	msg.Add("created", fmt.Sprintf("%v", a.Created))
+	msg.Add("updated", fmt.Sprintf("%v", a.Updated))
+	msg.Add("f", fmt.Sprintf("%v", a.F))
+	return msg
+}
+
 type User struct {
 	Id      string
 	Name    string
@@ -91,6 +119,13 @@ type User struct {
 	Roles   datasource.StringArray
 	Created time.Time
 	Updated *time.Time
+}
+
+func (u *User) Header() string {
+	return "id,name,deleted,created,updated"
+}
+func (u *User) Row() string {
+	return fmt.Sprintf("%s,%s,%v,%v,%v", u.Id, u.Name, u.Deleted, u.Created, u.Updated)
 }
 
 type QuerySpec struct {
@@ -132,6 +167,7 @@ func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
 		}
 
 	case len(testSpec.Sql) > 0:
+		//u.Debugf("----ABOUT TO QUERY")
 		rows, err := dbx.Queryx(testSpec.Sql)
 		assert.Tf(t, err == nil, "%v", err)
 		defer rows.Close()
@@ -165,7 +201,9 @@ func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
 				rowVals, err := rows.SliceScan()
 				//u.Infof("rowVals: %#v", rowVals)
 				assert.Tf(t, err == nil, "%v", err)
-				assert.Tf(t, len(rowVals) == testSpec.ExpectColCt, "wanted cols but got %v", len(rowVals))
+				if testSpec.ExpectColCt > 0 {
+					assert.Tf(t, len(rowVals) == testSpec.ExpectColCt, "wanted %d cols but got %v", testSpec.ExpectColCt, len(rowVals))
+				}
 				rowCt++
 				if testSpec.ValidateRow != nil {
 					testSpec.ValidateRow(rowVals)

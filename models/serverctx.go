@@ -38,9 +38,12 @@ func (m *ServerCtx) Init() error {
 	if err := m.loadConfig(); err != nil {
 		return err
 	}
+
+	planner.GridConf.NatsServers = m.Config.Nats
+	planner.GridConf.EtcdServers = m.Config.Etcd
+
 	// how many worker nodes?
 	m.Grid = planner.NewServerGrid(2, m.Reg)
-	go m.Grid.RunMaster()
 
 	return nil
 }
@@ -71,7 +74,7 @@ func (m *ServerCtx) loadConfig() error {
 		// find the Source config for eached named db/source
 		for _, sourceName := range schemaConf.Sources {
 
-			var sourceConf *schema.SourceConfig
+			var sourceConf *schema.ConfigSource
 			// we must find a source conf by name
 			for _, sc := range m.Config.Sources {
 				//u.Debugf("sc: %s %#v", sourceName, sc)
@@ -85,7 +88,7 @@ func (m *ServerCtx) loadConfig() error {
 				return fmt.Errorf("Could not find Source Config for %v", sourceName)
 			}
 
-			ss := schema.NewSourceSchema(sourceName, sourceConf.SourceType)
+			ss := schema.NewSchemaSource(sourceName, sourceConf.SourceType)
 			ss.Conf = sourceConf
 			ss.Schema = sch
 			//u.Infof("found sourceName: %q schema.Name=%q conf=%+v", sourceName, ss.Name, sourceConf)
@@ -102,7 +105,7 @@ func (m *ServerCtx) loadConfig() error {
 			ds := m.Reg.Get(sourceConf.SourceType)
 			//u.Debugf("after reg.Get(%q)  %#v", sourceConf.SourceType, ds)
 			if ds == nil {
-				u.Warnf("could not find source for %v", sourceName)
+				//u.Debugf("could not find source for %v", sourceName)
 			} else {
 				ss.DS = ds
 				ss.Partitions = sourceConf.Partitions
@@ -111,9 +114,9 @@ func (m *ServerCtx) loadConfig() error {
 						u.Errorf("Error setuping up %v  %v", sourceName, err)
 					}
 				}
+				m.Reg.SourceSchemaAdd(ss)
 			}
 
-			m.Reg.SourceSchemaAdd(ss)
 		}
 
 	}

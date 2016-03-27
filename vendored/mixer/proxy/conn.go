@@ -28,18 +28,18 @@ var DEFAULT_CAPABILITY uint32 = mysql.CLIENT_LONG_PASSWORD | mysql.CLIENT_LONG_F
 	mysql.CLIENT_CONNECT_WITH_DB | mysql.CLIENT_PROTOCOL_41 |
 	mysql.CLIENT_TRANSACTIONS | mysql.CLIENT_SECURE_CONNECTION
 
-// Conn serves as a Frontend (inbound listener) on mysql
-// protocol
+// Conn serves as a Frontend (inbound listener) on mysql protocol
 //
-//	--> frontend --> handlers --> backend
+//	--> frontend --> handler --> backend
+//
 type Conn struct {
 	sync.Mutex
 
 	pkg          *mysql.PacketIO
 	c            net.Conn
-	listener     *MysqlListener
+	listener     *mysqlListener
 	noRecover    bool
-	handler      models.Handler // Handle inbound Requests to be routed to backends
+	handler      models.StatementHandler // Statement Handler
 	capability   uint32
 	connectionId uint32
 	Status       uint16
@@ -57,7 +57,7 @@ type Conn struct {
 	stmts        map[uint32]*Stmt
 }
 
-func newConn(m *MysqlListener, co net.Conn) *Conn {
+func newConn(m *mysqlListener, co net.Conn) *Conn {
 	c := new(Conn)
 
 	c.c = co
@@ -65,7 +65,8 @@ func newConn(m *MysqlListener, co net.Conn) *Conn {
 	c.pkg = mysql.NewPacketIO(co)
 
 	c.listener = m
-	c.handler = c.listener.handle.Open(c)
+	//u.Debugf("has sc? %#v", m.sc)
+	c.handler = m.sc.Open(c)
 
 	c.noRecover = c.listener.cfg.SupressRecover
 	c.c = co
@@ -168,6 +169,10 @@ func (c *Conn) Handshake() error {
 	c.pkg.Sequence = 0
 
 	return nil
+}
+
+func (c *Conn) ConnId() uint32 {
+	return c.connectionId
 }
 
 func (c *Conn) Close() error {
@@ -326,7 +331,7 @@ func (c *Conn) WriteOK(r *mysql.Result) error {
 		data = append(data, 0, 0)
 	}
 	if c.capability&mysql.CLIENT_SESSION_TRACK > 0 {
-		u.Debugf("supports Session Track?")
+		//u.Debugf("supports Session Track?")
 		//data = append(data, byte(r.Status), byte(r.Status>>8))
 		//data = append(data, 0, 0)
 	}

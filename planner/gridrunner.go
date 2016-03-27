@@ -42,7 +42,8 @@ func RunWorkerNodes(nodeCt int, r *datasource.Registry) {
 
 	for i := 0; i < nodeCt; i++ {
 		go func(nodeId int) {
-			s := serverStart(nodeCt, NodeName(uint64(nodeId)), r)
+			s := NewServerGrid(nodeCt, r)
+			s.Conf.Hostname = NodeName(uint64(nodeId))
 			s.RunWorker() // blocking
 		}(i)
 	}
@@ -50,16 +51,12 @@ func RunWorkerNodes(nodeCt int, r *datasource.Registry) {
 }
 
 func NewServerGrid(nodeCt int, r *datasource.Registry) *Server {
-	serverId, _ := NextId()
-	return serverStart(nodeCt, NodeName(serverId), r)
-}
+	nextId, _ := NextId()
 
-func serverStart(nodeCt int, nodeName string, r *datasource.Registry) *Server {
 	conf := GridConf.Clone()
 	conf.NodeCt = nodeCt
-	conf.Hostname = nodeName
-	s := &Server{Conf: conf, reg: r}
-	return s
+	conf.Hostname = NodeName(nextId)
+	return &Server{Conf: conf, reg: r}
 }
 
 func NodeName(id uint64) string {

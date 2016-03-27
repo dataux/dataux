@@ -47,9 +47,9 @@ type Config struct {
 	Etcd           []string               `json:"etcd"`            // list of etcd servers http://127.0.0.1:2379,http://127.0.0.1:2380
 	Nats           []string               `json:"nats"`            // list of nats servers http://127.0.0.1:4222,http://127.0.0.1:4223
 	Frontends      []*ListenerConfig      `json:"frontends"`       // tcp listener configs
-	Sources        []*schema.SourceConfig `json:"sources"`         // backend servers/sources (es, mysql etc)
-	Schemas        []*schema.SchemaConfig `json:"schemas"`         // Schemas, each backend has 1 schema
-	Nodes          []*schema.NodeConfig   `json:"nodes"`           // list of nodes that host sources
+	Sources        []*schema.ConfigSource `json:"sources"`         // backend servers/sources (es, mysql etc)
+	Schemas        []*schema.ConfigSchema `json:"schemas"`         // Schemas, each backend has 1 schema
+	Nodes          []*schema.ConfigNode   `json:"nodes"`           // list of nodes that host sources
 	Rules          *RulesConfig
 }
 

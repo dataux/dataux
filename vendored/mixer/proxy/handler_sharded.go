@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/kr/pretty"
 	"math"
 	"sort"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	"sync/atomic"
 
 	u "github.com/araddon/gou"
+	"github.com/kr/pretty"
 
 	"github.com/araddon/qlbridge/expr/builtins"
 	"github.com/araddon/qlbridge/rel"
@@ -31,7 +31,7 @@ func init() {
 }
 
 /*
-Handler is a mysql Router to take requests
+Handler Sharded is a mysql Router to take requests
 and route, filter to backend connections
 
 * Manage pool of db clients
@@ -43,7 +43,7 @@ var _ = value.ErrValue
 // Schema is the schema for a named database, shared
 // across multiple nodes
 type SchemaSharded struct {
-	*schema.SourceSchema
+	*schema.SchemaSource
 	mysqlnodes map[string]*Node
 	rule       *router.Router
 }
@@ -64,14 +64,14 @@ type HandlerSharded struct {
 	conn *Conn
 }
 
-func NewHandlerSharded(conf *models.Config) (models.Handler, error) {
-	sharedHandler := &HandlerShardedShared{
-		conf: conf,
-	}
-	handler := &HandlerSharded{HandlerShardedShared: sharedHandler}
-	err := handler.Init()
-	return handler, err
-}
+// func NewHandlerSharded(conf *models.Config) (models.Listener, error) {
+// 	sharedHandler := &HandlerShardedShared{
+// 		conf: conf,
+// 	}
+// 	handler := &HandlerSharded{HandlerShardedShared: sharedHandler}
+// 	err := handler.Init()
+// 	return handler, err
+// }
 
 func (m *HandlerSharded) Init() error {
 
@@ -82,7 +82,7 @@ func (m *HandlerSharded) Init() error {
 	return nil
 }
 
-func (m *HandlerShardedShared) Open(connI interface{}) models.Handler {
+func (m *HandlerShardedShared) Open(connI interface{}) models.StatementHandler {
 
 	handler := HandlerSharded{HandlerShardedShared: m}
 	if conn, ok := connI.(*Conn); ok {
@@ -105,7 +105,7 @@ func (m *HandlerSharded) SchemaUse(db string) *schema.Schema {
 	schema, ok := m.schemas[db]
 	if ok {
 		m.schema = schema
-		return schema.SourceSchema.Schema
+		return schema.SchemaSource.Schema
 	}
 
 	u.Errorf("Could not find schema for db=%s", db)
