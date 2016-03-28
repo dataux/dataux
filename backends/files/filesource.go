@@ -47,10 +47,12 @@ var (
 		TmpDir:          "/tmp/localcache",
 	}
 
+	// FileStoreLoader defines the interface for loading files
 	FileStoreLoader func(ss *schema.SchemaSource) (cloudstorage.Store, error)
 )
 
 const (
+	// SourceType is the registered Source name in the qlbridge source registry
 	SourceType = "cloudstore"
 )
 
@@ -60,13 +62,14 @@ func init() {
 	FileStoreLoader = createConfStore
 }
 
+// PartitionedFileReader defines a file source that can page through files
 type PartitionedFileReader interface {
 	// NextFile returns io.EOF on last file
 	NextFile() (*FileReader, error)
 }
 
-// File DataSource for reading files, and scanning them allowing
-//  the contents to be treated as a scannable dataset, like doing a full
+// FileSource DataSource for reading files, and scanning them allowing
+//  the contents to be treated as a database, like doing a full
 //  table scan in mysql.  But, you can partition across files.
 //
 // - readers:      s3, gcs, local-fs
@@ -88,7 +91,7 @@ type FileSource struct {
 	Partitioner    string // random, ??  (date, keyed?)
 }
 
-// Struct of file info
+// FileInfo Struct of file info
 type FileInfo struct {
 	Name      string // Name, Path of file
 	Table     string // Table name this file participates in
@@ -96,13 +99,14 @@ type FileInfo struct {
 	Partition int    // which partition
 }
 
-// Struct of file info to supply to ScannerMakers
+// FileReader file info and access to file to supply to ScannerMakers
 type FileReader struct {
 	*FileInfo
 	F    io.Reader // Actual file reader
 	Exit chan bool // exit channel to shutdown reader
 }
 
+// NewFileSource provides single FileSource
 func NewFileSource() schema.Source {
 	m := FileSource{
 		tables:     make(map[string]*schema.Table),
@@ -112,6 +116,7 @@ func NewFileSource() schema.Source {
 	return &m
 }
 
+// Setup the filesource with schema info
 func (m *FileSource) Setup(ss *schema.SchemaSource) error {
 	m.ss = ss
 	if err := m.init(); err != nil {
@@ -124,6 +129,7 @@ func (m *FileSource) Setup(ss *schema.SchemaSource) error {
 	return nil
 }
 
+// Open a connection to given table, part of Source interface
 func (m *FileSource) Open(tableName string) (schema.Conn, error) {
 	pg, err := m.createPager(tableName, 0)
 	if err != nil {
@@ -137,7 +143,11 @@ func (m *FileSource) Open(tableName string) (schema.Conn, error) {
 	// }
 	return pg, nil
 }
-func (m *FileSource) Close() error     { return nil }
+
+// Close this Conn
+func (m *FileSource) Close() error { return nil }
+
+// Tables for this file-source
 func (m *FileSource) Tables() []string { return m.tablenames }
 func (m *FileSource) init() error {
 	if m.store == nil {
@@ -147,6 +157,9 @@ func (m *FileSource) init() error {
 			return err
 		}
 		m.store = store
+
+		// filesTable := fmt.Sprintf("%s_files", m.ss.Name)
+		// m.tablenames = append(m.tablenames, filesTable)
 
 		conf := m.ss.Conf.Settings
 		if tablePath := conf.String("path"); tablePath != "" {
@@ -169,7 +182,7 @@ func (m *FileSource) init() error {
 	return nil
 }
 
-func FileInterpret(path string, obj cloudstorage.Object) *FileInfo {
+func fileInterpret(path string, obj cloudstorage.Object) *FileInfo {
 	fileName := obj.Name()
 	//u.Debugf("file %s", fileName)
 	fileName = strings.Replace(fileName, path, "", 1)
@@ -177,15 +190,13 @@ func FileInterpret(path string, obj cloudstorage.Object) *FileInfo {
 	parts := strings.Split(fileName, "/")
 	if len(parts) > 1 {
 		return &FileInfo{Table: parts[0], Name: obj.Name()}
-	} else {
-		parts = strings.Split(fileName, ".")
-		if len(parts) > 1 {
-			tableName := strings.ToLower(parts[0])
-			return &FileInfo{Table: tableName, Name: obj.Name()}
-		} else {
-			u.Errorf("table not readable from filename %q  %#v", fileName, obj)
-		}
 	}
+	parts = strings.Split(fileName, ".")
+	if len(parts) > 1 {
+		tableName := strings.ToLower(parts[0])
+		return &FileInfo{Table: tableName, Name: obj.Name()}
+	}
+	u.Errorf("table not readable from filename %q  %#v", fileName, obj)
 	return nil
 }
 
@@ -228,6 +239,7 @@ func (m *FileSource) loadSchema() {
 	}
 }
 
+// Table satisfys Source Schema interface to get table schema for given table
 func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 
 	var err error
@@ -313,7 +325,7 @@ func (m *FileSource) createPager(tableName string, partition int) (*FilePager, e
 	return pg, nil
 }
 
-// File Pager acts like a Conn, wrapping underlying FileSource
+// FilePager acts like a Conn, wrapping underlying FileSource
 // and paging through looking at partitions
 type FilePager struct {
 	cursor    int
@@ -331,6 +343,8 @@ type FilePager struct {
 // func (m *FilePager) SetContext(ctx *plan.Context) {
 // 	m.ctx = ctx
 // }
+
+// WalkExecSource Provide ability to implement a source plan for execution
 func (m *FilePager) WalkExecSource(p *plan.Source) (exec.Task, error) {
 
 	if m.p == nil {
@@ -347,6 +361,7 @@ func (m *FilePager) WalkExecSource(p *plan.Source) (exec.Task, error) {
 	return exec.NewSource(p.Context(), p)
 }
 
+// Columns part of Conn interface for providing columns for this table/conn
 func (m *FilePager) Columns() []string {
 	if m.tbl == nil {
 		t, err := m.fs.Table(m.table)
@@ -358,6 +373,9 @@ func (m *FilePager) Columns() []string {
 	}
 	return m.tbl.Columns()
 }
+
+// NextScanner provides the next scanner assuming that each scanner
+// representas different file, and multiple files for single source
 func (m *FilePager) NextScanner() (schema.ConnScanner, error) {
 
 	fr, err := m.NextFile()
@@ -381,6 +399,7 @@ func (m *FilePager) NextScanner() (schema.ConnScanner, error) {
 	return scanner, err
 }
 
+// NextFile gets next file
 func (m *FilePager) NextFile() (*FileReader, error) {
 
 	var fi *FileInfo
@@ -417,6 +436,7 @@ func (m *FilePager) NextFile() (*FileReader, error) {
 	return fr, nil
 }
 
+// Next iterator for next message, wraps the file Scanner, Next file abstractions
 func (m *FilePager) Next() schema.Message {
 	if m.ConnScanner == nil {
 		m.NextScanner()
@@ -445,6 +465,8 @@ func (m *FilePager) Next() schema.Message {
 		return msg
 	}
 }
+
+// Close this connection/pager
 func (m *FilePager) Close() error {
 	return nil
 }
