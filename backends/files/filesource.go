@@ -91,7 +91,7 @@ type FileSource struct {
 	Partitioner    string // random, ??  (date, keyed?)
 }
 
-// NewFileSource provides single FileSource
+// NewFileSource provides singleton
 func NewFileSource() schema.Source {
 	m := FileSource{
 		tables:     make(map[string]*schema.Table),
@@ -145,6 +145,8 @@ func (m *FileSource) init() error {
 		m.tablenames = append(m.tablenames, m.filesTable)
 
 		m.fdbcols = FileColumns
+		// We are going to create a DB/Store to be allow the
+		// entire list of files to be shown as a meta-table of sorts
 		db, err := memdb.NewMemDbForSchema(m.filesTable, m.ss, m.fdbcols)
 		if err != nil {
 			u.Errorf("could not create db %v", err)
@@ -187,7 +189,17 @@ func (m *FileSource) init() error {
 func fileInterpret(path string, obj cloudstorage.Object) *FileInfo {
 	fileName := obj.Name()
 	//u.Debugf("file %s", fileName)
-	fileName = strings.Replace(fileName, path, "", 1)
+	if !strings.HasPrefix(fileName, path) {
+		parts := strings.Split(fileName, path)
+		if len(parts) == 2 {
+			fileName = parts[1]
+		} else {
+			u.Warnf("could not get parts? %v", fileName)
+		}
+	} else {
+		fileName = strings.Replace(fileName, path, "", 1)
+	}
+
 	// Look for Folders
 	parts := strings.Split(fileName, "/")
 	if len(parts) > 1 {
@@ -215,7 +227,10 @@ func (m *FileSource) loadSchema() {
 	}
 	nextPartId := 0
 
+	//u.Infof("how many files? %v", len(objs))
+
 	for _, obj := range objs {
+		//u.Debugf("obj %#v", obj)
 		fi := m.fh.File(m.path, obj)
 		if fi == nil || fi.Name == "" {
 			continue
@@ -371,9 +386,9 @@ func createConfStore(ss *schema.SchemaSource) (cloudstorage.Store, error) {
 			LocalFS:         "/tmp/mockcloud",
 			TmpDir:          "/tmp/localcache",
 		}
-		if path := conf.String("path"); path != "" {
-			c.LocalFS = path
-		}
+		// if path := conf.String("path"); path != "" {
+		// 	c.LocalFS = path
+		// }
 		//os.RemoveAll("/tmp/localcache")
 
 		config = &c

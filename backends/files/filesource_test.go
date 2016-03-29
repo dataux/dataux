@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"database/sql"
 	"io/ioutil"
-	"os"
 	"testing"
 
 	u "github.com/araddon/gou"
@@ -65,26 +64,25 @@ func RunTestServer(t *testing.T) {
 		planner.GridConf.JobMaker = jobMaker
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
-		//createTestData(t)
+		createTestData(t)
 		testmysql.RunTestServer(t)
 		planner.RunWorkerNodes(2, testmysql.ServerCtx.Reg)
 	}
 }
 
-func createTestStore() (cloudstorage.Store, error) {
+func createLocalStore() (cloudstorage.Store, error) {
 
 	cloudstorage.LogConstructor = func(prefix string) logging.Logger {
 		return logging.NewStdLogger(true, logging.DEBUG, prefix)
 	}
 
 	var config *cloudstorage.CloudStoreContext
-	if os.Getenv("TESTINT") == "" {
-		//os.RemoveAll("/tmp/mockcloud")
-		//os.RemoveAll("/tmp/localcache")
-		config = localconfig
-	} else {
-		config = gcsIntconfig
-	}
+	//os.RemoveAll("/tmp/mockcloud")
+	//os.RemoveAll("/tmp/localcache")
+	config = localconfig
+	// else {
+	// 	config = gcsIntconfig
+	// }
 	return cloudstorage.NewStore(config)
 }
 
@@ -110,7 +108,7 @@ func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
 }
 
 func createTestData(t *testing.T) {
-	store, err := createTestStore()
+	store, err := createLocalStore()
 	assert.T(t, err == nil)
 	//clearStore(t, store)
 	//defer clearStore(t, store)
@@ -185,6 +183,25 @@ func TestShowTables(t *testing.T) {
 		RowData: &data,
 	})
 	assert.Tf(t, found, "Must have found article table with show")
+}
+
+func TestSelectFilesList(t *testing.T) {
+	data := struct {
+		File      string
+		Table     string
+		Size      int
+		Partition int
+	}{}
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select file, `table`, size, partition from localfiles_files",
+		ExpectRowCt: 2,
+		ValidateRowData: func() {
+			u.Infof("%v", data)
+			// assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
+			// assert.Tf(t, data.Title == "article1", "%v", data)
+		},
+		RowData: &data,
+	})
 }
 
 func TestSelectStar(t *testing.T) {

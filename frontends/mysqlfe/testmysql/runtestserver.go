@@ -65,7 +65,7 @@ frontends [
 schemas : [
   {
     name : datauxtest
-    sources : [ "mgo_datauxtest", "es_test", "gcscsvs", "csvlocal" , "google_ds_test"]
+    sources : [ "mgo_datauxtest", "es_test", "localfiles" , "google_ds_test"]
   }
 ]
 
@@ -90,29 +90,27 @@ sources : [
             ]
         }
     ]
-  },
+  }
   {
     name : es_test
     type : elasticsearch
-  },
+  }
+  
   {
-    name : csvlocal
-    type : csv
-  },
-  {
-    # this section is for http://seanlahman.com/baseball-archive/statistics/
-    # csv files
-    name     : gcscsvs
+    name     : localfiles
     type     : cloudstore
     settings : {
-      type             : gcs
-      bucket           : "lytics-dataux-tests"
+      type             : localfs
       path             : "tables/"
       format           : "csv"
     }
-  },
+  }
+
+  # this section is for http://seanlahman.com/baseball-archive/statistics/
+  # csv files 
+  #  must have TESTINT=true integration test flag turned on
   {
-    name     : gcscsvs2
+    name     : baseball
     type     : cloudstore
     settings : {
       type             : gcs
@@ -120,7 +118,9 @@ sources : [
       path             : "baseball/"
       format           : "csv"
     }
-  },
+  }
+  
+  # this is the google-datastore database config
   {
     name : google_ds_test
     type : google-datastore

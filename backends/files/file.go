@@ -9,7 +9,7 @@ import (
 
 var (
 	// FileColumns are the default file-columns
-	FileColumns = []string{"file", "table", "path", "size", "partition", "updated", "filetype"}
+	FileColumns = []string{"file", "table", "path", "size", "partition", "updated", "deleted", "filetype"}
 )
 
 // FileInfo Struct of file info
@@ -37,6 +37,7 @@ func (m *FileInfo) Values() []driver.Value {
 		0,
 		m.Partition,
 		m.obj.Updated(),
+		false,
 		m.FileType,
 	}
 }
