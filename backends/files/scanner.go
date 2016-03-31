@@ -60,7 +60,7 @@ type csvFiles struct {
 }
 
 func (m *csvFiles) File(path string, obj cloudstorage.Object) *FileInfo {
-	return FileInterpret(path, obj)
+	return fileInterpret(path, obj)
 }
 func (m *csvFiles) Scanner(store cloudstorage.Store, fr *FileReader) (schema.ConnScanner, error) {
 	csv, err := datasource.NewCsvSource(fr.Table, 0, fr.F, fr.Exit)

@@ -1,8 +1,10 @@
+// Package files implements Cloud Files logic for getting, readding, and converting
+// files into databases.   It reads cloud(or local) files, gets lists of tables,
+// and can scan through them using distributed query engine.
 package files
 
 import (
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
@@ -11,22 +13,13 @@ import (
 	"github.com/lytics/cloudstorage/logging"
 
 	"github.com/araddon/qlbridge/datasource"
-	"github.com/araddon/qlbridge/exec"
-	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/datasource/memdb"
 	"github.com/araddon/qlbridge/schema"
 )
 
 var (
 	// ensure we implement interfaces
 	_ schema.Source = (*FileSource)(nil)
-
-	// Our file-pager wraps our file-scanners to move onto next file
-	_ PartitionedFileReader = (*FilePager)(nil)
-	_ schema.ConnScanner    = (*FilePager)(nil)
-	_ exec.ExecutorSource   = (*FilePager)(nil)
-	//_ exec.RequiresContext  = (*FilePager)(nil)
-
-	schemaRefreshInterval = time.Minute * 5
 
 	_ = u.EMPTY
 
@@ -47,10 +40,14 @@ var (
 		TmpDir:          "/tmp/localcache",
 	}
 
+	schemaRefreshInterval = time.Minute * 5
+
+	// FileStoreLoader defines the interface for loading files
 	FileStoreLoader func(ss *schema.SchemaSource) (cloudstorage.Store, error)
 )
 
 const (
+	// SourceType is the registered Source name in the qlbridge source registry
 	SourceType = "cloudstore"
 )
 
@@ -60,25 +57,31 @@ func init() {
 	FileStoreLoader = createConfStore
 }
 
+// PartitionedFileReader defines a file source that can page through files
 type PartitionedFileReader interface {
 	// NextFile returns io.EOF on last file
 	NextFile() (*FileReader, error)
 }
 
-// File DataSource for reading files, and scanning them allowing
-//  the contents to be treated as a scannable dataset, like doing a full
+// FileSource DataSource for reading files, and scanning them allowing
+//  the contents to be treated as a database, like doing a full
 //  table scan in mysql.  But, you can partition across files.
 //
 // - readers:      s3, gcs, local-fs
 // - tablesource:  translate lists of files into tables.  Normally we would have
 //                 multiple files per table (ie partitioned, per-day, etc)
 // - scanners:     responsible for file-specific
+// - files table:  a "table" of all the files from this cloud source
 //
 type FileSource struct {
 	ss             *schema.SchemaSource
 	lastLoad       time.Time
 	store          cloudstorage.Store
 	fh             FileHandler
+	fdbcols        []string
+	fdb            schema.SourceAll
+	fc             schema.ConnAll
+	filesTable     string
 	tablenames     []string
 	tables         map[string]*schema.Table
 	files          map[string][]*FileInfo
@@ -88,21 +91,7 @@ type FileSource struct {
 	Partitioner    string // random, ??  (date, keyed?)
 }
 
-// Struct of file info
-type FileInfo struct {
-	Name      string // Name, Path of file
-	Table     string // Table name this file participates in
-	FileType  string // csv, json, etc
-	Partition int    // which partition
-}
-
-// Struct of file info to supply to ScannerMakers
-type FileReader struct {
-	*FileInfo
-	F    io.Reader // Actual file reader
-	Exit chan bool // exit channel to shutdown reader
-}
-
+// NewFileSource provides singleton
 func NewFileSource() schema.Source {
 	m := FileSource{
 		tables:     make(map[string]*schema.Table),
@@ -112,6 +101,7 @@ func NewFileSource() schema.Source {
 	return &m
 }
 
+// Setup the filesource with schema info
 func (m *FileSource) Setup(ss *schema.SchemaSource) error {
 	m.ss = ss
 	if err := m.init(); err != nil {
@@ -124,20 +114,23 @@ func (m *FileSource) Setup(ss *schema.SchemaSource) error {
 	return nil
 }
 
+// Open a connection to given table, part of Source interface
 func (m *FileSource) Open(tableName string) (schema.Conn, error) {
+	if tableName == m.filesTable {
+		return m.fdb.Open(tableName)
+	}
 	pg, err := m.createPager(tableName, 0)
 	if err != nil {
 		u.Errorf("could not get pager: %v", err)
 		return nil, err
 	}
-	// _, err = pg.NextScanner()
-	// if err != nil {
-	// 	u.Warnf("why error? %v", err)
-	// 	return nil, err
-	// }
 	return pg, nil
 }
-func (m *FileSource) Close() error     { return nil }
+
+// Close this Conn
+func (m *FileSource) Close() error { return nil }
+
+// Tables for this file-source
 func (m *FileSource) Tables() []string { return m.tablenames }
 func (m *FileSource) init() error {
 	if m.store == nil {
@@ -147,6 +140,30 @@ func (m *FileSource) init() error {
 			return err
 		}
 		m.store = store
+
+		m.filesTable = fmt.Sprintf("%s_files", m.ss.Name)
+		m.tablenames = append(m.tablenames, m.filesTable)
+
+		m.fdbcols = FileColumns
+		// We are going to create a DB/Store to be allow the
+		// entire list of files to be shown as a meta-table of sorts
+		db, err := memdb.NewMemDbForSchema(m.filesTable, m.ss, m.fdbcols)
+		if err != nil {
+			u.Errorf("could not create db %v", err)
+			return err
+		}
+		m.fdb = db
+		c, err := db.Open(m.filesTable)
+		if err != nil {
+			u.Errorf("Could not create db %v", err)
+			return err
+		}
+		ca, ok := c.(schema.ConnAll)
+		if !ok {
+			u.Warnf("Crap, wrong conn type: %T", c)
+			return fmt.Errorf("Expected ConnAll but got %T", c)
+		}
+		m.fc = ca
 
 		conf := m.ss.Conf.Settings
 		if tablePath := conf.String("path"); tablePath != "" {
@@ -169,23 +186,31 @@ func (m *FileSource) init() error {
 	return nil
 }
 
-func FileInterpret(path string, obj cloudstorage.Object) *FileInfo {
+func fileInterpret(path string, obj cloudstorage.Object) *FileInfo {
 	fileName := obj.Name()
 	//u.Debugf("file %s", fileName)
-	fileName = strings.Replace(fileName, path, "", 1)
+	if !strings.HasPrefix(fileName, path) {
+		parts := strings.Split(fileName, path)
+		if len(parts) == 2 {
+			fileName = parts[1]
+		} else {
+			u.Warnf("could not get parts? %v", fileName)
+		}
+	} else {
+		fileName = strings.Replace(fileName, path, "", 1)
+	}
+
 	// Look for Folders
 	parts := strings.Split(fileName, "/")
 	if len(parts) > 1 {
 		return &FileInfo{Table: parts[0], Name: obj.Name()}
-	} else {
-		parts = strings.Split(fileName, ".")
-		if len(parts) > 1 {
-			tableName := strings.ToLower(parts[0])
-			return &FileInfo{Table: tableName, Name: obj.Name()}
-		} else {
-			u.Errorf("table not readable from filename %q  %#v", fileName, obj)
-		}
 	}
+	parts = strings.Split(fileName, ".")
+	if len(parts) > 1 {
+		tableName := strings.ToLower(parts[0])
+		return &FileInfo{Table: tableName, Name: obj.Name()}
+	}
+	u.Errorf("table not readable from filename %q  %#v", fileName, obj)
 	return nil
 }
 
@@ -202,19 +227,20 @@ func (m *FileSource) loadSchema() {
 	}
 	nextPartId := 0
 
+	//u.Infof("how many files? %v", len(objs))
+
 	for _, obj := range objs {
+		//u.Debugf("obj %#v", obj)
 		fi := m.fh.File(m.path, obj)
-		if fi == nil {
+		if fi == nil || fi.Name == "" {
 			continue
 		}
-		if fi.Name != "" {
-			if _, tableExists := m.files[fi.Table]; !tableExists {
-				u.Debugf("%p found new table: %q", m, fi.Table)
-				m.files[fi.Table] = make([]*FileInfo, 0)
-				m.tablenames = append(m.tablenames, fi.Table)
-			}
+		fi.obj = obj
 
-			m.files[fi.Table] = append(m.files[fi.Table], fi)
+		if _, tableExists := m.files[fi.Table]; !tableExists {
+			u.Debugf("%p found new table: %q", m, fi.Table)
+			m.files[fi.Table] = make([]*FileInfo, 0)
+			m.tablenames = append(m.tablenames, fi.Table)
 		}
 		if fi.Partition == 0 && m.ss.Conf.PartitionCt > 0 {
 			// assign a partition
@@ -225,11 +251,24 @@ func (m *FileSource) loadSchema() {
 				nextPartId = 0
 			}
 		}
+		m.addFile(fi)
 	}
 }
 
+func (m *FileSource) addFile(fi *FileInfo) {
+	m.files[fi.Table] = append(m.files[fi.Table], fi)
+	_, err := m.fc.Put(nil, nil, fi.Values())
+	if err != nil {
+		u.Warnf("could not register file")
+	}
+}
+
+// Table satisfys Source Schema interface to get table schema for given table
 func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 
+	if m.filesTable == tableName {
+		return m.fdb.Table(tableName)
+	}
 	var err error
 	//u.Debugf("Table(%q)", tableName)
 	t, ok := m.tables[tableName]
@@ -313,142 +352,6 @@ func (m *FileSource) createPager(tableName string, partition int) (*FilePager, e
 	return pg, nil
 }
 
-// File Pager acts like a Conn, wrapping underlying FileSource
-// and paging through looking at partitions
-type FilePager struct {
-	cursor    int
-	rowct     int64
-	table     string
-	fs        *FileSource
-	files     []*FileInfo
-	partition *schema.Partition
-	partid    int
-	tbl       *schema.Table
-	p         *plan.Source
-	schema.ConnScanner
-}
-
-// func (m *FilePager) SetContext(ctx *plan.Context) {
-// 	m.ctx = ctx
-// }
-func (m *FilePager) WalkExecSource(p *plan.Source) (exec.Task, error) {
-
-	if m.p == nil {
-		m.p = p
-		//u.Debugf("%p custom? %v", m, p.Custom)
-		if partitionId, ok := p.Custom.IntSafe("partition"); ok {
-			m.partid = partitionId
-		}
-	} else {
-		u.Warnf("not nil?  custom? %v", p.Custom)
-	}
-
-	//u.Debugf("WalkExecSource():  %T  %#v", p, p)
-	return exec.NewSource(p.Context(), p)
-}
-
-func (m *FilePager) Columns() []string {
-	if m.tbl == nil {
-		t, err := m.fs.Table(m.table)
-		if err != nil {
-			u.Warnf("error getting table? %v", err)
-			return nil
-		}
-		m.tbl = t
-	}
-	return m.tbl.Columns()
-}
-func (m *FilePager) NextScanner() (schema.ConnScanner, error) {
-
-	fr, err := m.NextFile()
-	if err == io.EOF {
-		return nil, err
-	}
-
-	// if m.p == nil {
-	// 	u.Debugf("%p MASTER next file partid:%d %v", m, m.partid, fr.Name)
-	// 	u.WarnT(12)
-	// } else {
-	// 	u.Debugf("%p ACTOR next file partid:%d  custom:%v %v", m, m.partid, m.p.Custom, fr.Name)
-	// }
-	//u.Debugf("%p next file partid:%d  custom:%v %v", m, m.partid, m.p.Custom, fr.Name)
-	scanner, err := m.fs.fh.Scanner(m.fs.store, fr)
-	if err != nil {
-		u.Errorf("Could not open file scanner %v err=%v", m.fs.fileType, err)
-		return nil, err
-	}
-	m.ConnScanner = scanner
-	return scanner, err
-}
-
-func (m *FilePager) NextFile() (*FileReader, error) {
-
-	var fi *FileInfo
-	for {
-		if m.cursor >= len(m.files) {
-			return nil, io.EOF
-		}
-		fi = m.files[m.cursor]
-		m.cursor++
-		if fi.Partition == m.partid {
-			break
-		}
-	}
-
-	//u.Debugf("%p opening: partition:%v desiredpart:%v file: %q ", m, fi.Partition, m.partid, fi.Name)
-	obj, err := m.fs.store.Get(fi.Name)
-	if err != nil {
-		u.Errorf("could not read %q table %v", err)
-		return nil, err
-	}
-
-	f, err := obj.Open(cloudstorage.ReadOnly)
-	if err != nil {
-		u.Errorf("could not read %q table %v", m.table, err)
-		return nil, err
-	}
-	//u.Infof("found file: %s   %p", obj.Name(), f)
-
-	fr := &FileReader{
-		F:        f,
-		Exit:     make(chan bool),
-		FileInfo: fi,
-	}
-	return fr, nil
-}
-
-func (m *FilePager) Next() schema.Message {
-	if m.ConnScanner == nil {
-		m.NextScanner()
-	}
-	for {
-		msg := m.ConnScanner.Next()
-		if msg == nil {
-			_, err := m.NextScanner()
-			if err != nil && err == io.EOF {
-				return nil
-			} else if err != nil {
-				u.Errorf("unexpected end of scan %v", err)
-				return nil
-			}
-			// now that we have a new scanner, lets try again
-			if m.ConnScanner != nil {
-				u.Debugf("next page")
-				msg = m.ConnScanner.Next()
-			}
-		}
-
-		//u.Infof("msg: %#v", msg.Body())
-
-		m.rowct++
-
-		return msg
-	}
-}
-func (m *FilePager) Close() error {
-	return nil
-}
-
 func createConfStore(ss *schema.SchemaSource) (cloudstorage.Store, error) {
 
 	if ss == nil || ss.Conf == nil {
@@ -483,9 +386,9 @@ func createConfStore(ss *schema.SchemaSource) (cloudstorage.Store, error) {
 			LocalFS:         "/tmp/mockcloud",
 			TmpDir:          "/tmp/localcache",
 		}
-		if path := conf.String("path"); path != "" {
-			c.LocalFS = path
-		}
+		// if path := conf.String("path"); path != "" {
+		// 	c.LocalFS = path
+		// }
 		//os.RemoveAll("/tmp/localcache")
 
 		config = &c
