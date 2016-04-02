@@ -14,11 +14,12 @@ var (
 
 // FileInfo Struct of file info
 type FileInfo struct {
-	obj       cloudstorage.Object
-	Name      string // Name, Path of file
-	Table     string // Table name this file participates in
-	FileType  string // csv, json, etc
-	Partition int    // which partition
+	obj        cloudstorage.Object
+	Name       string   // Name, Path of file
+	Table      string   // Table name this file participates in
+	FileType   string   // csv, json, etc
+	Partition  int      // which partition
+	AppendCols []string // Additional Column info extracted from file name/folder path
 }
 
 // FileReader file info and access to file to supply to ScannerMakers
