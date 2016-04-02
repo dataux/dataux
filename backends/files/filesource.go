@@ -134,6 +134,28 @@ func (m *FileSource) Close() error { return nil }
 func (m *FileSource) Tables() []string { return m.tablenames }
 func (m *FileSource) init() error {
 	if m.store == nil {
+
+		conf := m.ss.Conf.Settings
+		if tablePath := conf.String("path"); tablePath != "" {
+			m.path = tablePath
+		}
+		if fileType := conf.String("format"); fileType != "" {
+			m.fileType = fileType
+		}
+		if partitioner := conf.String("partitioner"); partitioner != "" {
+			m.Partitioner = partitioner
+		}
+
+		// TODO:   if no m.fileType inspect file name?
+		fileHandler, exists := scannerGet(m.fileType)
+		if !exists || fileHandler == nil {
+			return fmt.Errorf("Could not find scanner for filetype %q", m.fileType)
+		}
+		m.fh = fileHandler
+
+		// ensure any additional columns are added
+		m.fdbcols = append(FileColumns, m.fh.FileAppendColumns()...)
+
 		store, err := FileStoreLoader(m.ss)
 		if err != nil {
 			u.Errorf("Could not create cloudstore %v", err)
@@ -144,7 +166,6 @@ func (m *FileSource) init() error {
 		m.filesTable = fmt.Sprintf("%s_files", m.ss.Name)
 		m.tablenames = append(m.tablenames, m.filesTable)
 
-		m.fdbcols = FileColumns
 		// We are going to create a DB/Store to be allow the
 		// entire list of files to be shown as a meta-table of sorts
 		db, err := memdb.NewMemDbForSchema(m.filesTable, m.ss, m.fdbcols)
@@ -165,23 +186,6 @@ func (m *FileSource) init() error {
 		}
 		m.fc = ca
 
-		conf := m.ss.Conf.Settings
-		if tablePath := conf.String("path"); tablePath != "" {
-			m.path = tablePath
-		}
-		if fileType := conf.String("format"); fileType != "" {
-			m.fileType = fileType
-		}
-		if partitioner := conf.String("partitioner"); partitioner != "" {
-			m.Partitioner = partitioner
-		}
-
-		// TODO:   if no m.fileType inspect file name?
-		fileHandler, exists := scannerGet(m.fileType)
-		if !exists || fileHandler == nil {
-			return fmt.Errorf("Could not find scanner for filetype %q", m.fileType)
-		}
-		m.fh = fileHandler
 	}
 	return nil
 }
@@ -266,9 +270,11 @@ func (m *FileSource) addFile(fi *FileInfo) {
 // Table satisfys Source Schema interface to get table schema for given table
 func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 
+	// We have a special table that is the list of all files
 	if m.filesTable == tableName {
 		return m.fdb.Table(tableName)
 	}
+
 	var err error
 	//u.Debugf("Table(%q)", tableName)
 	t, ok := m.tables[tableName]
@@ -287,6 +293,8 @@ func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 
 	} else {
 
+		// Source doesn't implement Schema Handling so we are going to get
+		//  a scanner and introspect some rows
 		t, err = m.buildTable(tableName)
 		if err != nil {
 			return nil, err
@@ -295,7 +303,7 @@ func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 	}
 
 	if t == nil {
-		u.Warnf("Nil Table, should not be possible? %q", tableName)
+		u.Warnf("No table found? %q", tableName)
 		return nil, fmt.Errorf("Missing table for %q", tableName)
 	}
 
