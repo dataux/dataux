@@ -56,17 +56,29 @@ func (m *SourceNats) CloseFinal() error {
 func (m *SourceNats) Run() error {
 
 	outCh := m.MessageOut()
+	hasQuit := false
+	quit := make(chan bool)
 
 	defer func() {
-		m.Ctx.Recover()
-		u.Infof("closing SourceNats Out")
-		close(outCh)
+		//m.Ctx.Recover()
+		close(quit)
+		hasQuit = true
+		// We are going to hit panic on closed channels?
+		defer func() {
+			if r := recover(); r != nil {
+				u.Warnf("error on defer/exit nats source %v", r)
+			}
+		}()
+		u.Infof("%p closing SourceNats Out", m)
+		//close(outCh)
 		m.rx.Close()
 	}()
 
 	for {
 
 		select {
+		case <-quit:
+			return nil
 		case <-m.SigChan():
 			u.Debugf("got signal quit")
 			return nil
@@ -75,8 +87,12 @@ func (m *SourceNats) Run() error {
 				u.Debugf("NICE, got msg shutdown")
 				return nil
 			}
+			if hasQuit {
+				u.Debugf("NICE, already quit!")
+				return nil
+			}
 
-			//u.Debugf("In SourceNats msg %#v", msg)
+			//u.Debugf("%p In SourceNats msg ", m)
 			switch mt := msg.(type) {
 			case *datasource.SqlDriverMessageMap:
 				if len(mt.Vals) == 0 {

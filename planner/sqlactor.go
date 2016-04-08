@@ -185,6 +185,8 @@ func (m *SqlActor) Starting() dfa.Letter {
 		return Failure
 	}
 	m.tx = tx
+	grid.SetConnSendRetries(m.tx, 5)
+	grid.SetConnSendTimeout(m.tx, time.Second*10)
 
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -282,12 +284,12 @@ func (m *SqlActor) Running() dfa.Letter {
 			u.Warnf("%s finished store", m)
 			return Exit
 		case <-ticker.C:
-			u.Infof("alive")
+			u.Debugf("%p alive  %s", m, m.ID())
 			if err := m.started.Alive(); err != nil {
 				u.Warnf("sqlactor not alive?: %v", err)
 				return Failure
 			}
-			u.Warnf("%s about to do ticker store", m)
+			//u.Warnf("%s about to do ticker store", m)
 		case <-finished:
 			//u.Warnf("%s sqlactor about to send finished signal?", m)
 			return EverybodyFinished

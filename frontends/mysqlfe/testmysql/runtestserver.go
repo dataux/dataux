@@ -174,8 +174,9 @@ func NewTestServerForDb(t *testing.T, db string) {
 
 		ServerCtx = models.NewServerCtx(Conf)
 		ServerCtx.Init()
+		quit := make(chan bool)
 		go func() {
-			ServerCtx.Grid.RunMaster()
+			ServerCtx.Grid.RunMaster(quit)
 		}()
 
 		Schema, _ = ServerCtx.Schema(db)

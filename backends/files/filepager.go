@@ -146,7 +146,7 @@ func (m *FilePager) Next() schema.Message {
 			}
 			// now that we have a new scanner, lets try again
 			if m.ConnScanner != nil {
-				u.Debugf("next page")
+				//u.Debugf("next page")
 				msg = m.ConnScanner.Next()
 			}
 		}

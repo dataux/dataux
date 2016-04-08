@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	u "github.com/araddon/gou"
 
@@ -38,6 +39,11 @@ func banner() string {
 	return strings.Replace(asciiIntro, "*", "`", -1)
 }
 
+// Start a Dataux Service,
+//  @listener  true/false   do we run the listeneners (mysql)?
+//              if not then this is a worker only node
+//  @workerct  2 ?   How many worker services do we start?   Say, one per proc/core?
+//
 func RunDaemon(listener bool, workerCt int) {
 
 	//u.Infof("conf: %+v", Conf)
@@ -47,6 +53,8 @@ func RunDaemon(listener bool, workerCt int) {
 	svrCtx.Init()
 
 	u.Infof("%+v", planner.GridConf)
+	planner.GridConf.SchemaLoader = svrCtx.SchemaLoader
+	planner.GridConf.JobMaker = svrCtx.JobMaker
 
 	svr, err := NewServer(svrCtx)
 	if err != nil {
@@ -55,6 +63,7 @@ func RunDaemon(listener bool, workerCt int) {
 	}
 
 	sc := make(chan os.Signal, 1)
+	quit := make(chan bool)
 	signal.Notify(sc,
 		syscall.SIGHUP,
 		syscall.SIGINT,
@@ -63,15 +72,23 @@ func RunDaemon(listener bool, workerCt int) {
 
 	go func() {
 		sig := <-sc
+		close(quit)
 		u.Infof("Got signal [%d] to exit.", sig)
+		time.Sleep(time.Millisecond * 50)
 		svr.Shutdown(Reason{Reason: "signal", Message: fmt.Sprintf("%v", sig)})
+
 	}()
 
 	fmt.Println(banner())
 
-	go planner.RunWorkerNodes(workerCt, svrCtx.Reg)
+	if workerCt > 0 {
+		go planner.RunWorkerNodes(quit, workerCt, svrCtx.Reg)
+	}
 
 	if listener {
+		go func() {
+			svrCtx.Grid.RunMaster(quit)
+		}()
 		svr.RunListeners()
 	}
 
@@ -172,5 +189,5 @@ func (m *Server) loadFrontends() error {
 
 // Shutdown listeners and close down
 func (m *Server) Shutdown(reason Reason) {
-	m.stop <- true
+	close(m.stop)
 }

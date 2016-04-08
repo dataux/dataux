@@ -1,10 +1,14 @@
 package planner
 
 import (
+	"database/sql/driver"
+	"encoding/gob"
+	"time"
+
 	u "github.com/araddon/gou"
 	"github.com/lytics/grid"
 
-	//"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/plan"
 )
@@ -12,6 +16,13 @@ import (
 var (
 	_ exec.Task = (*SourceNats)(nil)
 )
+
+func init() {
+	gob.Register(map[string]interface{}{})
+	gob.Register(time.Time{})
+	gob.Register(datasource.SqlDriverMessageMap{})
+	gob.Register([]driver.Value{})
+}
 
 // A SinkNats task that receives messages that optionally may have been
 //   hashed to be sent via nats to a nats source consumer.
@@ -83,7 +94,7 @@ func (m *SinkNats) Run() error {
 
 			//u.Debugf("In SinkNats topic:%q    msg:%#v", m.destination, msg)
 			if err := m.tx.Send(m.destination, msg); err != nil {
-				u.Errorf("Could not send message? %v", err)
+				u.Errorf("Could not send message? %v %T  %#v", err, msg, msg)
 				return err
 			}
 		}
