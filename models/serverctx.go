@@ -6,6 +6,7 @@ import (
 	u "github.com/araddon/gou"
 
 	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/schema"
 
 	"github.com/dataux/dataux/planner"
@@ -29,6 +30,7 @@ func NewServerCtx(conf *Config) *ServerCtx {
 	svr := ServerCtx{}
 	svr.Config = conf
 	svr.Reg = datasource.DataSourcesRegistry()
+
 	return &svr
 }
 
@@ -46,6 +48,20 @@ func (m *ServerCtx) Init() error {
 	m.Grid = planner.NewServerGrid(2, m.Reg)
 
 	return nil
+}
+func (m *ServerCtx) SchemaLoader(db string) (*schema.Schema, error) {
+	s, ok := m.Reg.Schema(db)
+	if s == nil || !ok {
+		u.Warnf("Could not find schema for db=%s", db)
+		return nil, schema.ErrNotFound
+	}
+	return s, nil
+}
+
+func (m *ServerCtx) JobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
+	//ctx.Schema = testmysql.Schema
+	u.Warnf("jobMaker, going to do a partial plan?")
+	return planner.BuildExecutorUnPlanned(ctx, m.Grid)
 }
 
 // Get

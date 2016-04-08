@@ -4,9 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
-	"os/signal"
 	"strconv"
-	"syscall"
 	"time"
 
 	u "github.com/araddon/gou"
@@ -52,7 +50,8 @@ type Server struct {
 	lastTaskId uint64
 }
 
-func (m *Server) startSqlActor(actorCt, actorId int, partition string, pb string, flow Flow, def *grid.ActorDef, p *plan.Select) error {
+func (m *Server) startSqlActor(actorCt, actorId int, partition string, pb string,
+	flow Flow, def *grid.ActorDef, p *plan.Select) error {
 
 	def.DefineType("sqlactor")
 	def.Define("flow", flow.Name())
@@ -144,40 +143,48 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 	case <-localTask.SigChan():
 		u.Warnf("%s YAAAAAY finished", flow.String())
 
-	case <-time.After(30 * time.Second):
-		u.Warnf("%s exiting bc timeout", flow)
+		//case <-time.After(30 * time.Second):
+		//	u.Warnf("%s exiting bc timeout", flow)
 	}
 	u.Warnf("what is going on?")
 	return nil
 }
 
-func (m *Server) RunWorker() error {
+func (m *Server) RunWorker(quit chan bool) error {
 	//u.Debugf("%p starting grid worker", m)
 	actor, err := newActorMaker(m.Conf)
 	if err != nil {
 		u.Errorf("failed to make actor maker: %v", err)
 		return err
 	}
-	return m.runMaker(actor)
+	return m.runMaker(quit, actor)
 }
 
-func (m *Server) RunMaster() error {
+func (m *Server) RunMaster(quit chan bool) error {
 	//u.Debugf("%p start grid master", m)
-	return m.runMaker(&nilMaker{})
+	return m.runMaker(quit, &nilMaker{})
 }
 
-func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
+func (s *Server) runMaker(quit chan bool, actorMaker grid.ActorMaker) error {
 
 	// We are going to start a "Grid" with specified maker
 	//   - nilMaker = "master" only used for submitting tasks, not performing them
 	//   - normal maker;  performs specified work units
 	s.Grid = grid.New(s.Conf.GridName, s.Conf.Hostname, s.Conf.EtcdServers, s.Conf.NatsServers, actorMaker)
 
+	u.Debugf("created new distributed grid sql job maker: %#v", s.Grid)
 	exit, err := s.Grid.Start()
 	if err != nil {
 		u.Errorf("failed to start grid: %v", err)
 		return fmt.Errorf("error starting grid %v", err)
 	}
+
+	defer func() {
+		u.Debugf("defer grid worker complete: %s", s.Conf.Hostname)
+		s.Grid.Stop()
+	}()
+
+	complete := make(chan bool)
 
 	j := condition.NewJoin(s.Grid.Etcd(), 30*time.Second, s.Grid.Name(), "hosts", s.Conf.Hostname)
 	err = j.Join()
@@ -191,7 +198,12 @@ func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 		defer ticker.Stop()
 		for {
 			select {
+			case <-quit:
+				u.Debugf("quit signal")
+				close(complete)
+				return
 			case <-exit:
+				//u.Debugf("worker grid exit??")
 				return
 			case <-ticker.C:
 				err := j.Alive()
@@ -211,6 +223,9 @@ func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 	//u.LogTraceDf(u.WARN, 16, "")
 	started := w.WatchUntil(waitForCt)
 	select {
+	case <-complete:
+		u.Debugf("got complete signal")
+		return nil
 	case <-exit:
 		//u.Debug("Shutting down, grid exited")
 		return nil
@@ -221,20 +236,9 @@ func (s *Server) runMaker(actorMaker grid.ActorMaker) error {
 		s.started = true
 		//u.Debugf("%p now started", s)
 	}
-
-	go func() {
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-		select {
-		case <-sig:
-			//u.Debug("shutting down")
-			s.Grid.Stop()
-		case <-exit:
-		}
-	}()
-
+	//u.Debug("waiting for exit")
 	<-exit
-	//u.Info("shutdown complete")
+	//u.Debug("shutdown complete")
 	return nil
 }
 

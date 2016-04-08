@@ -15,11 +15,12 @@ var (
 // FileInfo Struct of file info
 type FileInfo struct {
 	obj        cloudstorage.Object
-	Name       string   // Name, Path of file
-	Table      string   // Table name this file participates in
-	FileType   string   // csv, json, etc
-	Partition  int      // which partition
-	AppendCols []string // Additional Column info extracted from file name/folder path
+	Name       string         // Name, Path of file
+	Table      string         // Table name this file participates in
+	FileType   string         // csv, json, etc
+	Partition  int            // which partition
+	Size       int            // Content-Length size in bytes
+	AppendCols []driver.Value // Additional Column info extracted from file name/folder path
 }
 
 // FileReader file info and access to file to supply to ScannerMakers
@@ -31,14 +32,16 @@ type FileReader struct {
 
 // Values as as slice
 func (m *FileInfo) Values() []driver.Value {
-	return []driver.Value{
+	cols := []driver.Value{
 		m.Name,
 		m.Table,
 		"",
-		0,
+		m.Size,
 		m.Partition,
 		m.obj.Updated(),
 		false,
 		m.FileType,
 	}
+	cols = append(cols, m.AppendCols...)
+	return cols
 }

@@ -28,6 +28,13 @@ func BuildSqlJob(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
 	job.GridServer = gs
 	job.Ctx = ctx
 	u.Debugf("buildsqljob: %T p:%p  %T p:%p", job, job, job.Executor, job.JobExecutor)
+	if gs == nil {
+		u.Warnf("Grid Server Doesn't exist %v", gs)
+	} else if gs.Grid == nil {
+		u.Warnf("Grid doens't exist? ")
+	} else if gs.Grid.Nats() == nil {
+		u.Warnf("Grid.Nats() doesnt exist")
+	}
 	//u.Debugf("buildsqljob2: %T  %T", baseJob, baseJob.Executor)
 	task, err := exec.BuildSqlJobPlanned(job.Planner, job, ctx)
 	if err != nil {
@@ -41,7 +48,7 @@ func BuildSqlJob(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
 	return job, err
 }
 
-// Build a Sql Job which may be a Grid/Distributed job
+// Build a Sql Job which has already been planned so this is just execution runner
 func BuildExecutorUnPlanned(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
 
 	baseJob := exec.NewExecutor(ctx, nil)
@@ -49,6 +56,10 @@ func BuildExecutorUnPlanned(ctx *plan.Context, gs *Server) (*ExecutorGrid, error
 	job := &ExecutorGrid{JobExecutor: baseJob}
 	baseJob.Executor = job
 	job.GridServer = gs
+	if gs == nil {
+		u.Warnf("nope, need a grid server ")
+		//return nil, fmt.Errorf("no grid server")
+	}
 	job.Ctx = ctx
 	//u.Infof("Grid Actor Executor: %T p:%p  %T p:%p", job, job, job.Executor, job.JobExecutor)
 	return job, nil
@@ -102,7 +113,7 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 
 	//u.WarnT(10)
 	if !p.ChildDag && len(p.Stmt.With) > 0 && p.Stmt.With.Bool("distributed") {
-		//u.Warnf("%p has distributed!!!!!: %#v", m, p.Stmt.With)
+		u.Warnf("%p has distributed!!!!!: %#v", m, p.Stmt.With)
 		// We are going to run tasks remotely, so need a local grid source for them
 		//  remoteSink  -> nats ->  localSource
 		localTask := exec.NewTaskSequential(m.Ctx)
@@ -110,6 +121,14 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 		if err != nil {
 			u.Errorf("Could not create task id %v", err)
 			return nil, err
+		}
+		gs := m.GridServer
+		if gs == nil {
+			u.Warnf("Grid Server Doesn't exist %v", gs)
+		} else if gs.Grid == nil {
+			u.Warnf("Grid doens't exist? ")
+		} else if gs.Grid.Nats() == nil {
+			u.Warnf("Grid.Nats() doesnt exist")
 		}
 
 		flow := NewFlow(taskUint)

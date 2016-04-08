@@ -243,6 +243,7 @@ func (m *FileSource) loadSchema() {
 			continue
 		}
 		fi.obj = obj
+		fi.FileType = m.fileType
 
 		if _, tableExists := m.files[fi.Table]; !tableExists {
 			u.Debugf("%p found new table: %q", m, fi.Table)

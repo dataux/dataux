@@ -36,7 +36,7 @@ func setupLogging() {
 	u.DiscardStandardLogger() // Discard non-sanctioned spammers
 }
 
-func RunWorkerNodes(nodeCt int, r *datasource.Registry) {
+func RunWorkerNodes(quit chan bool, nodeCt int, r *datasource.Registry) {
 
 	loggingOnce.Do(setupLogging)
 
@@ -44,7 +44,10 @@ func RunWorkerNodes(nodeCt int, r *datasource.Registry) {
 		go func(nodeId int) {
 			s := NewServerGrid(nodeCt, r)
 			s.Conf.Hostname = NodeName(uint64(nodeId))
-			s.RunWorker() // blocking
+			err := s.RunWorker(quit) // blocking
+			if err != nil {
+				u.Warnf("could not start worker")
+			}
 		}(i)
 	}
 	time.Sleep(time.Millisecond * 80)
