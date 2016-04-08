@@ -155,7 +155,8 @@ func LoadGithubToEs(host string, year, month, daysToImport, hoursToImport int) {
 						delete(jh, "payload") // elasticsearch 2.1 hates that payload.shas alternates string/bool
 						line, _ = json.Marshal(&jh)
 					}
-					err = indexer.Index("github_"+ge.Type(), "event", id, "", &ge.Created, line, false)
+					// (index string, _type string, id, parent, ttl string, date *time.Time, data interface{})
+					err = indexer.Index("github_"+ge.Type(), "event", id, "", "", &ge.Created, line)
 					if err != nil {
 						u.Errorf("error? %v", err)
 					}

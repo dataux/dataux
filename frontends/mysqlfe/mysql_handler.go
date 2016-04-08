@@ -90,8 +90,8 @@ func (m *MySqlConnCreator) Close() error {
 // - per connection, ie session specific
 type mySqlHandler struct {
 	svr    *models.ServerCtx
-	sess   expr.ContextReader // session info
-	conn   *mysqlproxy.Conn   // Connection to client, inbound mysql conn
+	sess   expr.ContextReadWriter // session info
+	conn   *mysqlproxy.Conn       // Connection to client, inbound mysql conn
 	schema *schema.Schema
 	connId uint32
 }
@@ -220,6 +220,11 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	case *rel.SqlInsert, *rel.SqlUpsert, *rel.SqlUpdate, *rel.SqlDelete:
 		resultWriter = NewMySqlExecResultWriter(writer, job.Ctx)
 	case *rel.SqlCommand:
+		err = job.Run()
+		job.Close()
+		if err != nil {
+			return err
+		}
 		return m.conn.WriteOK(nil)
 	default:
 		u.Warnf("sql not supported?  %v  %T", stmt, stmt)

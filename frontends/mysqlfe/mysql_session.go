@@ -11,7 +11,7 @@ import (
 // http://dev.mysql.com/doc/refman/5.6/en/server-system-variables.html
 var mysqlGlobalVars *datasource.ContextSimple = NewMySqlGlobalVars()
 
-func NewMySqlSessionVars(db string, connId uint32) expr.ContextReader {
+func NewMySqlSessionVars(db string, connId uint32) expr.ContextReadWriter {
 	ctx := datasource.NewContextSimple()
 	ctx.Data["@@dataux.dialect"] = value.NewStringValue("mysql")
 	ctx.Data["@@database"] = value.NewStringValue(db)
@@ -19,11 +19,11 @@ func NewMySqlSessionVars(db string, connId uint32) expr.ContextReader {
 	ctx.Data["@@max_allowed_packet"] = value.NewIntValue(MaxAllowedPacket)
 	ctx.Data["@@session.auto_increment_increment"] = value.NewIntValue(1)
 	ctx.Data["@@session.tx_isolation"] = value.NewStringValue("REPEATABLE-READ")
-	rdr := datasource.NewNestedContextReader([]expr.ContextReader{
+	rw := datasource.NewNestedContextReadWriter([]expr.ContextReader{
 		ctx,
 		mysqlGlobalVars,
-	}, time.Now())
-	return rdr
+	}, ctx, time.Now())
+	return rw
 }
 
 func NewMySqlGlobalVars() *datasource.ContextSimple {

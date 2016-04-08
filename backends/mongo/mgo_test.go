@@ -78,7 +78,7 @@ func TestInvalidQuery(t *testing.T) {
 	assert.Tf(t, rows == nil, "must not get rows")
 }
 
-func TestSchemaQueries(t *testing.T) {
+func TestSessionVarQueries(t *testing.T) {
 
 	found := false
 	data := struct {
@@ -102,17 +102,31 @@ func TestSchemaQueries(t *testing.T) {
 		Sql: `
 		select  
 			@@session.auto_increment_increment as auto_increment_increment, 
-  			@@character_set_client as character_set_client, 
-  			@@character_set_connection as character_set_connection`,
+			@@character_set_client as character_set_client, 
+			@@character_set_connection as character_set_connection`,
 		ExpectRowCt: 1,
 		ExpectColCt: 3,
 		ValidateRow: func(row []interface{}) {
-			u.Infof("%v", row)
+			u.Infof("%#v", row)
 			assert.T(t, len(row) == 3)
 			found = true
 		},
 	})
 	assert.Tf(t, found, "Must have found @@vaars")
+
+	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
+	assert.T(t, err == nil)
+
+	result, err := db.Exec(`SET @my_test_var = "hello world";`)
+	assert.Tf(t, err == nil, "got error on SET? %v", err)
+	assert.Tf(t, result != nil, "must get result")
+
+	rows, err := db.Query("select @my_test_var;")
+	assert.Tf(t, err == nil, "%v", err)
+	assert.T(t, rows.Next(), "Must have a row")
+	hw := ""
+	err = rows.Scan(&hw)
+	assert.T(t, hw == "hello world", "Should have found @var?")
 }
 
 func TestShowTables(t *testing.T) {

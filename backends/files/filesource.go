@@ -58,12 +58,13 @@ func init() {
 }
 
 // PartitionedFileReader defines a file source that can page through files
+// getting next file from partition
 type PartitionedFileReader interface {
 	// NextFile returns io.EOF on last file
 	NextFile() (*FileReader, error)
 }
 
-// FileSource DataSource for reading files, and scanning them allowing
+// FileSource Source for reading files, and scanning them allowing
 //  the contents to be treated as a database, like doing a full
 //  table scan in mysql.  But, you can partition across files.
 //
@@ -91,7 +92,9 @@ type FileSource struct {
 	Partitioner    string // random, ??  (date, keyed?)
 }
 
-// NewFileSource provides singleton
+// NewFileSource provides a singleton manager for a particular
+// Source Schema, and File-Handler to read/manage all files from
+// a source such as gcs folder x, s3 folder y
 func NewFileSource() schema.Source {
 	m := FileSource{
 		tables:     make(map[string]*schema.Table),
@@ -127,7 +130,7 @@ func (m *FileSource) Open(tableName string) (schema.Conn, error) {
 	return pg, nil
 }
 
-// Close this Conn
+// Close this File Source manager
 func (m *FileSource) Close() error { return nil }
 
 // Tables for this file-source
