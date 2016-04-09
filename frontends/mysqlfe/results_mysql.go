@@ -80,7 +80,7 @@ func NewMySqlSchemaWriter(writer models.ResultWriter, ctx *plan.Context) *MySqlR
 }
 
 func (m *MySqlResultWriter) Close() error {
-	u.Infof("%p mysql Close() already closed?%v", m, m.closed)
+	//u.Debugf("%p mysql Close() already closed?%v", m, m.closed)
 	if m.closed {
 		return nil
 	}
@@ -94,7 +94,7 @@ func (m *MySqlResultWriter) Close() error {
 }
 
 func (m *MySqlResultWriter) flushResults() error {
-	u.Infof("%p mysql flushResults() already flushed?%v", m, m.flushed)
+	//u.Infof("%p mysql flushResults() already flushed?%v", m, m.flushed)
 	if m.flushed {
 		return nil
 	}
@@ -103,12 +103,12 @@ func (m *MySqlResultWriter) flushResults() error {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
-	u.Infof("%p mysql Close() waiting for complete", m)
+	//u.Infof("%p mysql Close() waiting for complete", m)
 	select {
 	case <-ticker.C:
-		u.Warnf("timeout???? ")
+		u.Warnf("mysql write timeout???? ")
 	case <-m.complete:
-		u.Warnf("%p got mysql result complete", m)
+		//u.Debugf("%p got mysql result complete", m)
 	}
 	if !m.wroteHeaders {
 		m.WriteHeaders()
@@ -124,7 +124,7 @@ func schemaWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 	return func(_ *plan.Context, msg schema.Message) bool {
 
-		u.Debugf("in schemaWrite:  %#v", msg)
+		//u.Debugf("in schemaWrite:  %#v", msg)
 		if !m.wroteHeaders {
 			m.WriteHeaders()
 		}
@@ -182,7 +182,7 @@ func (m *MySqlResultWriter) Run() error {
 			return nil
 		case msg, ok := <-inCh:
 			if !ok || msg == nil {
-				u.Debugf("%p MYSQL INPUT CLOSED, got msg shutdown nilmsg?%v", m, msg == nil)
+				//u.Debugf("%p MYSQL INPUT CLOSED, got msg shutdown nilmsg?%v", m, msg == nil)
 				if !m.isComplete {
 					m.isComplete = true
 					close(m.complete)

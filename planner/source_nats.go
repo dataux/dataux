@@ -27,8 +27,9 @@ var (
 //
 type SourceNats struct {
 	*exec.TaskBase
-	closed bool
-	rx     grid.Receiver
+	closed  bool
+	drainCt int
+	rx      grid.Receiver
 }
 
 // Nats Source, the plan already provided info to the nats listener
@@ -42,7 +43,8 @@ func NewSourceNats(ctx *plan.Context, rx grid.Receiver) *SourceNats {
 
 // Close cleans up and closes channels
 func (m *SourceNats) Close() error {
-	u.Debugf("SourceNats Close  alreadyclosed?%v", m.closed)
+	//u.Debugf("SourceNats Close  alreadyclosed?%v", m.closed)
+	//u.WarnT(8)
 	if m.closed {
 		return nil
 	}
@@ -53,15 +55,31 @@ func (m *SourceNats) Close() error {
 			u.Warnf("error on close %v", r)
 		}
 	}()
+	go m.drain()
 
-	m.rx.Close()
-	return m.TaskBase.Close()
-	//return nil
+	close(m.SigChan())
+
+	//m.rx.Close()
+	//return m.TaskBase.Close()
+	return nil
+}
+func (m *SourceNats) drain() {
+
+	for {
+		select {
+		case _, ok := <-m.rx.Msgs():
+			if !ok {
+				u.Debugf("%p NICE, got drain shutdown, drained %d msgs", m, m.drainCt)
+				return
+			}
+			m.drainCt++
+		}
+	}
 }
 
 // CloseFinal after exit, cleanup some more
 func (m *SourceNats) CloseFinal() error {
-	u.Debugf("SourceNats CloseFinal  alreadyclosed?%v", m.closed)
+	//u.Debugf("SourceNats CloseFinal  alreadyclosed?%v", m.closed)
 	defer func() {
 		if r := recover(); r != nil {
 			u.Warnf("error on close %v", r)
@@ -70,6 +88,7 @@ func (m *SourceNats) CloseFinal() error {
 	//close(inCh) we don't close input channels, upstream does
 	//m.Ctx.Recover()
 	m.rx.Close()
+	//return nil
 	return m.TaskBase.Close()
 }
 
@@ -90,7 +109,7 @@ func (m *SourceNats) Run() error {
 				u.Warnf("error on defer/exit nats source %v", r)
 			}
 		}()
-		u.Infof("%p defer SourceNats Run() exit", m)
+		//u.Infof("%p defer SourceNats Run() exit", m)
 		close(outCh)
 		m.rx.Close()
 	}()
@@ -99,6 +118,7 @@ func (m *SourceNats) Run() error {
 
 		select {
 		case <-quit:
+			u.Warn("quit")
 			return nil
 		case <-m.SigChan():
 			u.Debugf("%p got signal quit", m)
@@ -111,6 +131,13 @@ func (m *SourceNats) Run() error {
 			if hasQuit {
 				u.Debugf("%p NICE, already quit!", m)
 				return nil
+			}
+			if m.closed {
+				// We want to drain this topic of nats,
+				// not let it back up in gnatsd
+				//u.Debugf("dropping message %v", msg)
+				m.drainCt++
+				continue
 			}
 
 			//u.Debugf("%p In SourceNats msg ", m)
@@ -128,7 +155,7 @@ func (m *SourceNats) Run() error {
 				}
 				outCh <- &mt
 			case nil:
-				u.Debugf("%p got nil, assume this is a shutdown signal?", m)
+				//u.Debugf("%p got nil, assume this is a shutdown signal?", m)
 				return nil
 			default:
 				u.Warnf("hm   %#v", mt)

@@ -67,7 +67,7 @@ func (m *Server) startSqlActor(actorCt, actorId int, partition string, pb string
 }
 
 // Submits a Sql Select statement task for planning across multiple nodes
-func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select) error {
+func (m *Server) SubmitTask(completionTask exec.TaskRunner, flow Flow, p *plan.Select) error {
 
 	//u.Debugf("%p master submitting job childdag?%v  %s", m, p.ChildDag, p.Stmt.String())
 	// marshal plan to Protobuf for transport
@@ -129,7 +129,6 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 
 	rp := ring.New(flow.NewContextualName("sqlactor"), actorCt)
 	u.Debugf("%p master?? submitting distributed sql query with %d actors", m, actorCt)
-	//u.WarnT(18)
 	for i, def := range rp.ActorDefs() {
 		go func(ad *grid.ActorDef, actorId int) {
 			if err = m.startSqlActor(actorCt, actorId, partitions[actorId], pb64, flow, ad, p); err != nil {
@@ -138,23 +137,25 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 		}(def, i)
 	}
 
-	u.Debugf("submitted actors, waiting for completion signal")
-	select {
-	case <-finished:
-		u.Debugf("%s got all! finished signal?", flow.Name())
-		return nil
-	case <-localTask.SigChan():
-		u.Warnf("YAAAAAY finished, sending shutdown signal %s/%s/%s ", m.Grid.Name(), flow.Name(), "sql_master_done")
+	//u.Debugf("submitted actors, waiting for completion signal")
+	sendComplete := func() {
+		u.Debugf("CompletionTask finished sending shutdown signal %s/%s/%s ", m.Grid.Name(), flow.Name(), "sql_master_done")
 		jdone := condition.NewJoin(m.Grid.Etcd(), 10*time.Second, m.Grid.Name(), flow.Name(), "sql_master_done", "master")
 		if err = jdone.Rejoin(); err != nil {
 			u.Errorf("could not join?? %v", err)
 		}
 		time.Sleep(time.Millisecond * 50)
 		defer jdone.Stop()
+	}
+	select {
+	case <-finished:
+		u.Debugf("%s got all finished signal?", flow.Name())
+		return nil
+	case <-completionTask.SigChan():
+		sendComplete()
 		//case <-time.After(30 * time.Second):
 		//	u.Warnf("%s exiting bc timeout", flow)
 	}
-	u.Warnf("exit what is going on?")
 	return nil
 }
 
@@ -180,7 +181,7 @@ func (s *Server) runMaker(quit chan bool, actorMaker grid.ActorMaker) error {
 	//   - normal maker;  performs specified work units
 	s.Grid = grid.New(s.Conf.GridName, s.Conf.Hostname, s.Conf.EtcdServers, s.Conf.NatsServers, actorMaker)
 
-	u.Debugf("created new distributed grid sql job maker: %#v", s.Grid)
+	//u.Debugf("%p created new distributed grid sql job maker: %#v", s, s.Grid)
 	exit, err := s.Grid.Start()
 	if err != nil {
 		u.Errorf("failed to start grid: %v", err)
@@ -207,7 +208,7 @@ func (s *Server) runMaker(quit chan bool, actorMaker grid.ActorMaker) error {
 		for {
 			select {
 			case <-quit:
-				u.Debugf("quit signal")
+				//u.Debugf("quit signal")
 				close(complete)
 				return
 			case <-exit:

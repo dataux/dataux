@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -133,7 +134,14 @@ func (c *Conn) Run() {
 			} else {
 				//u.Warnf("Handler() error %v", err)
 			}
-			u.Warnf("got error on handle %v", err)
+			es := err.Error()
+			switch {
+			case strings.Contains(es, "COM_FIELD_LIST"):
+				// ignore
+			default:
+				u.Warnf("got error on handle %v", err)
+			}
+
 			if err != mysql.ErrBadConn {
 				c.WriteError(err)
 			}
@@ -181,10 +189,7 @@ func (c *Conn) Close() error {
 		return nil
 	}
 
-	u.WarnT(30)
-	//u.LogTracef(u.WARN, "wtf")
-	panic("wtf")
-	//return nil // TEMP HACK
+	//u.LogTracef(u.WARN, "mysql conn listener closing")
 
 	c.c.Close()
 

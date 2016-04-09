@@ -241,15 +241,15 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		u.Errorf("error on finalize %v", err)
 		return err
 	}
-	u.Infof("mysqlhandler task.Run() start")
+	//u.Infof("mysqlhandler %p task.Run() start", job.RootTask)
 	err = job.Run()
-	u.Infof("mysqlhandler task.Run() complete")
+	//u.Infof("mysqlhandler %p task.Run() complete", job.RootTask)
 	if err != nil {
 		u.Errorf("error on Query.Run(): %v", err)
 	}
-	u.Infof("mysqlhandler task.Close() start")
+	//u.Infof("mysqlhandler %p task.Close() start", job.RootTask)
 	err = job.Close()
-	u.Infof("mysqlhandler task.Close() complete  err=%v", err)
+	//u.Infof("mysqlhandler %p task.Close() complete  err=%v", job.RootTask, err)
 	return err
 }
 

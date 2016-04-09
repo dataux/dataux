@@ -59,8 +59,7 @@ func (m *ServerCtx) SchemaLoader(db string) (*schema.Schema, error) {
 }
 
 func (m *ServerCtx) JobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
-	//ctx.Schema = testmysql.Schema
-	u.Warnf("jobMaker, going to do a partial plan?")
+	//u.Debugf("jobMaker, going to do a partial plan?")
 	return planner.BuildExecutorUnPlanned(ctx, m.Grid)
 }
 

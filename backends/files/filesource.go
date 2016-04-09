@@ -357,12 +357,8 @@ func (m *FileSource) createPager(tableName string, partition int) (*FilePager, e
 		return nil, schema.ErrNotFound
 	}
 
-	pg := &FilePager{
-		files: files,
-		fs:    m,
-		table: tableName,
-		exit:  make(chan bool),
-	}
+	pg := NewFilePager(tableName, m)
+	pg.files = files
 	return pg, nil
 }
 
@@ -371,7 +367,7 @@ func createConfStore(ss *schema.SchemaSource) (cloudstorage.Store, error) {
 	if ss == nil || ss.Conf == nil {
 		return nil, fmt.Errorf("No config info for files source")
 	}
-	u.Infof("json conf:\n%s", ss.Conf.Settings.PrettyJson())
+	//u.Debugf("json conf:\n%s", ss.Conf.Settings.PrettyJson())
 	cloudstorage.LogConstructor = func(prefix string) logging.Logger {
 		return logging.NewStdLogger(true, logging.DEBUG, prefix)
 	}

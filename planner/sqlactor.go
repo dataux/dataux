@@ -106,7 +106,7 @@ func (a *SqlActor) Act(g grid.Grid, exit <-chan bool) bool {
 	final, _ := d.Run(a.Starting)
 
 	if final == Terminating {
-		u.Debugf("%s sqlactor complete final: %v", a, final.String())
+		//u.Debugf("%s sqlactor complete final: %v", a, final.String())
 		return true
 	}
 	u.Errorf("%s sqlactor error : %v", a, final.String())
@@ -142,7 +142,6 @@ func (m *SqlActor) Starting() dfa.Letter {
 	if p.ChildDag == false {
 		u.Errorf("%p This MUST BE CHILD DAG", p)
 	}
-	//u.Infof("about to get executor for actor has child dag")
 
 	if m.conf == nil {
 		u.Warnf("no conf?")
@@ -154,7 +153,7 @@ func (m *SqlActor) Starting() dfa.Letter {
 	}
 	executor, err := m.conf.JobMaker(p.Ctx)
 	if err != nil {
-		u.Errorf("error %v", err)
+		u.Errorf("error on job maker%v", err)
 		return Failure
 	}
 
@@ -187,8 +186,8 @@ func (m *SqlActor) Starting() dfa.Letter {
 		return Failure
 	}
 	m.tx = tx
-	grid.SetConnSendRetries(m.tx, 5)
-	grid.SetConnSendTimeout(m.tx, time.Second*10)
+	// grid.SetConnSendRetries(m.tx, 5)
+	// grid.SetConnSendTimeout(m.tx, time.Second*10)
 
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -219,7 +218,7 @@ func (m *SqlActor) Starting() dfa.Letter {
 			return Exit
 		case <-ticker.C:
 			if err := m.started.Alive(); err != nil {
-				u.Warnf("failure???")
+				u.Warnf("%p failure???  no longer alive? %v", m, err)
 				return Failure
 			}
 		case <-started:
@@ -268,7 +267,7 @@ func (m *SqlActor) Running() dfa.Letter {
 		// dagp.PrintDag(0)
 
 		err := m.et.Run()
-		u.Infof("%p finished sqldag %s", m, m.flow.Name())
+		u.Debugf("%p finished sqldag %s", m, m.flow.Name())
 		if err != nil {
 			u.Errorf("error on Query.Run(): %v", err)
 		}
@@ -287,7 +286,7 @@ func (m *SqlActor) Running() dfa.Letter {
 	for {
 		select {
 		case <-m.exit:
-			u.Warnf("%s finished store", m)
+			u.Warnf("%s exit?   what caused this?", m)
 			return Exit
 		case <-ticker.C:
 			u.Debugf("%p alive  %s", m, m.ID())
@@ -297,10 +296,13 @@ func (m *SqlActor) Running() dfa.Letter {
 			}
 			//u.Warnf("%s about to do ticker store", m)
 		case <-finished:
-			u.Warnf("%s sqlactor about to send finished signal?", m)
+			u.Warnf("%s sqlactor ending due to everybody finished", m)
 			return EverybodyFinished
 		case <-masterDone:
-			u.Warnf("%s sqlactor about to send sql_master_done signal?", m)
+			// In this scenario, we have not finished our dag, either client
+			// quit or reached a LIMIT clause
+			//u.Debugf("%s sqlactor ending due to sql_master_done signal!", m)
+			m.et.Quit()
 			return EverybodyFinished
 		case err := <-w.WatchError():
 			u.Errorf("%v: error: %v", m, err)
@@ -379,7 +381,7 @@ func (m *SqlActor) Exiting() {
 }
 
 func (m *SqlActor) Terminating() {
-	u.Debugf("%s SqlActor terminating", m)
+	//u.Debugf("%s SqlActor terminating", m)
 	m.Exiting()
 
 	if m.state == nil {
