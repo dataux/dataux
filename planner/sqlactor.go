@@ -104,10 +104,12 @@ func (a *SqlActor) Act(g grid.Grid, exit <-chan bool) bool {
 	d.SetTransition(Finishing, Exit, Exiting, a.Exiting)
 
 	final, _ := d.Run(a.Starting)
-	//u.Debugf("%s sqlactor final: %v", a, final.String())
+
 	if final == Terminating {
+		u.Debugf("%s sqlactor complete final: %v", a, final.String())
 		return true
 	}
+	u.Errorf("%s sqlactor error : %v", a, final.String())
 	return false
 }
 
@@ -251,18 +253,22 @@ func (m *SqlActor) Running() dfa.Letter {
 	defer w.Stop()
 	finished := w.WatchUntil(m.ActorCt)
 
+	wdone := condition.NewCountWatch(m.grid.Etcd(), m.grid.Name(), m.flow.Name(), "sql_master_done")
+	defer wdone.Stop()
+	masterDone := wdone.WatchUntil(1)
+
 	// Now run the Actual worker
 	go func() {
 		natsSink := NewSinkNats(m.p.Ctx, m.flow.Name(), m.tx)
 		m.et.Add(natsSink)
-		m.et.Setup(0)
+		m.et.Setup(0) // Setup our Task in the DAG
 
 		// u.Warnf("starting sqldag %s, printing dag", m.flow.Name())
 		// dagp := m.et.(exec.TaskPrinter)
 		// dagp.PrintDag(0)
 
 		err := m.et.Run()
-		//u.Infof("finished sqldag %s", m.flow.Name())
+		u.Infof("%p finished sqldag %s", m, m.flow.Name())
 		if err != nil {
 			u.Errorf("error on Query.Run(): %v", err)
 		}
@@ -291,7 +297,10 @@ func (m *SqlActor) Running() dfa.Letter {
 			}
 			//u.Warnf("%s about to do ticker store", m)
 		case <-finished:
-			//u.Warnf("%s sqlactor about to send finished signal?", m)
+			u.Warnf("%s sqlactor about to send finished signal?", m)
+			return EverybodyFinished
+		case <-masterDone:
+			u.Warnf("%s sqlactor about to send sql_master_done signal?", m)
 			return EverybodyFinished
 		case err := <-w.WatchError():
 			u.Errorf("%v: error: %v", m, err)
@@ -313,7 +322,7 @@ func (m *SqlActor) Running() dfa.Letter {
 
 func (m *SqlActor) Finishing() dfa.Letter {
 
-	//u.Debugf("%s sqlactor finishing   %d", m.String(), m.ActorCt)
+	u.Debugf("%s sqlactor finishing   %d", m.String(), m.ActorCt)
 
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -370,7 +379,7 @@ func (m *SqlActor) Exiting() {
 }
 
 func (m *SqlActor) Terminating() {
-	//u.Debugf("%s SqlActor terminating", m)
+	u.Debugf("%s SqlActor terminating", m)
 	m.Exiting()
 
 	if m.state == nil {

@@ -15,8 +15,9 @@ var (
 	_ exec.Task = (*SourceNats)(nil)
 )
 
-// A SourceNats task that receives messages that optionally may have been
-//   hash routed to this node.
+// SourceNats task that receives messages via Gnatsd, for distribution
+//  across multiple workers.  These messages optionally may have been
+//   hash routed to this node, ie partition-key routed.
 //
 //   taska-1 ->  hash-nats-sink  \                        / --> nats-source -->
 //                                \                      /
@@ -26,7 +27,8 @@ var (
 //
 type SourceNats struct {
 	*exec.TaskBase
-	rx grid.Receiver
+	closed bool
+	rx     grid.Receiver
 }
 
 // Nats Source, the plan already provided info to the nats listener
@@ -38,11 +40,28 @@ func NewSourceNats(ctx *plan.Context, rx grid.Receiver) *SourceNats {
 	}
 }
 
+// Close cleans up and closes channels
 func (m *SourceNats) Close() error {
-	//u.Debugf("SourceNats Close")
-	return nil
+	u.Debugf("SourceNats Close  alreadyclosed?%v", m.closed)
+	if m.closed {
+		return nil
+	}
+	m.closed = true
+
+	defer func() {
+		if r := recover(); r != nil {
+			u.Warnf("error on close %v", r)
+		}
+	}()
+
+	m.rx.Close()
+	return m.TaskBase.Close()
+	//return nil
 }
+
+// CloseFinal after exit, cleanup some more
 func (m *SourceNats) CloseFinal() error {
+	u.Debugf("SourceNats CloseFinal  alreadyclosed?%v", m.closed)
 	defer func() {
 		if r := recover(); r != nil {
 			u.Warnf("error on close %v", r)
@@ -53,6 +72,8 @@ func (m *SourceNats) CloseFinal() error {
 	m.rx.Close()
 	return m.TaskBase.Close()
 }
+
+// Run a blocking runner
 func (m *SourceNats) Run() error {
 
 	outCh := m.MessageOut()
@@ -69,8 +90,8 @@ func (m *SourceNats) Run() error {
 				u.Warnf("error on defer/exit nats source %v", r)
 			}
 		}()
-		u.Infof("%p closing SourceNats Out", m)
-		//close(outCh)
+		u.Infof("%p defer SourceNats Run() exit", m)
+		close(outCh)
 		m.rx.Close()
 	}()
 
@@ -80,15 +101,15 @@ func (m *SourceNats) Run() error {
 		case <-quit:
 			return nil
 		case <-m.SigChan():
-			u.Debugf("got signal quit")
+			u.Debugf("%p got signal quit", m)
 			return nil
 		case msg, ok := <-m.rx.Msgs():
 			if !ok {
-				u.Debugf("NICE, got msg shutdown")
+				u.Debugf("%p NICE, got msg shutdown", m)
 				return nil
 			}
 			if hasQuit {
-				u.Debugf("NICE, already quit!")
+				u.Debugf("%p NICE, already quit!", m)
 				return nil
 			}
 
@@ -107,7 +128,7 @@ func (m *SourceNats) Run() error {
 				}
 				outCh <- &mt
 			case nil:
-				u.Debugf("got nil, assume this is a shutdown signal?")
+				u.Debugf("%p got nil, assume this is a shutdown signal?", m)
 				return nil
 			default:
 				u.Warnf("hm   %#v", mt)

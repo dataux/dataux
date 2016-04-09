@@ -26,6 +26,24 @@ func NewMySqlSessionVars(db string, connId uint32) expr.ContextReadWriter {
 	return rw
 }
 
+/*
+ql> show variables like '%timeout';
++----------------------------+-------+
+| Variable_name              | Value |
++----------------------------+-------+
+| connect_timeout            | 10    |
+| delayed_insert_timeout     | 300   |
+| innodb_lock_wait_timeout   | 50    |
+| innodb_rollback_on_timeout | OFF   |
+| interactive_timeout        | 60    |
+| net_read_timeout           | 30    |
+| net_write_timeout          | 60    |
+| slave_net_timeout          | 3600  |
+| table_lock_wait_timeout    | 50    |
+| wait_timeout               | 60    |
++----------------------------+-------+
+*/
+
 func NewMySqlGlobalVars() *datasource.ContextSimple {
 	ctx := datasource.NewContextSimple()
 
@@ -52,5 +70,6 @@ func NewMySqlGlobalVars() *datasource.ContextSimple {
 	ctx.Data["@@tx_isolation"] = value.NewStringValue("REPEATABLE-READ")
 	ctx.Data["@@version_comment"] = value.NewStringValue("DataUX (MIT), Release .13")
 	ctx.Data["@@wait_timeout"] = value.NewIntValue(28800)
+	ctx.Data["@@character_set_server"] = value.NewStringValue("utf8")
 	return ctx
 }

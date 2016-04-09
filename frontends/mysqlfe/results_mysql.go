@@ -23,6 +23,9 @@ var (
 )
 
 type MySqlResultWriter struct {
+	*exec.TaskBase
+	closed       bool
+	flushed      bool
 	writer       models.ResultWriter
 	msghandler   exec.MessageHandler
 	schema       *schema.Schema
@@ -31,14 +34,14 @@ type MySqlResultWriter struct {
 	complete     chan bool
 	isComplete   bool
 	wroteHeaders bool
-	*exec.TaskBase
 }
 
 type MySqlExecResultWriter struct {
+	*exec.TaskBase
+	closed bool
 	writer models.ResultWriter
 	schema *schema.Schema
 	Rs     *mysql.Result
-	*exec.TaskBase
 }
 
 func NewMySqlResultWriter(writer models.ResultWriter, ctx *plan.Context) *MySqlResultWriter {
@@ -77,29 +80,46 @@ func NewMySqlSchemaWriter(writer models.ResultWriter, ctx *plan.Context) *MySqlR
 }
 
 func (m *MySqlResultWriter) Close() error {
+	u.Infof("%p mysql Close() already closed?%v", m, m.closed)
+	if m.closed {
+		return nil
+	}
+	m.closed = true
 
-	ticker := time.NewTicker(30 * time.Second)
+	if err := m.flushResults(); err != nil {
+		u.Errorf("could not flush? %v", err)
+	}
+
+	return m.TaskBase.Close()
+}
+
+func (m *MySqlResultWriter) flushResults() error {
+	u.Infof("%p mysql flushResults() already flushed?%v", m, m.flushed)
+	if m.flushed {
+		return nil
+	}
+	m.flushed = true
+
+	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
-	//u.Infof("%p mysql Close() waiting for complete", m)
+	u.Infof("%p mysql Close() waiting for complete", m)
 	select {
 	case <-ticker.C:
 		u.Warnf("timeout???? ")
 	case <-m.complete:
-		//u.Warnf("%p got mysql result complete", m)
+		u.Warnf("%p got mysql result complete", m)
 	}
-
+	if !m.wroteHeaders {
+		m.WriteHeaders()
+	}
 	if m.Rs == nil || len(m.Rs.Fields) == 0 {
 		m.Rs = NewEmptyResultset(m.Ctx.Projection)
 	}
 	m.writer.WriteResult(m.Rs)
-
-	if err := m.TaskBase.Close(); err != nil {
-		return err
-	}
-
 	return nil
 }
+
 func schemaWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 	return func(_ *plan.Context, msg schema.Message) bool {
@@ -161,15 +181,13 @@ func (m *MySqlResultWriter) Run() error {
 			u.Debugf("got signal quit")
 			return nil
 		case msg, ok := <-inCh:
-			if !ok {
-				//u.Debugf("%p MYSQL INPUT CLOSED, got msg shutdown", m)
+			if !ok || msg == nil {
+				u.Debugf("%p MYSQL INPUT CLOSED, got msg shutdown nilmsg?%v", m, msg == nil)
 				if !m.isComplete {
 					m.isComplete = true
 					close(m.complete)
+					return m.flushResults()
 				}
-				return nil
-			}
-			if msg == nil {
 				return nil
 			}
 
@@ -337,6 +355,10 @@ func NewMySqlExecResultWriter(writer models.ResultWriter, ctx *plan.Context) *My
 	return m
 }
 func (m *MySqlExecResultWriter) Close() error {
+	if m.closed {
+		return nil
+	}
+	m.closed = true
 	if m.writer == nil {
 		u.Warnf("wat?  nil writer? ")
 	}
@@ -344,7 +366,7 @@ func (m *MySqlExecResultWriter) Close() error {
 	// TODO: we need to send a message to get this count
 	m.Rs.AffectedRows = 1
 	m.writer.WriteResult(m.Rs)
-	return nil
+	return m.TaskBase.Close()
 }
 func (m *MySqlExecResultWriter) Finalize() error {
 	return nil

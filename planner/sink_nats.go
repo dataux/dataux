@@ -18,13 +18,14 @@ var (
 )
 
 func init() {
+	// Really not a good place for this
 	gob.Register(map[string]interface{}{})
 	gob.Register(time.Time{})
 	gob.Register(datasource.SqlDriverMessageMap{})
 	gob.Register([]driver.Value{})
 }
 
-// A SinkNats task that receives messages that optionally may have been
+// SinkNats task that receives messages that optionally may have been
 //   hashed to be sent via nats to a nats source consumer.
 //
 //   taska-1 ->  hash-key -> nats-sink--> \                 / --> nats-source -->
@@ -35,11 +36,12 @@ func init() {
 //
 type SinkNats struct {
 	*exec.TaskBase
+	closed      bool
 	tx          grid.Sender
 	destination string
 }
 
-// New nats sink
+// NewSinkNats gnats sink to route messages via gnatsd
 func NewSinkNats(ctx *plan.Context, destination string, tx grid.Sender) *SinkNats {
 	return &SinkNats{
 		TaskBase:    exec.NewTaskBase(ctx),
@@ -47,24 +49,34 @@ func NewSinkNats(ctx *plan.Context, destination string, tx grid.Sender) *SinkNat
 		destination: destination,
 	}
 }
+
+// Close closes and cleanup
 func (m *SinkNats) Close() error {
+	u.Debugf("%p SinkNats Close()", m)
+	if m.closed {
+		return nil
+	}
+	m.closed = true
 	//inCh := m.MessageIn()
-	//u.Debugf("SinkNats close")
-	return nil
+	// m.TaskBase.Close()
+	return m.TaskBase.Close()
 }
+
+// CloseFinal after shutdown cleanup the rest of channels
 func (m *SinkNats) CloseFinal() error {
 	defer func() {
 		if r := recover(); r != nil {
 			u.Warnf("error on close %v", r)
 		}
 	}()
+	u.Debugf("%p sinknats CloseFinal() ", m)
 	//close(inCh) we don't close input channels, upstream does
 	//m.Ctx.Recover()
 	m.tx.Close()
 	return nil
 }
 
-//func (m *SinkNats) Close() error { return m.TaskBase.Close() }
+// Run blocking runner
 func (m *SinkNats) Run() error {
 
 	inCh := m.MessageIn()
@@ -83,7 +95,7 @@ func (m *SinkNats) Run() error {
 			return nil
 		case msg, ok := <-inCh:
 			if !ok {
-				//u.Debugf("NICE, got msg shutdown")
+				u.Debugf("NICE, got msg shutdown")
 				// eofMsg := datasource.NewSqlDriverMessageMapEmpty()
 				// if err := m.tx.Send(m.destination, eofMsg); err != nil {
 				// 	u.Errorf("Could not send eof message? %v", err)
@@ -94,6 +106,7 @@ func (m *SinkNats) Run() error {
 
 			//u.Debugf("In SinkNats topic:%q    msg:%#v", m.destination, msg)
 			if err := m.tx.Send(m.destination, msg); err != nil {
+				// Currently we shut down receiving nats listener, and this times-out
 				u.Errorf("Could not send message? %v %T  %#v", err, msg, msg)
 				return err
 			}

@@ -27,7 +27,7 @@ var asciiIntro = `
 var Conf *models.Config
 
 func LoadConfig(configFile string) {
-	// get config
+	// get config from file and exit if error
 	conf, err := models.LoadConfigFromFile(configFile)
 	if err != nil {
 		u.Errorf("Could not load config: %v", err)
@@ -39,26 +39,23 @@ func banner() string {
 	return strings.Replace(asciiIntro, "*", "`", -1)
 }
 
-// Start a Dataux Service,
+// Start a DataUX Service, can be either worker, listener, both
+//
 //  @listener  true/false   do we run the listeneners (mysql)?
 //              if not then this is a worker only node
 //  @workerct  2 ?   How many worker services do we start?   Say, one per proc/core?
 //
 func RunDaemon(listener bool, workerCt int) {
 
-	//u.Infof("conf: %+v", Conf)
-
-	// Make Server Context
 	svrCtx := models.NewServerCtx(Conf)
 	svrCtx.Init()
 
-	u.Infof("%+v", planner.GridConf)
 	planner.GridConf.SchemaLoader = svrCtx.SchemaLoader
 	planner.GridConf.JobMaker = svrCtx.JobMaker
 
 	svr, err := NewServer(svrCtx)
 	if err != nil {
-		u.Errorf("%v", err)
+		u.Errorf("Could not create new server err=%v", err)
 		return
 	}
 
@@ -72,7 +69,7 @@ func RunDaemon(listener bool, workerCt int) {
 
 	go func() {
 		sig := <-sc
-		close(quit)
+		close(quit) // This should signal worker nodes, master node to quit
 		u.Infof("Got signal [%d] to exit.", sig)
 		time.Sleep(time.Millisecond * 50)
 		svr.Shutdown(Reason{Reason: "signal", Message: fmt.Sprintf("%v", sig)})
@@ -87,14 +84,18 @@ func RunDaemon(listener bool, workerCt int) {
 
 	if listener {
 		go func() {
+			// Master is the Grid master that coordinates
+			// with etcd, nats, etc, submit tasks to worker nodes
+			// Only needed on listener nodes
 			svrCtx.Grid.RunMaster(quit)
 		}()
+		// Listeners are the tcp-inbound connections
 		svr.RunListeners()
 	}
 
 }
 
-// Server is the main DataUx server, the running process and responsible for:
+// Server is the main DataUX server, the running process and responsible for:
 //  1) starting *listeners* - network transports/protocols (mysql,mongo,redis)
 //  2) routing requests through *Handlers*(plugins) which
 //      filter, transform, log, etc
@@ -110,6 +111,7 @@ type Server struct {
 	stop chan bool
 }
 
+// Reason info on internal events
 type Reason struct {
 	Reason  string
 	err     error
@@ -126,11 +128,13 @@ func NewServer(ctx *models.ServerCtx) (*Server, error) {
 
 	return svr, nil
 }
+
+// Run the listeners
 func (m *Server) Run() {
 	m.RunListeners()
 }
 
-// a blocking runner, that starts mysql tcplisteners
+// RunListeners a blocking runner, that starts [mysql,?] tcp listeners
 // and returns if connection to listeners cannot be established
 func (m *Server) RunListeners() {
 

@@ -41,7 +41,7 @@ func NextId() (uint64, error) {
 	return sf.NextID()
 }
 
-// Distributed DataUx worker node
+// Server DataUX worker service
 type Server struct {
 	Conf       *Conf
 	reg        *datasource.Registry
@@ -60,17 +60,16 @@ func (m *Server) startSqlActor(actorCt, actorId int, partition string, pb string
 	def.Settings["actor_ct"] = strconv.Itoa(actorCt)
 	//u.Debugf("%p submitting start actor %s  nodeI=%d", m, def.ID(), actorId)
 	err := m.Grid.StartActor(def)
-	//u.Debugf("%p after submit start actor", m)
 	if err != nil {
 		u.Errorf("error: failed to start: %v, due to: %v", "sqlactor", err)
 	}
 	return err
 }
 
+// Submits a Sql Select statement task for planning across multiple nodes
 func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select) error {
 
 	//u.Debugf("%p master submitting job childdag?%v  %s", m, p.ChildDag, p.Stmt.String())
-	//u.LogTracef(u.WARN, "hello")
 	// marshal plan to Protobuf for transport
 	pb, err := p.Marshal()
 	if err != nil {
@@ -114,6 +113,10 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 	if err != nil {
 		u.Errorf("Could not initilize dir %v", err)
 	}
+	_, err = m.Grid.Etcd().CreateDir(fmt.Sprintf("/%v/%v/%v", m.Grid.Name(), flow.Name(), "sql_master_done"), 100000)
+	if err != nil {
+		u.Errorf("Could not initilize dir %v", err)
+	}
 	_, err = m.Grid.Etcd().CreateDir(fmt.Sprintf("/%v/%v/%v", m.Grid.Name(), flow.Name(), "finished"), 100000)
 	if err != nil {
 		u.Errorf("Could not initilize dir %v", err)
@@ -135,18 +138,23 @@ func (m *Server) SubmitTask(localTask exec.TaskRunner, flow Flow, p *plan.Select
 		}(def, i)
 	}
 
-	//u.Debugf("submitted actors, waiting for completion signal")
+	u.Debugf("submitted actors, waiting for completion signal")
 	select {
 	case <-finished:
-		//u.Debugf("%s got all! finished signal?", flow.Name())
+		u.Debugf("%s got all! finished signal?", flow.Name())
 		return nil
 	case <-localTask.SigChan():
-		u.Warnf("%s YAAAAAY finished", flow.String())
-
+		u.Warnf("YAAAAAY finished, sending shutdown signal %s/%s/%s ", m.Grid.Name(), flow.Name(), "sql_master_done")
+		jdone := condition.NewJoin(m.Grid.Etcd(), 10*time.Second, m.Grid.Name(), flow.Name(), "sql_master_done", "master")
+		if err = jdone.Rejoin(); err != nil {
+			u.Errorf("could not join?? %v", err)
+		}
+		time.Sleep(time.Millisecond * 50)
+		defer jdone.Stop()
 		//case <-time.After(30 * time.Second):
 		//	u.Warnf("%s exiting bc timeout", flow)
 	}
-	u.Warnf("what is going on?")
+	u.Warnf("exit what is going on?")
 	return nil
 }
 
@@ -234,9 +242,8 @@ func (s *Server) runMaker(quit chan bool, actorMaker grid.ActorMaker) error {
 		os.Exit(1)
 	case <-started:
 		s.started = true
-		//u.Debugf("%p now started", s)
+		u.Debugf("%p now started", s)
 	}
-	//u.Debug("waiting for exit")
 	<-exit
 	//u.Debug("shutdown complete")
 	return nil

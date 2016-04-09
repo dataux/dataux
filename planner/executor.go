@@ -2,6 +2,7 @@ package planner
 
 import (
 	"fmt"
+	"time"
 
 	u "github.com/araddon/gou"
 	"github.com/lytics/grid"
@@ -155,10 +156,13 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 				u.Errorf("Could not run task", err)
 			}
 			// need to send signal to quit
-			ch := natsSource.MessageOut()
-			//u.Debugf("closing Source due to a task (first?) completing")
-			close(ch)
-			localTask.Close()
+			//ch := natsSource.MessageOut()
+			u.Debugf("%p closing Source due to a task (first?) completing", m)
+			time.Sleep(time.Millisecond * 30)
+			// If we close input source, then will it shutdown the rest?
+			natsSource.Close()
+			//close(ch)
+			//localTask.Close()
 		}()
 		return localTask, nil
 	}

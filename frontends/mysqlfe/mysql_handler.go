@@ -139,6 +139,7 @@ func (m *mySqlHandler) chooseCommand(writer models.ResultWriter, req *models.Req
 	case mysql.COM_PING:
 		return m.writeOK(nil)
 	case mysql.COM_QUIT:
+		u.Warnf("who is asking me to Quit? %s", string(cmd))
 		m.Close()
 		return nil
 	case mysql.COM_INIT_DB:
@@ -240,13 +241,15 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		u.Errorf("error on finalize %v", err)
 		return err
 	}
-	//u.Infof("about to run")
+	u.Infof("mysqlhandler task.Run() start")
 	err = job.Run()
-	//u.Infof("after run")
+	u.Infof("mysqlhandler task.Run() complete")
 	if err != nil {
 		u.Errorf("error on Query.Run(): %v", err)
 	}
-	job.Close()
+	u.Infof("mysqlhandler task.Close() start")
+	err = job.Close()
+	u.Infof("mysqlhandler task.Close() complete  err=%v", err)
 	return err
 }
 

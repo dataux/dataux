@@ -24,6 +24,8 @@ type FilePager struct {
 	cursor    int
 	rowct     int64
 	table     string
+	exit      chan bool
+	closed    bool
 	fs        *FileSource
 	files     []*FileInfo
 	partition *schema.Partition
@@ -135,6 +137,9 @@ func (m *FilePager) Next() schema.Message {
 		m.NextScanner()
 	}
 	for {
+		if m.closed {
+			return nil
+		}
 		msg := m.ConnScanner.Next()
 		if msg == nil {
 			_, err := m.NextScanner()
@@ -161,5 +166,7 @@ func (m *FilePager) Next() schema.Message {
 
 // Close this connection/pager
 func (m *FilePager) Close() error {
+	u.Debugf("got file pager closer")
+	m.closed = true
 	return nil
 }

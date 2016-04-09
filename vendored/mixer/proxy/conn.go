@@ -133,6 +133,7 @@ func (c *Conn) Run() {
 			} else {
 				//u.Warnf("Handler() error %v", err)
 			}
+			u.Warnf("got error on handle %v", err)
 			if err != mysql.ErrBadConn {
 				c.WriteError(err)
 			}
@@ -179,6 +180,11 @@ func (c *Conn) Close() error {
 	if c.closed {
 		return nil
 	}
+
+	u.WarnT(30)
+	//u.LogTracef(u.WARN, "wtf")
+	panic("wtf")
+	//return nil // TEMP HACK
 
 	c.c.Close()
 
