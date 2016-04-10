@@ -15,6 +15,11 @@ var (
 	_ exec.Task = (*SourceNats)(nil)
 )
 
+type CmdMsg struct {
+	Cmd      string
+	BodyJson u.JsonHelper
+}
+
 // SourceNats task that receives messages via Gnatsd, for distribution
 //  across multiple workers.  These messages optionally may have been
 //   hash routed to this node, ie partition-key routed.
@@ -29,6 +34,7 @@ type SourceNats struct {
 	*exec.TaskBase
 	closed  bool
 	drainCt int
+	cmdch   chan *CmdMsg
 	rx      grid.Receiver
 }
 
@@ -38,6 +44,7 @@ func NewSourceNats(ctx *plan.Context, rx grid.Receiver) *SourceNats {
 	return &SourceNats{
 		TaskBase: exec.NewTaskBase(ctx),
 		rx:       rx,
+		cmdch:    make(chan *CmdMsg),
 	}
 }
 
@@ -88,6 +95,7 @@ func (m *SourceNats) CloseFinal() error {
 	//close(inCh) we don't close input channels, upstream does
 	//m.Ctx.Recover()
 	m.rx.Close()
+	close(m.cmdch)
 	//return nil
 	return m.TaskBase.Close()
 }
@@ -142,18 +150,21 @@ func (m *SourceNats) Run() error {
 
 			//u.Debugf("%p In SourceNats msg ", m)
 			switch mt := msg.(type) {
-			case *datasource.SqlDriverMessageMap:
-				if len(mt.Vals) == 0 {
-					u.Infof("NICE EMPTY EOF MESSAGE, CLOSING")
-					return nil
-				}
-				outCh <- mt
+			// case *datasource.SqlDriverMessageMap:
+			// 	if len(mt.Vals) == 0 {
+			// 		u.Infof("NICE EMPTY EOF MESSAGE, CLOSING")
+			// 		return nil
+			// 	}
+			// 	outCh <- mt
 			case datasource.SqlDriverMessageMap:
 				if len(mt.Vals) == 0 {
 					u.Infof("NICE EMPTY EOF MESSAGE 2")
 					return nil
 				}
 				outCh <- &mt
+			case *CmdMsg:
+				u.Debugf("%p got cmdmsg  %#v", m, mt)
+				m.cmdch <- mt
 			case nil:
 				//u.Debugf("%p got nil, assume this is a shutdown signal?", m)
 				return nil

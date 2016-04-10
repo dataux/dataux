@@ -23,6 +23,7 @@ func init() {
 	gob.Register(time.Time{})
 	gob.Register(datasource.SqlDriverMessageMap{})
 	gob.Register([]driver.Value{})
+	gob.Register(CmdMsg{})
 }
 
 // SinkNats task that receives messages that optionally may have been

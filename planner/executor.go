@@ -172,8 +172,8 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 
 		// submit query execution tasks to run on other worker nodes
 		go func() {
-			// task submission to worker actors
-			if err := m.GridServer.SubmitTask(completionTask, flow, p); err != nil {
+			//
+			if err := m.GridServer.RunSqlMaster(completionTask, natsSource, flow, p); err != nil {
 				u.Errorf("Could not run task", err)
 			}
 			//u.Debugf("%p closing Source due to a task (first?) completing", m)

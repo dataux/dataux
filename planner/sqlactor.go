@@ -246,7 +246,7 @@ func (m *SqlActor) Running() dfa.Letter {
 		}
 	}
 
-	//u.Debugf("%v: running with %d nodes", m.ID(), m.ActorCt)
+	u.Debugf("%p running with %d nodes %s", m, m.ActorCt, m.ID())
 
 	w := condition.NewCountWatch(m.grid.Etcd(), m.grid.Name(), m.flow.Name(), "sqlcomplete")
 	defer w.Stop()
@@ -256,31 +256,25 @@ func (m *SqlActor) Running() dfa.Letter {
 	defer wdone.Stop()
 	masterDone := wdone.WatchUntil(1)
 
-	// Now run the Actual worker
+	isComplete := false
+	jTaskComplete := condition.NewJoin(m.grid.Etcd(), 30*time.Second, m.grid.Name(), m.flow.Name(), "sqlcomplete", m.ID())
+	defer jTaskComplete.Stop()
+
+	// Now run the sql dag exec tasks
 	go func() {
 		natsSink := NewSinkNats(m.p.Ctx, m.flow.Name(), m.tx)
 		m.et.Add(natsSink)
 		m.et.Setup(0) // Setup our Task in the DAG
 
-		// u.Warnf("starting sqldag %s, printing dag", m.flow.Name())
-		// dagp := m.et.(exec.TaskPrinter)
-		// dagp.PrintDag(0)
-
 		err := m.et.Run()
-		u.Debugf("%p finished sqldag %s", m, m.flow.Name())
+		u.Debugf("%p finished sqldag %s", m, m.ID())
 		if err != nil {
 			u.Errorf("error on Query.Run(): %v", err)
 		}
-
-		//u.Warnf("about to send sqlcomplete after exec task run")
-		j := condition.NewJoin(m.grid.Etcd(), 10*time.Second, m.grid.Name(), m.flow.Name(), "sqlcomplete", m.ID())
-		defer j.Stop()
-
-		//u.Infof("sending sqlcomplete join message for")
-		if err = j.Rejoin(); err != nil {
+		if err = jTaskComplete.Rejoin(); err != nil {
 			u.Errorf("could not join?? %v", err)
 		}
-		//u.Warnf("sqlcomplete sql dag")
+		isComplete = true
 	}()
 
 	for {
@@ -290,6 +284,13 @@ func (m *SqlActor) Running() dfa.Letter {
 			return Exit
 		case <-ticker.C:
 			u.Debugf("%p alive  %s", m, m.ID())
+			if isComplete {
+				// Refresh our complete flag
+				if err := jTaskComplete.Alive(); err != nil {
+					u.Warnf("jTaskComplete not alive?: %v", err)
+					return Failure
+				}
+			}
 			if err := m.started.Alive(); err != nil {
 				u.Warnf("sqlactor not alive?: %v", err)
 				return Failure

@@ -283,6 +283,7 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 		wasWriten[col.Name] = struct{}{}
 		m.Rs.FieldNames[col.Name] = i
 		//u.Debugf("writeheader %s %v", col.Name, col.Type.String())
+
 		switch col.Type {
 		case value.IntType:
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_LONG))
@@ -300,6 +301,7 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 			u.Debugf("Field type not known explicitly mapped type=%v so use json %#v", col.Type.String(), col)
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_BLOB))
 		}
+
 		//u.Debugf("added field: %v", col.Name)
 	}
 

@@ -1,6 +1,6 @@
 github.com/araddon/dateparse 2f41da3eb28d713ca2f45682fae66173fad5e85b
 github.com/araddon/gou c4d51044125da629d6f2aa594f25b45c451a7d2a
-github.com/araddon/qlbridge bffcbd70a855a123dc08b7f3c7692a8c500c6f2c
+github.com/araddon/qlbridge 11595df42b47d0fbfa40820d7299c8be58c1d54d
 github.com/bitly/go-hostpool d0e59c22a56e8dadfed24f74f452cea5a52722d2
 github.com/bmizerany/assert e17e99893cb6509f428e1728281c2ad60a6b31e3
 github.com/coreos/etcd 207c92b62785d220edc74ed791fd8a22a18e378e
@@ -21,7 +21,7 @@ github.com/lytics/cloudstorage 7c7173488d69e97c35140b22d565298f40bb2a0e
 github.com/lytics/confl f12b6bace2ff295fc6730f6dbaf009289e2f6e80
 github.com/lytics/datemath 988020f3ad34814005ab10b6c7863e31672b5f63
 github.com/lytics/dfa 63e35f788f7fa5203fcd2dcd7e318da5a1b981e5
-github.com/lytics/grid 8e444f9e1d9c7366fccfb99c44f398fa1b9c5689
+github.com/lytics/grid 5d3734ce2b6e4ce13074af1a129faa2ca706d3dc
 github.com/lytics/metafora eb26f00432a98228e44de8e074b9627fc4c1e457
 github.com/lytics/sereno f6128b640de0742892a439b3672ac88637df977d
 github.com/mattbaird/elastigo d0839da905fef1221e2b19ddfaf34985add62e10
