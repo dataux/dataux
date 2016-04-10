@@ -39,11 +39,12 @@ func setupLogging() {
 func RunWorkerNodes(quit chan bool, nodeCt int, r *datasource.Registry) {
 
 	loggingOnce.Do(setupLogging)
+	nextId, _ := NextId()
 
 	for i := 0; i < nodeCt; i++ {
 		go func(nodeId int) {
 			s := NewServerGrid(nodeCt, r)
-			s.Conf.Hostname = NodeName(uint64(nodeId))
+			s.Conf.Hostname = NodeName2(nextId, uint64(nodeId))
 			err := s.RunWorker(quit) // blocking
 			if err != nil {
 				u.Warnf("could not start worker")
@@ -68,4 +69,11 @@ func NodeName(id uint64) string {
 		u.Errorf("error: failed to discover hostname: %v", err)
 	}
 	return fmt.Sprintf("%s-%d", hostname, id)
+}
+func NodeName2(id1, id2 uint64) string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		u.Errorf("error: failed to discover hostname: %v", err)
+	}
+	return fmt.Sprintf("%s-%d-%d", hostname, id1, id2)
 }

@@ -18,12 +18,16 @@ var (
 	//_ exec.RequiresContext  = (*FilePager)(nil)
 )
 
-// FilePager acts like a Conn, wrapping underlying FileSource
-// and paging through looking at partitions
+// FilePager acts like a Partitionied Data Source Conn, wrapping underlying FileSource
+// and paging through list of files and only scanning those that match
+// this pagers partition
+// - by default the partition is -1 which means no partitioning
 type FilePager struct {
 	cursor    int
 	rowct     int64
 	table     string
+	exit      chan bool
+	closed    bool
 	fs        *FileSource
 	files     []*FileInfo
 	partition *schema.Partition
@@ -31,6 +35,16 @@ type FilePager struct {
 	tbl       *schema.Table
 	p         *plan.Source
 	schema.ConnScanner
+}
+
+// NewFilePager creates default new FilePager
+func NewFilePager(tableName string, fs *FileSource) *FilePager {
+	return &FilePager{
+		fs:     fs,
+		table:  tableName,
+		exit:   make(chan bool),
+		partid: -1,
+	}
 }
 
 // func (m *FilePager) SetContext(ctx *plan.Context) {
@@ -72,16 +86,11 @@ func (m *FilePager) Columns() []string {
 func (m *FilePager) NextScanner() (schema.ConnScanner, error) {
 
 	fr, err := m.NextFile()
+	//u.Debugf("%p next file? fr:%+v  err=%v", m, fr, err)
 	if err == io.EOF {
 		return nil, err
 	}
 
-	// if m.p == nil {
-	// 	u.Debugf("%p MASTER next file partid:%d %v", m, m.partid, fr.Name)
-	// 	u.WarnT(12)
-	// } else {
-	// 	u.Debugf("%p ACTOR next file partid:%d  custom:%v %v", m, m.partid, m.p.Custom, fr.Name)
-	// }
 	//u.Debugf("%p next file partid:%d  custom:%v %v", m, m.partid, m.p.Custom, fr.Name)
 	scanner, err := m.fs.fh.Scanner(m.fs.store, fr)
 	if err != nil {
@@ -96,13 +105,15 @@ func (m *FilePager) NextScanner() (schema.ConnScanner, error) {
 func (m *FilePager) NextFile() (*FileReader, error) {
 
 	var fi *FileInfo
+	//u.Debugf("%p file ct=%d partid:%d", m, len(m.files), m.partid)
 	for {
 		if m.cursor >= len(m.files) {
 			return nil, io.EOF
 		}
 		fi = m.files[m.cursor]
 		m.cursor++
-		if fi.Partition == m.partid {
+		// partid = -1 means we are not partitioning
+		if m.partid < 0 || fi.Partition == m.partid {
 			break
 		}
 	}
@@ -135,10 +146,15 @@ func (m *FilePager) Next() schema.Message {
 		m.NextScanner()
 	}
 	for {
+		if m.closed {
+			return nil
+		}
 		msg := m.ConnScanner.Next()
 		if msg == nil {
+			// Kind of crap api, side-effect method? uck
 			_, err := m.NextScanner()
 			if err != nil && err == io.EOF {
+				// Truly was last file in partition
 				return nil
 			} else if err != nil {
 				u.Errorf("unexpected end of scan %v", err)
@@ -151,15 +167,13 @@ func (m *FilePager) Next() schema.Message {
 			}
 		}
 
-		//u.Infof("msg: %#v", msg.Body())
-
 		m.rowct++
-
 		return msg
 	}
 }
 
 // Close this connection/pager
 func (m *FilePager) Close() error {
+	m.closed = true
 	return nil
 }

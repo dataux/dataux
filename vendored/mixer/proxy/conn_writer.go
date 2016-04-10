@@ -140,9 +140,9 @@ func (c *Conn) WriteHandlerResult(status uint16, r *mysql.Resultset) error {
 		data = data[0:4]
 		data = append(data, v.Dump()...)
 		//u.Infof("field; %v", v.String())
-		//u.Debugf("data: %s", data)
+		//u.Debugf("data size %d", len(data))
 		if err := c.WritePacket(data); err != nil {
-			u.Warn(err)
+			u.Warnf("Could not write mysql out? size=%d, err=%v", len(data), err)
 			return err
 		}
 	}

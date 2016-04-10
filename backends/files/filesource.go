@@ -249,6 +249,7 @@ func (m *FileSource) loadSchema() {
 			u.Debugf("%p found new table: %q", m, fi.Table)
 			m.files[fi.Table] = make([]*FileInfo, 0)
 			m.tablenames = append(m.tablenames, fi.Table)
+			nextPartId = 0
 		}
 		if fi.Partition == 0 && m.ss.Conf.PartitionCt > 0 {
 			// assign a partition
@@ -327,7 +328,7 @@ func (m *FileSource) buildTable(tableName string) (*schema.Table, error) {
 
 	scanner, err := pager.NextScanner()
 	if err != nil {
-		u.Errorf("what, no scanner? %v", err)
+		u.Errorf("what, no scanner? table=%q  err=%v", tableName, err)
 		return nil, err
 	}
 
@@ -356,11 +357,8 @@ func (m *FileSource) createPager(tableName string, partition int) (*FilePager, e
 		return nil, schema.ErrNotFound
 	}
 
-	pg := &FilePager{
-		files: files,
-		fs:    m,
-		table: tableName,
-	}
+	pg := NewFilePager(tableName, m)
+	pg.files = files
 	return pg, nil
 }
 
@@ -369,7 +367,7 @@ func createConfStore(ss *schema.SchemaSource) (cloudstorage.Store, error) {
 	if ss == nil || ss.Conf == nil {
 		return nil, fmt.Errorf("No config info for files source")
 	}
-	u.Infof("json conf:\n%s", ss.Conf.Settings.PrettyJson())
+	//u.Debugf("json conf:\n%s", ss.Conf.Settings.PrettyJson())
 	cloudstorage.LogConstructor = func(prefix string) logging.Logger {
 		return logging.NewStdLogger(true, logging.DEBUG, prefix)
 	}
@@ -384,6 +382,11 @@ func createConfStore(ss *schema.SchemaSource) (cloudstorage.Store, error) {
 			c.Project = proj
 		}
 		if bkt := conf.String("bucket"); bkt != "" {
+			bktl := strings.ToLower(bkt)
+			// We don't actually need the gs:// because cloudstore does it
+			if strings.HasPrefix(bktl, "gs://") && len(bkt) > 5 {
+				bkt = bkt[5:]
+			}
 			c.Bucket = bkt
 		}
 		if jwt := conf.String("jwt"); jwt != "" {

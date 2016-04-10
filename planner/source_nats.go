@@ -15,8 +15,14 @@ var (
 	_ exec.Task = (*SourceNats)(nil)
 )
 
-// A SourceNats task that receives messages that optionally may have been
-//   hash routed to this node.
+type CmdMsg struct {
+	Cmd      string
+	BodyJson u.JsonHelper
+}
+
+// SourceNats task that receives messages via Gnatsd, for distribution
+//  across multiple workers.  These messages optionally may have been
+//   hash routed to this node, ie partition-key routed.
 //
 //   taska-1 ->  hash-nats-sink  \                        / --> nats-source -->
 //                                \                      /
@@ -26,7 +32,10 @@ var (
 //
 type SourceNats struct {
 	*exec.TaskBase
-	rx grid.Receiver
+	closed  bool
+	drainCt int
+	cmdch   chan *CmdMsg
+	rx      grid.Receiver
 }
 
 // Nats Source, the plan already provided info to the nats listener
@@ -35,14 +44,49 @@ func NewSourceNats(ctx *plan.Context, rx grid.Receiver) *SourceNats {
 	return &SourceNats{
 		TaskBase: exec.NewTaskBase(ctx),
 		rx:       rx,
+		cmdch:    make(chan *CmdMsg),
 	}
 }
 
+// Close cleans up and closes channels
 func (m *SourceNats) Close() error {
-	//u.Debugf("SourceNats Close")
+	//u.Debugf("SourceNats Close  alreadyclosed?%v", m.closed)
+	//u.WarnT(8)
+	if m.closed {
+		return nil
+	}
+	m.closed = true
+
+	defer func() {
+		if r := recover(); r != nil {
+			u.Warnf("error on close %v", r)
+		}
+	}()
+	go m.drain()
+
+	close(m.SigChan())
+
+	//m.rx.Close()
+	//return m.TaskBase.Close()
 	return nil
 }
+func (m *SourceNats) drain() {
+
+	for {
+		select {
+		case _, ok := <-m.rx.Msgs():
+			if !ok {
+				u.Debugf("%p NICE, got drain shutdown, drained %d msgs", m, m.drainCt)
+				return
+			}
+			m.drainCt++
+		}
+	}
+}
+
+// CloseFinal after exit, cleanup some more
 func (m *SourceNats) CloseFinal() error {
+	//u.Debugf("SourceNats CloseFinal  alreadyclosed?%v", m.closed)
 	defer func() {
 		if r := recover(); r != nil {
 			u.Warnf("error on close %v", r)
@@ -51,8 +95,12 @@ func (m *SourceNats) CloseFinal() error {
 	//close(inCh) we don't close input channels, upstream does
 	//m.Ctx.Recover()
 	m.rx.Close()
+	close(m.cmdch)
+	//return nil
 	return m.TaskBase.Close()
 }
+
+// Run a blocking runner
 func (m *SourceNats) Run() error {
 
 	outCh := m.MessageOut()
@@ -69,8 +117,8 @@ func (m *SourceNats) Run() error {
 				u.Warnf("error on defer/exit nats source %v", r)
 			}
 		}()
-		u.Infof("%p closing SourceNats Out", m)
-		//close(outCh)
+		//u.Infof("%p defer SourceNats Run() exit", m)
+		close(outCh)
 		m.rx.Close()
 	}()
 
@@ -78,36 +126,47 @@ func (m *SourceNats) Run() error {
 
 		select {
 		case <-quit:
+			u.Warn("quit")
 			return nil
 		case <-m.SigChan():
-			u.Debugf("got signal quit")
+			u.Debugf("%p got signal quit", m)
 			return nil
 		case msg, ok := <-m.rx.Msgs():
 			if !ok {
-				u.Debugf("NICE, got msg shutdown")
+				u.Debugf("%p NICE, got msg shutdown", m)
 				return nil
 			}
 			if hasQuit {
-				u.Debugf("NICE, already quit!")
+				u.Debugf("%p NICE, already quit!", m)
 				return nil
+			}
+			if m.closed {
+				// We want to drain this topic of nats,
+				// not let it back up in gnatsd
+				//u.Debugf("dropping message %v", msg)
+				m.drainCt++
+				continue
 			}
 
 			//u.Debugf("%p In SourceNats msg ", m)
 			switch mt := msg.(type) {
-			case *datasource.SqlDriverMessageMap:
-				if len(mt.Vals) == 0 {
-					u.Infof("NICE EMPTY EOF MESSAGE, CLOSING")
-					return nil
-				}
-				outCh <- mt
+			// case *datasource.SqlDriverMessageMap:
+			// 	if len(mt.Vals) == 0 {
+			// 		u.Infof("NICE EMPTY EOF MESSAGE, CLOSING")
+			// 		return nil
+			// 	}
+			// 	outCh <- mt
 			case datasource.SqlDriverMessageMap:
 				if len(mt.Vals) == 0 {
 					u.Infof("NICE EMPTY EOF MESSAGE 2")
 					return nil
 				}
 				outCh <- &mt
+			case *CmdMsg:
+				u.Debugf("%p got cmdmsg  %#v", m, mt)
+				m.cmdch <- mt
 			case nil:
-				u.Debugf("got nil, assume this is a shutdown signal?")
+				//u.Debugf("%p got nil, assume this is a shutdown signal?", m)
 				return nil
 			default:
 				u.Warnf("hm   %#v", mt)

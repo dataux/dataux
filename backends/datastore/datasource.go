@@ -139,7 +139,6 @@ func (m *GoogleDSDataSource) connect() error {
 	conf, err := google.JWTConfigFromJSON(
 		jsonKey,
 		datastore.ScopeDatastore,
-		datastore.ScopeUserEmail,
 	)
 	if err != nil {
 		u.Errorf("could not use google datastore JWT token: %v", err)
@@ -291,14 +290,14 @@ func (m *GoogleDSDataSource) loadTableSchema(tableLower, tableOriginal string) (
 	props := pageQuery(m.dsClient.Run(m.dsCtx, datastore.NewQuery(tableOriginal).Limit(20)))
 	for _, row := range props {
 
-		for i, p := range row.props {
+		for _, p := range row.props {
 			//u.Warnf("%#v ", p)
 			colName := strings.ToLower(p.Name)
 
 			if tbl.HasField(colName) {
 				continue
 			}
-			u.Debugf("%d found col: %s %T=%v", i, colName, p.Value, p.Value)
+			//u.Debugf("%d found col: %s %T=%v", i, colName, p.Value, p.Value)
 			switch val := p.Value.(type) {
 			case *datastore.Key:
 				//u.Debugf("found datastore.Key: %v='%#v'", colName, val)
