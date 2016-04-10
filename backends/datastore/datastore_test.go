@@ -80,7 +80,8 @@ func RunTestServer(t *testing.T) func() {
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
 		testmysql.RunTestServer(t)
-		planner.RunWorkerNodes(2, testmysql.ServerCtx.Reg)
+		quit := make(chan bool)
+		planner.RunWorkerNodes(quit, 2, testmysql.ServerCtx.Reg)
 	}
 	return func() {
 		// placeholder
@@ -238,7 +239,6 @@ func loadAuth(jsonKey []byte) (context.Context, *datastore.Client) {
 	conf, err := google.JWTConfigFromJSON(
 		jsonKey,
 		datastore.ScopeDatastore,
-		datastore.ScopeUserEmail,
 	)
 	if err != nil {
 		log.Fatal(err)

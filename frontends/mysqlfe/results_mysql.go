@@ -351,7 +351,7 @@ func NewEmptyResultset(pp *plan.Projection) *mysql.Resultset {
 func NewMySqlExecResultWriter(writer models.ResultWriter, ctx *plan.Context) *MySqlExecResultWriter {
 
 	m := &MySqlExecResultWriter{writer: writer, schema: ctx.Schema}
-	m.TaskBase = exec.NewTaskBase(m.Ctx)
+	m.TaskBase = exec.NewTaskBase(ctx)
 	m.Rs = mysql.NewResult()
 	m.Handler = nilWriter(m)
 	return m

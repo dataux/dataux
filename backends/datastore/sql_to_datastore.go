@@ -29,6 +29,7 @@ var (
 
 	// Implement Datasource interface that allows Mongo
 	//  to fully implement a full select statement
+	_ schema.Conn         = (*SqlToDatstore)(nil)
 	_ plan.SourcePlanner  = (*SqlToDatstore)(nil)
 	_ exec.ExecutorSource = (*SqlToDatstore)(nil)
 	_ schema.ConnMutation = (*SqlToDatstore)(nil)
@@ -206,8 +207,9 @@ func (m *SqlToDatstore) WalkExecSource(p *plan.Source) (exec.Task, error) {
 // interface for SourceMutation
 //CreateMutator(stmt expr.SqlStatement) (Mutator, error)
 func (m *SqlToDatstore) CreateMutator(pc interface{}) (schema.ConnMutator, error) {
-	if ctx, ok := pc.(*plan.Context); ok {
-		m.Ctx = ctx
+	if ctx, ok := pc.(*plan.Context); ok && ctx != nil {
+		m.TaskBase = exec.NewTaskBase(ctx)
+		m.stmt = ctx.Stmt
 		return m, nil
 	}
 	return nil, fmt.Errorf("Expected *plan.Context but got %T", pc)
@@ -248,9 +250,11 @@ func (m *SqlToDatstore) Put(ctx context.Context, key schema.Key, val interface{}
 	}
 
 	var sel *rel.SqlSelect
+	//u.Debugf("stmt: %T", m.stmt)
 	switch sqlReq := m.stmt.(type) {
 	case *rel.SqlInsert:
 		cols = sqlReq.ColumnNames()
+		//u.Infof("cols:  %v", cols)
 	case *rel.SqlUpdate:
 		// need to fetch first?
 		sel = sqlReq.SqlSelect()
@@ -279,23 +283,26 @@ func (m *SqlToDatstore) Put(ctx context.Context, key schema.Key, val interface{}
 		for _, f := range m.tbl.Fields {
 			for i, colName := range cols {
 				if f.Name == colName {
-
-					switch val := row[i].(type) {
-					case string, []byte, int, int64, bool, time.Time:
-						//u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, row[i], row[i])
-						props = append(props, datastore.Property{Name: f.Name, Value: val})
-					case []value.Value:
-						by, err := json.Marshal(val)
-						if err != nil {
-							u.Errorf("Error converting field %v  err=%v", val, err)
+					if len(row) <= i-1 {
+						u.Errorf("bad column count?  %d vs %d  col: %+v", len(row), i, f)
+					} else {
+						//u.Debugf("col info?  %d vs %d  col: %+v", len(row), i, f)
+						switch val := row[i].(type) {
+						case string, []byte, int, int64, bool, time.Time:
+							//u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, row[i], row[i])
+							props = append(props, datastore.Property{Name: f.Name, Value: val})
+						case []value.Value:
+							by, err := json.Marshal(val)
+							if err != nil {
+								u.Errorf("Error converting field %v  err=%v", val, err)
+							}
+							//u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, string(by), by)
+							props = append(props, datastore.Property{Name: f.Name, Value: by})
+						default:
+							u.Warnf("unsupported conversion: %T  %v", val, val)
+							props = append(props, datastore.Property{Name: f.Name, Value: val})
 						}
-						//u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, string(by), by)
-						props = append(props, datastore.Property{Name: f.Name, Value: by})
-					default:
-						u.Warnf("unsupported conversion: %T  %v", val, val)
-						props = append(props, datastore.Property{Name: f.Name, Value: val})
 					}
-
 					break
 				}
 			}
