@@ -139,7 +139,7 @@ func (m *mySqlHandler) chooseCommand(writer models.ResultWriter, req *models.Req
 	case mysql.COM_PING:
 		return m.writeOK(nil)
 	case mysql.COM_QUIT:
-		u.Warnf("who is asking me to Quit? %s", string(cmd))
+		//u.Warnf("who is asking me to Quit? %s", string(cmd))
 		m.Close()
 		return nil
 	case mysql.COM_INIT_DB:
@@ -185,6 +185,7 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	ctx.DisableRecover = m.svr.Config.SupressRecover
 	ctx.Session = m.sess
 	ctx.Schema = m.schema
+	ctx.Funcs = fr
 	if ctx.Schema == nil {
 		u.Warnf("no schema: ")
 	} else {

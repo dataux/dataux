@@ -8,12 +8,74 @@ import (
 
 	u "github.com/araddon/gou"
 
+	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 )
 
 var _ = u.EMPTY
+
+var fr = expr.NewFuncRegistry()
+
+func init() {
+	fr.Add("typewriter", MysqlTypeWriter)
+}
+
+// MysqlTypeWriter Convert a qlbridge value type to a mysql type
+//
+func MysqlTypeWriter(ctx expr.EvalContext, val value.Value) (value.StringValue, bool) {
+	out := ""
+	switch sv := val.(type) {
+	case value.StringValue:
+		switch vt := value.ValueFromString(sv.Val()); vt {
+		case value.NilType:
+			out = "niltype"
+		case value.ErrorType:
+			out = "error"
+		case value.UnknownType:
+			out = "unknown"
+		case value.ValueInterfaceType:
+			out = "text"
+		case value.NumberType:
+			out = "double"
+		case value.IntType:
+			out = "bigint"
+		case value.BoolType:
+			out = "tinyint"
+		case value.TimeType:
+			out = "datetime"
+		case value.ByteSliceType:
+			out = "text"
+		case value.StringType:
+			out = "varchar(255)"
+		case value.StringsType:
+			out = "text"
+		case value.MapValueType:
+			out = "text"
+		case value.MapIntType:
+			out = "text"
+		case value.MapStringType:
+			out = "text"
+		case value.MapNumberType:
+			out = "text"
+		case value.MapBoolType:
+			out = "text"
+		case value.SliceValueType:
+			out = "text"
+		case value.StructType:
+			out = "text"
+		case value.JsonType:
+			out = "json"
+		default:
+			out = "text"
+		}
+	}
+	if out == "" {
+		return value.NewStringValue(out), false
+	}
+	return value.NewStringValue(out), true
+}
 
 func typeToMysql(f *schema.Field) string {
 	// char(60)

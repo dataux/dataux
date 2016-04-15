@@ -207,7 +207,7 @@ func TestShowColumns(t *testing.T) {
 				assert.Tf(t, data.Type == "text", "wanted text got %q")
 				describedCt++
 			case "deleted":
-				assert.Tf(t, data.Type == "boolean", "Wanted boolean got? %q", data.Type)
+				assert.Tf(t, data.Type == "tinyint", "Wanted tinyint got? %q", data.Type)
 				describedCt++
 			}
 		},
@@ -249,7 +249,7 @@ func TestDescribeTable(t *testing.T) {
 				assert.T(t, data.Type == "text")
 				describedCt++
 			case "deleted":
-				assert.T(t, data.Type == "boolean", "type?", data.Type)
+				assert.T(t, data.Type == "tinyint", "type?", data.Type)
 				describedCt++
 			}
 		},

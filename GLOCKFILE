@@ -1,14 +1,14 @@
 github.com/araddon/dateparse 2f41da3eb28d713ca2f45682fae66173fad5e85b
 github.com/araddon/gou c4d51044125da629d6f2aa594f25b45c451a7d2a
-github.com/araddon/qlbridge a25a985310bc92a271f3659dc1cfed814ac271e0
+github.com/araddon/qlbridge 96c3da4e0c9996c06bdcfc56118c808c10d5f8e6
 github.com/bitly/go-hostpool d0e59c22a56e8dadfed24f74f452cea5a52722d2
 github.com/bmizerany/assert e17e99893cb6509f428e1728281c2ad60a6b31e3
 github.com/coreos/etcd 207c92b62785d220edc74ed791fd8a22a18e378e
 github.com/coreos/go-etcd de3514f25635bbfb024fdaf2a8d5f67378492675
 github.com/dchest/siphash 6d8617816bb5d8268011ffbfb8720f17ce9af63c
-github.com/go-sql-driver/mysql 1421caf44f6464fd2ee8de694c7508ee13f92964
-github.com/gogo/protobuf 74b6e9deaff6ba6da1389ec97351d337f0d08b06
-github.com/golang/protobuf dda510ac0fd43b39770f22ac6260eb91d377bce3
+github.com/go-sql-driver/mysql 7ebe0a500653eeb1859664bed5e48dec1e164e73
+github.com/gogo/protobuf 4f262e4b0f3a6cea646e15798109335551e21756
+github.com/golang/protobuf f0a097ddac24fb00e07d2ac17f8671423f3ea47c
 github.com/google/btree f06e229e679911bb31a04e07ac891115822e37c3
 github.com/hashicorp/go-immutable-radix 8e8ed81f8f0bf1bdd829593fdd5c29922c1ea990
 github.com/hashicorp/go-memdb 98f52f52d7a476958fa9da671354d270c50661a7
@@ -21,7 +21,7 @@ github.com/lytics/cloudstorage 7c7173488d69e97c35140b22d565298f40bb2a0e
 github.com/lytics/confl f12b6bace2ff295fc6730f6dbaf009289e2f6e80
 github.com/lytics/datemath 988020f3ad34814005ab10b6c7863e31672b5f63
 github.com/lytics/dfa 63e35f788f7fa5203fcd2dcd7e318da5a1b981e5
-github.com/lytics/grid 5d3734ce2b6e4ce13074af1a129faa2ca706d3dc
+github.com/lytics/grid 8e444f9e1d9c7366fccfb99c44f398fa1b9c5689
 github.com/lytics/metafora eb26f00432a98228e44de8e074b9627fc4c1e457
 github.com/lytics/sereno f6128b640de0742892a439b3672ac88637df977d
 github.com/mattbaird/elastigo d0839da905fef1221e2b19ddfaf34985add62e10
@@ -33,7 +33,7 @@ github.com/pborman/uuid c55201b036063326c5b1b89ccfe45a184973d073
 github.com/sony/sonyflake 152b0c313040e9fb0101fcff9285a11965fd42be
 github.com/ugorji/go 45ce7596ace4534e47b69051a92aef7b64ec7b3f
 golang.org/x/crypto 1f22c0103821b9390939b6776727195525381532
-golang.org/x/net e45385e9b226f570b1f086bf287b25d3d4117776
+golang.org/x/net fb93926129b8ec0056f2f458b1f519654814edf0
 golang.org/x/oauth2 b0e2337fe6ec0c637fa4f123268b972f334504eb
 google.golang.org/api 9737cc9e103c00d06a8f3993361dec083df3d252
 google.golang.org/cloud 79ffda073da804f325135da5ff645a630a4d7625
