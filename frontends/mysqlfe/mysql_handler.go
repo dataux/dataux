@@ -26,7 +26,8 @@ func init() {
 
 const (
 	// Default Max Allowed packets for connections
-	MaxAllowedPacket = 4194304
+	MaxAllowedPacket    = 4194304
+	MaxAllowedPacketStr = "4194304"
 )
 
 var (
@@ -189,12 +190,12 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	if ctx.Schema == nil {
 		u.Warnf("no schema: ")
 	} else {
-		//u.Warnf("ctx has schema? %p", ctx.Schema)
+		//u.Debugf("ctx has schema? %#v", ctx.Schema)
 	}
 	job, err := BuildMySqlJob(m.svr, ctx)
 
 	if err != nil {
-		//u.Debugf("error? %v", err)
+		u.Debugf("error? %v", err)
 		sql = strings.ToLower(sql)
 		switch {
 		case strings.HasPrefix(sql, "set "):

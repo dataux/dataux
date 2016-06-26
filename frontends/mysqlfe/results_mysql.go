@@ -286,15 +286,15 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 
 		switch col.Type {
 		case value.IntType:
-			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_LONG))
+			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 8, mysql.MYSQL_TYPE_LONG))
 		case value.StringType:
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 200, mysql.MYSQL_TYPE_STRING))
 		case value.NumberType:
-			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_FLOAT))
+			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 8, mysql.MYSQL_TYPE_FLOAT))
 		case value.BoolType:
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 1, mysql.MYSQL_TYPE_TINY))
 		case value.TimeType:
-			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_DATETIME))
+			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 8, mysql.MYSQL_TYPE_DATETIME))
 		case value.ByteSliceType:
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_BLOB))
 		default:
