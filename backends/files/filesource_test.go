@@ -66,7 +66,8 @@ func RunTestServer(t *testing.T) {
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
 		createTestData(t)
 		testmysql.RunTestServer(t)
-		planner.RunWorkerNodes(2, testmysql.ServerCtx.Reg)
+		quit := make(chan bool)
+		planner.RunWorkerNodes(quit, 2, testmysql.ServerCtx.Reg)
 	}
 }
 
