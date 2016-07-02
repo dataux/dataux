@@ -17,12 +17,13 @@ var (
 )
 
 const (
-	ListenerType = "elasticsearch"
+	// SourceType defines the "source" type from qlbridge datasource
+	SourceType = "elasticsearch"
 )
 
 func init() {
 	// We need to register our DataSource provider here
-	datasource.Register(ListenerType, &ElasticsearchDataSource{})
+	datasource.Register(SourceType, &ElasticsearchDataSource{})
 }
 
 type ElasticsearchDataSource struct {

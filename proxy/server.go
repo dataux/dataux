@@ -26,7 +26,9 @@ var asciiIntro = `
 
 var Conf *models.Config
 
-func LoadConfig(configFile string) {
+// LoadConfig from @configFile (read from disk?)
+// also available is a
+func LoadConfig(configFile string) *models.Config {
 	// get config from file and exit if error
 	conf, err := models.LoadConfigFromFile(configFile)
 	if err != nil {
@@ -34,6 +36,7 @@ func LoadConfig(configFile string) {
 		os.Exit(1)
 	}
 	Conf = conf
+	return conf
 }
 func banner() string {
 	return strings.Replace(asciiIntro, "*", "`", -1)

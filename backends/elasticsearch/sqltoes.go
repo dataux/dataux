@@ -66,7 +66,12 @@ func (m *SqlToEs) Host() string {
 	return chooseBackend(m.schema)
 }
 func chooseBackend(schema *schema.SchemaSource) string {
-	for _, node := range schema.Nodes {
+	if len(schema.Conf.Nodes) == 0 {
+		if len(schema.Conf.Hosts) > 0 {
+			return schema.Conf.Hosts[0]
+		}
+	}
+	for _, node := range schema.Conf.Nodes {
 		// TODO:  implement real balancer
 		return node.Address
 	}

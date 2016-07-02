@@ -145,10 +145,10 @@ func (m *MongoDataSource) loadSchema() error {
 	return nil
 }
 
-// TODO:  this is horrible, use mgo's built in gossip with mongo for cluster info
+// TODO:  this is horrible, should use mgo's built in gossip with mongo for cluster info
 func chooseBackend(source string, schema *schema.SchemaSource) string {
 	//u.Infof("check backends: %v", len(schema.Nodes))
-	for _, node := range schema.Nodes {
+	for _, node := range schema.Conf.Nodes {
 		//u.Debugf("check node:%q =? %+v", source, node)
 		if node.Source == source {
 			//u.Debugf("found node: %+v", node)

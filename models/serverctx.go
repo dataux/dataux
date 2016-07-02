@@ -12,13 +12,13 @@ import (
 	"github.com/dataux/dataux/planner"
 )
 
-// Server Context for the DataUX Server giving access to the shared
+// ServerCtx Server Context for the DataUX Server giving access to the shared
 //  memory objects Config, Schemas, Grid runtime
 type ServerCtx struct {
 	// The dataux server config info on schema, backends, frontends, etc
 	Config *Config
 	// The underlying qlbridge schema holds info about the
-	//  available datasource Drivers/Adapters
+	//  available datasource's
 	Reg *datasource.Registry
 	// Grid is our real-time multi-node coordination and messaging system
 	Grid *planner.Server
@@ -34,13 +34,16 @@ func NewServerCtx(conf *Config) *ServerCtx {
 	return &svr
 }
 
-// Load all the config info for this context and start the grid servers
+// Init Load all the config info for this server and start the
+// grid/messaging/coordination systems
 func (m *ServerCtx) Init() error {
 
 	if err := m.loadConfig(); err != nil {
 		return err
 	}
 
+	// Copy over the nats, etcd info from config to
+	// Planner grid
 	planner.GridConf.NatsServers = m.Config.Nats
 	planner.GridConf.EtcdServers = m.Config.Etcd
 
@@ -108,10 +111,18 @@ func (m *ServerCtx) loadConfig() error {
 			ss.Schema = sch
 			//u.Infof("found sourceName: %q schema.Name=%q conf=%+v", sourceName, ss.Name, sourceConf)
 
-			for _, nc := range m.Config.Nodes {
-				if nc.Source == sourceConf.Name {
-					ss.Nodes = append(ss.Nodes, nc)
+			if len(m.Config.Nodes) == 0 {
+				for _, host := range sourceConf.Hosts {
+					nc := &schema.ConfigNode{Source: sourceName, Address: host}
+					//ss.Nodes = append(ss.Nodes, nc)
 					sourceConf.Nodes = append(sourceConf.Nodes, nc)
+				}
+			} else {
+				for _, nc := range m.Config.Nodes {
+					if nc.Source == sourceConf.Name {
+						//ss.Nodes = append(ss.Nodes, nc)
+						sourceConf.Nodes = append(sourceConf.Nodes, nc)
+					}
 				}
 			}
 

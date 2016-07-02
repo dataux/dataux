@@ -38,7 +38,8 @@ func RunTestServer(t *testing.T) func() {
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
 		testmysql.RunTestServer(t)
-		planner.RunWorkerNodes(2, testmysql.ServerCtx.Reg)
+		quit := make(chan bool)
+		planner.RunWorkerNodes(quit, 2, testmysql.ServerCtx.Reg)
 	}
 	return func() {
 		// placeholder
