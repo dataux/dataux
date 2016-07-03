@@ -11,10 +11,11 @@ import (
 // http://dev.mysql.com/doc/refman/5.6/en/server-system-variables.html
 var mysqlGlobalVars *datasource.ContextSimple = NewMySqlGlobalVars()
 
-func NewMySqlSessionVars(db string, connId uint32) expr.ContextReadWriter {
+func NewMySqlSessionVars(db, user string, connId uint32) expr.ContextReadWriter {
 	ctx := datasource.NewContextSimple()
 	ctx.Data["@@dataux.dialect"] = value.NewStringValue("mysql")
 	ctx.Data["@@database"] = value.NewStringValue(db)
+	ctx.Data["@@user"] = value.NewStringValue(user)
 	ctx.Data["@@connection_id"] = value.NewIntValue(int64(connId))
 	ctx.Data["@@max_allowed_packet"] = value.NewIntValue(MaxAllowedPacket)
 	ctx.Data["@@session.auto_increment_increment"] = value.NewIntValue(1)

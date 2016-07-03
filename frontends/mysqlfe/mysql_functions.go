@@ -33,8 +33,6 @@ func DatabaseName(ctx expr.EvalContext) (value.StringValue, bool) {
 			return dbValStr, true
 		}
 	}
-	//u.WarnT(10)
-	u.Warnf("database: %#v", ctx)
 	return value.NewStringValue(""), true
 }
 
@@ -57,10 +55,12 @@ func ConnectionId(ctx expr.EvalContext) (value.IntValue, bool) {
 //      current_user()     =>  user, true
 //
 func CurrentUser(ctx expr.EvalContext) (value.StringValue, bool) {
-	// switch node := val.(type) {
-	// case value.StringValue:
-	// 	return value.NewIntValue(int64(len(node.Val()))), true
-	// }
-	u.Infof("CurrentUser: %#v", ctx)
-	return value.NewStringValue("root"), true
+	if ctx == nil {
+		return value.NewStringValue("root"), true
+	}
+	v, ok := ctx.Get("@@user")
+	if !ok {
+		return value.EmptyStringValue, false
+	}
+	return value.NewStringValue(v.ToString()), true
 }

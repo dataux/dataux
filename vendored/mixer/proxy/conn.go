@@ -184,6 +184,10 @@ func (c *Conn) ConnId() uint32 {
 	return c.connectionId
 }
 
+func (c *Conn) User() string {
+	return c.user
+}
+
 func (c *Conn) Close() error {
 	if c.closed {
 		return nil
