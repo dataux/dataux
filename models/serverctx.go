@@ -69,7 +69,7 @@ func (m *ServerCtx) InfoSchema() (*schema.Schema, error) {
 		for _, sc := range m.Config.Schemas {
 			s, ok := m.Reg.Schema(sc.Name)
 			if s != nil && ok {
-				u.Warnf("found schema for db=%q", sc.Name)
+				u.Warnf("%p found schema for db=%q", m, sc.Name)
 				return s, nil
 			}
 		}

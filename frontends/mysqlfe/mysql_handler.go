@@ -65,7 +65,6 @@ func (m *MySqlConnCreator) Init(conf *models.ListenerConfig, svr *models.ServerC
 // - it re-uses the HandlerShard with has schema, etc on it
 func (m *MySqlConnCreator) Open(connI interface{}) models.StatementHandler {
 
-	//u.Infof("Open: %#v", connI)
 	handler := mySqlHandler{svr: m.svr}
 
 	if conn, ok := connI.(*mysqlproxy.Conn); ok {
@@ -179,7 +178,7 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		if err != nil {
 			return err
 		}
-		u.Warnf("no schema so use info schema?  %v")
+		//u.Warnf("no schema so use info schema? %#v", s)
 		m.schema = s.InfoSchema
 	}
 
@@ -252,7 +251,7 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	if err != nil {
 		u.Errorf("error on Query.Run(): %v", err)
 	}
-	//u.Infof("mysqlhandler %p task.Close() start", job.RootTask)
+	//u.Infof("mysqlhandler %p task.Close() start for %T", job.RootTask, job.RootTask)
 	err = job.Close()
 	//u.Infof("mysqlhandler %p task.Close() complete  err=%v", job.RootTask, err)
 	return err
