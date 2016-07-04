@@ -21,8 +21,6 @@ var (
 	// ensure we implement interfaces
 	_ schema.Source = (*FileSource)(nil)
 
-	_ = u.EMPTY
-
 	// TODO:   move to test files
 	localFilesConfig = cloudstorage.CloudStoreContext{
 		LogggingContext: "unittest",
@@ -319,7 +317,7 @@ func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 func (m *FileSource) buildTable(tableName string) (*schema.Table, error) {
 
 	// Since we don't have a table schema, lets create one via introspection
-	u.Debugf("We are introspecting table %q for schema, provide a schema if you want better schema", tableName)
+	u.Debugf("introspecting file-table %q for schema type=%q", tableName, m.fileType)
 	pager, err := m.createPager(tableName, 0)
 	if err != nil {
 		u.Errorf("could not find scanner for table %q table err:%v", tableName, err)

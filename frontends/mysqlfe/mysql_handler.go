@@ -67,14 +67,13 @@ func (m *MySqlConnCreator) Init(conf *models.ListenerConfig, svr *models.ServerC
 // - it re-uses the HandlerShard with has schema, etc on it
 func (m *MySqlConnCreator) Open(connI interface{}) models.StatementHandler {
 
-	//u.Infof("Open: %#v", connI)
 	handler := mySqlHandler{svr: m.svr}
 
 	if conn, ok := connI.(*mysqlproxy.Conn); ok {
 		//u.Debugf("Cloning Mysql handler %v", conn)
 		handler.conn = conn
 		handler.connId = conn.ConnId()
-		handler.sess = NewMySqlSessionVars("default", conn.ConnId())
+		handler.sess = NewMySqlSessionVars("default", conn.User(), conn.ConnId())
 		return &handler
 	}
 	panic(fmt.Sprintf("not proxy.Conn? %T", connI))
@@ -120,7 +119,7 @@ func (m *mySqlHandler) SchemaUse(db string) *schema.Schema {
 		return nil
 	}
 	m.schema = schema
-	m.sess = NewMySqlSessionVars(db, m.connId)
+	m.sess = NewMySqlSessionVars(db, m.conn.User(), m.connId)
 	return schema
 }
 
@@ -177,8 +176,12 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	}
 
 	if m.schema == nil {
-		u.Warnf("missing schema?  ")
-		return fmt.Errorf("no schema in use")
+		s, err := m.svr.InfoSchema()
+		if err != nil {
+			return err
+		}
+		//u.Warnf("no schema so use info schema? %#v", s)
+		m.schema = s.InfoSchema
 	}
 
 	// Ensure it parses, right now we can't handle multiple statement (ie with semi-colons separating)
@@ -266,7 +269,7 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	if err != nil {
 		u.Errorf("error on Query.Run(): %v", err)
 	}
-	//u.Infof("mysqlhandler %p task.Close() start", job.RootTask)
+	//u.Infof("mysqlhandler %p task.Close() start for %T", job.RootTask, job.RootTask)
 	err = job.Close()
 	//u.Infof("mysqlhandler %p task.Close() complete  err=%v", job.RootTask, err)
 	return err

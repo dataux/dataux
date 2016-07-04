@@ -11,12 +11,12 @@ import (
 // http://dev.mysql.com/doc/refman/5.6/en/server-system-variables.html
 var mysqlGlobalVars *datasource.ContextSimple = NewMySqlGlobalVars()
 
-func NewMySqlSessionVars(db string, connId uint32) expr.ContextReadWriter {
+func NewMySqlSessionVars(db, user string, connId uint32) expr.ContextReadWriter {
 	ctx := datasource.NewContextSimple()
 	ctx.Data["@@dataux.dialect"] = value.NewStringValue("mysql")
 	ctx.Data["@@database"] = value.NewStringValue(db)
+	ctx.Data["@@user"] = value.NewStringValue(user)
 	ctx.Data["@@session.tx_isolation"] = value.NewStringValue("REPEATABLE-READ")
-
 	ctx.Data["@@connection_id"] = value.NewIntValue(int64(connId))
 	ctx.Data["@@max_allowed_packet"] = value.NewIntValue(MaxAllowedPacket)
 	ctx.Data["@@session.auto_increment_increment"] = value.NewIntValue(1)
@@ -63,18 +63,6 @@ func NewMySqlGlobalVars() *datasource.ContextSimple {
 	ctx.Data["@@net_write_timeout"] = value.NewIntValue(600)
 	ctx.Data["@@query_cache_size"] = value.NewIntValue(1048576)
 	ctx.Data["@@wait_timeout"] = value.NewIntValue(28800)
-
-	// ctx.Data["@@session.auto_increment_increment"] = value.NewStringValue("1")
-	// ctx.Data["@@session.tx_read_only"] = value.NewStringValue("1")
-	// ctx.Data["@@interactive_timeout"] = value.NewStringValue("28800")
-	// ctx.Data["@@lower_case_table_names"] = value.NewStringValue("0")
-	// ctx.Data["@@max_allowed_packet"] = value.NewStringValue(MaxAllowedPacketStr)
-	// ctx.Data["@@max_allowed_packets"] = value.NewStringValue(MaxAllowedPacketStr)
-	// ctx.Data["@@net_buffer_length"] = value.NewStringValue("16384")
-	// ctx.Data["@@net_write_timeout"] = value.NewStringValue("600")
-	// ctx.Data["@@query_cache_size"] = value.NewStringValue("1048576")
-	// ctx.Data["@@wait_timeout"] = value.NewStringValue("28800")
-
 	ctx.Data["@@character_set_client"] = value.NewStringValue("utf8")
 	ctx.Data["@@character_set_connection"] = value.NewStringValue("utf8")
 	ctx.Data["@@character_set_results"] = value.NewStringValue("utf8")

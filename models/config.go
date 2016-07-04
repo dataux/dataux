@@ -3,17 +3,11 @@ package models
 import (
 	"io/ioutil"
 
-	u "github.com/araddon/gou"
-	"github.com/lytics/confl"
-
 	"github.com/araddon/qlbridge/schema"
+	"github.com/lytics/confl"
 )
 
-var (
-	_ = u.EMPTY
-)
-
-// Read a Confl configured file
+// LoadConfigFromFile Read a Confl formatted config file from disk
 func LoadConfigFromFile(filename string) (*Config, error) {
 	var c Config
 	confBytes, err := ioutil.ReadFile(filename)
@@ -27,6 +21,8 @@ func LoadConfigFromFile(filename string) (*Config, error) {
 	return &c, nil
 }
 
+// LoadConfig load a confl formatted file from string (assumes came)
+//  from file or passed in
 func LoadConfig(conf string) (*Config, error) {
 	var c Config
 	if _, err := confl.Decode(conf, &c); err != nil {
@@ -35,10 +31,10 @@ func LoadConfig(conf string) (*Config, error) {
 	return &c, nil
 }
 
-// Overall DataUX Server config made up of blocks
+// Config for DataUX Server config made up of blocks
 //   1) Frontend Listeners (protocols)
 //   2) Sources (types of backends such as elasticsearch, mysql, mongo, ...)
-//   3) Virtual Schemas
+//   3) Schemas:  n number of sources can create a "Virtual Schema"
 //   4) list of server/nodes for Sources
 //   5) nats,etcd coordinators
 type Config struct {
@@ -50,20 +46,20 @@ type Config struct {
 	Sources        []*schema.ConfigSource `json:"sources"`         // backend servers/sources (es, mysql etc)
 	Schemas        []*schema.ConfigSchema `json:"schemas"`         // Schemas, each backend has 1 schema
 	Nodes          []*schema.ConfigNode   `json:"nodes"`           // list of nodes that host sources
-	Rules          *RulesConfig
+	Rules          *RulesConfig           `json:"rules"`           // rules for routing
 }
 
-// Frontend Listener to listen for inbound traffic on
-// specific protocola or transport
+// ListenerConfig Frontend Listener to listen for inbound
+// traffic on specific protocol aka transport
 type ListenerConfig struct {
-	Type     string `json:"type"`     // [mysql,mongo,mc,postgres,etc]
+	Type     string `json:"type"`     // named protocol type [mysql,mongo,mc,postgres,etc]
 	Addr     string `json:"address"`  // net.Conn compatible ip/dns address
 	User     string `json:"user"`     // user to talk to backend with
 	Password string `json:"password"` // optional pwd for backend
 }
 
 type RulesConfig struct {
-	Schema    string        `json:"default"`
+	Schema    string        `json:"schema"`
 	Default   string        `json:"default"`
 	ShardRule []ShardConfig `json:"shard"`
 }

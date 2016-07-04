@@ -12,13 +12,13 @@ import (
 	"github.com/dataux/dataux/planner"
 )
 
-// Server Context for the DataUX Server giving access to the shared
+// ServerCtx Server Context for the DataUX Server giving access to the shared
 //  memory objects Config, Schemas, Grid runtime
 type ServerCtx struct {
 	// The dataux server config info on schema, backends, frontends, etc
 	Config *Config
 	// The underlying qlbridge schema holds info about the
-	//  available datasource Drivers/Adapters
+	//  available datasource's
 	Reg *datasource.Registry
 	// Grid is our real-time multi-node coordination and messaging system
 	Grid *planner.Server
@@ -34,13 +34,16 @@ func NewServerCtx(conf *Config) *ServerCtx {
 	return &svr
 }
 
-// Load all the config info for this context and start the grid servers
+// Init Load all the config info for this server and start the
+// grid/messaging/coordination systems
 func (m *ServerCtx) Init() error {
 
 	if err := m.loadConfig(); err != nil {
 		return err
 	}
 
+	// Copy over the nats, etcd info from config to
+	// Planner grid
 	planner.GridConf.NatsServers = m.Config.Nats
 	planner.GridConf.EtcdServers = m.Config.Etcd
 
@@ -49,6 +52,8 @@ func (m *ServerCtx) Init() error {
 
 	return nil
 }
+
+// SchemaLoader finds a schema by name from the registry
 func (m *ServerCtx) SchemaLoader(db string) (*schema.Schema, error) {
 	s, ok := m.Reg.Schema(db)
 	if s == nil || !ok {
@@ -58,12 +63,30 @@ func (m *ServerCtx) SchemaLoader(db string) (*schema.Schema, error) {
 	return s, nil
 }
 
+// Get A schema
+func (m *ServerCtx) InfoSchema() (*schema.Schema, error) {
+	if len(m.schemas) == 0 {
+		for _, sc := range m.Config.Schemas {
+			s, ok := m.Reg.Schema(sc.Name)
+			if s != nil && ok {
+				u.Warnf("%p found schema for db=%q", m, sc.Name)
+				return s, nil
+			}
+		}
+		return nil, schema.ErrNotFound
+	}
+	for _, s := range m.schemas {
+		return s, nil
+	}
+	panic("unreachable")
+}
+
 func (m *ServerCtx) JobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
 	//u.Debugf("jobMaker, going to do a partial plan?")
 	return planner.BuildExecutorUnPlanned(ctx, m.Grid)
 }
 
-// Get
+// Table Get by schema, name
 func (m *ServerCtx) Table(schemaName, tableName string) (*schema.Table, error) {
 	s, ok := m.schemas[schemaName]
 	if ok {
@@ -108,10 +131,18 @@ func (m *ServerCtx) loadConfig() error {
 			ss.Schema = sch
 			//u.Infof("found sourceName: %q schema.Name=%q conf=%+v", sourceName, ss.Name, sourceConf)
 
-			for _, nc := range m.Config.Nodes {
-				if nc.Source == sourceConf.Name {
-					ss.Nodes = append(ss.Nodes, nc)
+			if len(m.Config.Nodes) == 0 {
+				for _, host := range sourceConf.Hosts {
+					nc := &schema.ConfigNode{Source: sourceName, Address: host}
+					//ss.Nodes = append(ss.Nodes, nc)
 					sourceConf.Nodes = append(sourceConf.Nodes, nc)
+				}
+			} else {
+				for _, nc := range m.Config.Nodes {
+					if nc.Source == sourceConf.Name {
+						//ss.Nodes = append(ss.Nodes, nc)
+						sourceConf.Nodes = append(sourceConf.Nodes, nc)
+					}
 				}
 			}
 
