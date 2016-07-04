@@ -9,6 +9,7 @@ import (
 
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
+	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
@@ -26,7 +27,8 @@ func init() {
 
 const (
 	// Default Max Allowed packets for connections
-	MaxAllowedPacket = 4194304
+	MaxAllowedPacket    = 4194304
+	MaxAllowedPacketStr = "4194304"
 )
 
 var (
@@ -161,7 +163,7 @@ func (m *mySqlHandler) chooseCommand(writer models.ResultWriter, req *models.Req
 
 func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err error) {
 
-	u.Debugf("handleQuery: %v", sql)
+	u.Debugf("%d %p handleQuery: %v", m.connId, m, sql)
 	if !m.svr.Config.SupressRecover {
 		//u.Debugf("running recovery? ")
 		defer func() {
@@ -192,19 +194,32 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	if ctx.Schema == nil {
 		u.Warnf("no schema: ")
 	} else {
-		//u.Warnf("ctx has schema? %p", ctx.Schema)
+		//u.Debugf("ctx has schema? %#v", ctx.Schema)
 	}
 	job, err := BuildMySqlJob(m.svr, ctx)
 
 	if err != nil {
-		//u.Debugf("error? %v", err)
-		sql = strings.ToLower(sql)
-		switch {
-		case strings.HasPrefix(sql, "set "):
-			// set autocommit
-			// SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ
-			return m.conn.WriteOK(nil)
+		u.Debugf("error? nilstmt?%v  err=%v", ctx.Stmt == nil, err)
+		if ctx.Stmt != nil {
+			switch ctx.Stmt.Keyword() {
+			case lex.TokenRollback, lex.TokenCommit:
+				// we don't currently support transactions
+				return m.conn.WriteOK(nil)
+			case lex.TokenSet:
+				// set autocommit
+				// SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ
+				return m.conn.WriteOK(nil)
+			}
+		} else {
+			sql = strings.ToLower(sql)
+			switch {
+			case strings.HasPrefix(sql, "rollback") || strings.HasPrefix(sql, "commit"):
+
+			case strings.HasPrefix(sql, "set "):
+
+			}
 		}
+
 		u.Debugf("error on parse sql statement: %v", err)
 		return err
 	}
@@ -225,6 +240,9 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	case *rel.SqlInsert, *rel.SqlUpsert, *rel.SqlUpdate, *rel.SqlDelete:
 		resultWriter = NewMySqlExecResultWriter(writer, job.Ctx)
 	case *rel.SqlCommand:
+		if stmt.Keyword() == lex.TokenRollback {
+			return m.conn.WriteOK(nil)
+		}
 		err = job.Run()
 		job.Close()
 		if err != nil {
