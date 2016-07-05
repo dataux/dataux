@@ -27,8 +27,8 @@ func init() {
 
 const (
 	// Default Max Allowed packets for connections
-	MaxAllowedPacket    = 4194304
-	MaxAllowedPacketStr = "4194304"
+	MaxAllowedPacket = 4194304
+	//MaxAllowedPacketStr = "4194304"
 )
 
 var (

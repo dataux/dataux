@@ -221,7 +221,7 @@ func fileInterpret(path string, obj cloudstorage.Object) *FileInfo {
 
 func (m *FileSource) loadSchema() {
 
-	//u.Infof("%p  load schema %#v", m, m.ss.Conf)
+	u.Infof("%p  load schema path:%q   %#v", m, m.path, m.ss.Conf)
 
 	q := cloudstorage.Query{Prefix: m.path}
 	q.Sorted() // We need to sort this by reverse to go back to front?
@@ -232,7 +232,7 @@ func (m *FileSource) loadSchema() {
 	}
 	nextPartId := 0
 
-	//u.Infof("how many files? %v", len(objs))
+	u.Infof("how many files? %v", len(objs))
 
 	for _, obj := range objs {
 		//u.Debugf("obj %#v", obj)
@@ -365,7 +365,7 @@ func createConfStore(ss *schema.SchemaSource) (cloudstorage.Store, error) {
 	if ss == nil || ss.Conf == nil {
 		return nil, fmt.Errorf("No config info for files source")
 	}
-	//u.Debugf("json conf:\n%s", ss.Conf.Settings.PrettyJson())
+	u.Debugf("json conf:\n%s", ss.Conf.Settings.PrettyJson())
 	cloudstorage.LogConstructor = func(prefix string) logging.Logger {
 		return logging.NewStdLogger(true, logging.DEBUG, prefix)
 	}
@@ -396,12 +396,12 @@ func createConfStore(ss *schema.SchemaSource) (cloudstorage.Store, error) {
 		c := cloudstorage.CloudStoreContext{
 			LogggingContext: "localfiles",
 			TokenSource:     cloudstorage.LocalFileSource,
-			LocalFS:         "/tmp/mockcloud",
+			LocalFS:         conf.String("localpath"),
 			TmpDir:          "/tmp/localcache",
 		}
-		// if path := conf.String("path"); path != "" {
-		// 	c.LocalFS = path
-		// }
+		if c.LocalFS == "" {
+			return nil, fmt.Errorf(`"localfs" filestore requires a {"settings":{"path":"/path/to/files"}} to local files`)
+		}
 		//os.RemoveAll("/tmp/localcache")
 
 		config = &c
