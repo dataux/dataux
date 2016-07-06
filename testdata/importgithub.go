@@ -24,7 +24,7 @@ var (
 func LoadGithubToEsOnce(host string) {
 	esGithubLoaded.Do(func() {
 		// Load 2014 December 01, 02 full 24 hours for those days
-		LoadGithubToEs(host, 2014, 12, 2, 24)
+		LoadGithubToEs(host, 2014, 12, 1, 2)
 	})
 }
 
@@ -41,7 +41,7 @@ func (g *GithubEvent) Type() string {
 // Create an Elasticsearch Put Mapping for customizing field mappings
 func PutGithubMappings(host string) {
 
-	for _, evType := range []string{"release", "watch", "fork"} {
+	for _, evType := range []string{"watch", "issues"} {
 		esUrl := fmt.Sprintf("http://%s:9200/github_%s", host, evType)
 		u.Debugf("create index/mapping at %v", esUrl)
 		u.PostJson(esUrl, `
@@ -136,31 +136,20 @@ func LoadGithubToEs(host string, year, month, daysToImport, hoursToImport int) {
 					}
 				}
 				if err := json.Unmarshal(line, &ge); err == nil {
-					//u.Debugf("type: %v", ge.Type())
-					// switch ge.Type() {
-					// case "release", "watch", "fork", "push":
-					// 	// ok
-					// default:
-					// 	continue
-					//}
-					// switch ge.Type() {
-					// case "push", "fork", "watch", "release", "member":
-					// }
-					// create a Document ID that is consistent across imports
-					id := fmt.Sprintf("%x", md5.Sum(line))
-					//indexer.Index("github", ge.Type, id, "", &ge.Created, line)
+
 					switch ge.Type() {
+					case "watch", "issues":
+						id := fmt.Sprintf("%x", md5.Sum(line))
+						err = indexer.Index("github_"+ge.Type(), "event", id, "", "", &ge.Created, line)
+						if err != nil {
+							u.Errorf("error? %v", err)
+						}
+						docCt++
 					case "push":
-						jh := u.NewJsonHelper(line)
-						delete(jh, "payload") // elasticsearch 2.1 hates that payload.shas alternates string/bool
-						line, _ = json.Marshal(&jh)
+						// jh := u.NewJsonHelper(line)
+						// delete(jh, "payload") // elasticsearch 2.1 hates that payload.shas alternates string/bool
+						// line, _ = json.Marshal(&jh)
 					}
-					// (index string, _type string, id, parent, ttl string, date *time.Time, data interface{})
-					err = indexer.Index("github_"+ge.Type(), "event", id, "", "", &ge.Created, line)
-					if err != nil {
-						u.Errorf("error? %v", err)
-					}
-					docCt++
 
 				} else {
 					u.Errorf("ERROR? %v", string(line))

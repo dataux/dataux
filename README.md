@@ -1,17 +1,17 @@
 
 ##  Sql Query Proxy to Elasticsearch, Mongo, etc.
 
-Mysql compatible query engine to Elasticsearch, Mongo, Google Datastore, File-based backend sources, including join.
-
-The goal of DataUX is to make data more accessible and usable by querying data where it
-lives (Elasticsearch, Mongo, MySql, Files) by implementing full relational algebra and distributed
-query engine to query these even if they don't implement SQL.  
-This query engine hosts a mysql protocol listener, then translates to native (elasticsearch, mongo, etc).
-It works by implementing a full relational algebra layer to run sql queries and poly-fill missing features
-from underlying sources.  So, a backend key-value storage such as redis can now have aggregate functions, where etc.
+Mysql compatible federqred query engine to Elasticsearch, Mongo, 
+Google Datastore, Cassandra, File-based backend sources, including join.
+This proxy and query engine hosts a mysql protocol listener, 
+which then rewrites sql queries to native (elasticsearch, mongo, cassandra).
+It works by implementing a full relational algebra layer 
+to run sql queries and poly-fill missing features
+from underlying sources.  So, a backend key-value storage such as cassandra
+can now have complete `WHERE` clause support as well as aggregate functions etc.
 
 Most similar to [prestodb](http://prestodb.io/) but in Golang, and focused on
-easy to hack, add custom data sources.
+easy to add custom data sources.
 
 
 ## Features
@@ -25,6 +25,38 @@ easy to hack, add custom data sources.
 
 ## Status
 * NOT Production ready.  Currently supporting a few non-critical use-cases (ad-hoc queries, support tool) in production.
+
+## Try it Out
+This example imports a day worth of historical data
+from  https://www.githubarchive.org/ into a local
+elasticsearch server for example.  Requires [nats.io](http://nats.io)
+and etcd server running local as well. Docker setup coming soon.
+```sh
+
+cd tools/importgithub
+# assuming elasticsearch on localhost elase --host=myeshost
+# this takes quite a while, i need to cut down to reduce it
+# but unit tests were written against it. sorry.
+go build && ./importgithub
+
+# using dataux.conf from root of this project
+go build
+./dataux --config=dataux.conf
+
+# to add other data sources see dataux.conf example
+
+```
+
+Roadmap(ish)
+------------------------------
+* Sources
+  * Cassandra
+  * Big-Query
+  * Big-Table
+  * Json-Files
+* Writes
+  * write propogation:  inbound insert/update gets written multiple places.
+  * write lambda functions:  allow arbitray functions to get nats.io pub/sub of write events.
 
 
 
@@ -54,21 +86,7 @@ aggs min, max, avg, sum | `select min(year), max(year), avg(year), sum(year) fro
 filter:   terms         | `select * from table WHERE year IN (2015,2014,2013);`
 filter: gte, range      | `select * from table WHERE year BETWEEN 2012 AND 2014`
 
-## Running
-```sh
 
-go build
-
-# using dataux.conf from root of this project
-./dataux --config=dataux.conf
-
-```
-
-
-Roadmap(ish)
-------------------------------
-* **Backends**: Json-Files, Cassandra, Big-Query
-* Pub-Sub for Writes
 
 
 **Hacking**

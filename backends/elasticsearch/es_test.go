@@ -133,13 +133,13 @@ func TestShowTablesSelect(t *testing.T) {
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
 			assert.Tf(t, data.Table != "", "%v", data)
-			if data.Table == "github_fork" {
+			if data.Table == "github_watch" {
 				found = true
 			}
 		},
 		RowData: &data,
 	})
-	assert.Tf(t, found, "Must have found github_fork")
+	assert.Tf(t, found, "Must have found github_watch")
 }
 
 func TestInvalidQuery(t *testing.T) {
@@ -159,11 +159,11 @@ func TestSimpleRowSelect(t *testing.T) {
 		Actor string
 	}{}
 	validateQuerySpec(t, QuerySpec{
-		Sql:         "select actor from github_push WHERE `actor` = \"araddon\" LIMIT 10;",
+		Sql:         "select actor from github_watch WHERE `actor` = \"cabadsanchez\" LIMIT 10;",
 		ExpectRowCt: 2,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
-			assert.Tf(t, data.Actor == "araddon", "%v", data)
+			assert.Tf(t, data.Actor == "cabadsanchez", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -172,15 +172,15 @@ func TestSimpleRowSelect(t *testing.T) {
 func TestSelectAggs(t *testing.T) {
 	data := struct {
 		Oldest int `db:"oldest_repo"`
-		Card   int `db:"users_who_released"`
+		Card   int `db:"users_who_watched"`
 	}{}
 	validateQuerySpec(t, QuerySpec{
-		Sql:         "select cardinality(`actor`) AS users_who_released, min(`repository.id`) as oldest_repo from github_release;",
+		Sql:         "select cardinality(`actor`) AS users_who_watched, min(`repository.id`) as oldest_repo from github_watch;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			//u.Debugf("%v", data)
-			assert.Tf(t, data.Card == 1772, "%v", data)
-			assert.Tf(t, data.Oldest == 27, "%v", data)
+			//u.Debugf("%v", data)   {765 3448}
+			assert.Tf(t, data.Card == 3448, "%v", data)
+			assert.Tf(t, data.Oldest == 765, "%v", data)
 
 		},
 		RowData: &data,
@@ -188,20 +188,20 @@ func TestSelectAggs(t *testing.T) {
 
 	data2 := struct {
 		Oldest int `db:"oldest_repo"`
-		Card   int `db:"users_who_released"`
+		Card   int `db:"users_who_watched"`
 		Ct     int
 	}{}
 	validateQuerySpec(t, QuerySpec{
-		Sql: "select cardinality(`actor`) AS users_who_released, count(*) as ct " +
+		Sql: "select cardinality(`actor`) AS users_who_watched, count(*) as ct " +
 			", min(`repository.id`) as oldest_repo " +
-			` FROM github_release
-			WHERE query LIKE "database";`,
+			` FROM github_watch
+			WHERE repository.description LIKE "database";`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			//u.Debugf("%v", data2)
-			assert.Tf(t, data2.Card == 36, "%v", data2)
-			assert.Tf(t, data2.Oldest == 904810, "%#v", data2)
-			assert.Tf(t, data2.Ct == 47, "%v", data2) // 47 docs had database
+			u.Debugf("%+v", data2) //{108110 32 32}
+			assert.Tf(t, data2.Card == 32, "%v", data2)
+			assert.Tf(t, data2.Oldest == 108110, "%#v", data2)
+			assert.Tf(t, data2.Ct == 32, "%v", data2) // 47 docs had database
 		},
 		RowData: &data2,
 	})
@@ -252,11 +252,11 @@ func TestSelectWhereEqual(t *testing.T) {
 	validateQuerySpec(t, QuerySpec{
 		Sql: "select `actor`, `repository.name`, `repository.stargazers_count`, `repository.language` " +
 			"from github_watch where `repository.language` = \"Go\";",
-		ExpectRowCt: 20,
+		ExpectRowCt: 114,
 		ValidateRowData: func() {
-			//u.Infof("%v", data)
-			assert.Tf(t, data.Actor != "", "%v", data)
-			assert.Tf(t, data.Language == "Go", "%v", data)
+			//u.Infof("%+v", data)
+			assert.Tf(t, data.Actor != "", "%+v", data)
+			assert.Tf(t, data.Language == "Go", "%+v", data)
 		},
 		RowData: &data,
 	})
@@ -265,9 +265,9 @@ func TestSelectWhereEqual(t *testing.T) {
 		Sql: "select `actor`, `repository.name`, `repository.stargazers_count`, `repository.language` " +
 			" from github_watch where " +
 			"`repository.language` == \"Go\" AND `repository.forks_count` > 1000;",
-		ExpectRowCt: 20,
+		ExpectRowCt: 5,
 		ValidateRowData: func() {
-			//u.Infof("%v", data)
+			//u.Infof("%+v", data)
 			assert.Tf(t, data.Language == "Go", "%v", data)
 			assert.Tf(t, data.Stars > 1000, "must have filterd by forks: %v", data)
 			assert.Tf(t, data.Actor != "", "%v", data)
@@ -304,13 +304,13 @@ func TestSelectWhereLike(t *testing.T) {
 	}{}
 	validateQuerySpec(t, QuerySpec{
 		Sql: "select `repository.stargazers_count` AS ct, `repository.name` AS name " +
-			" FROM github_fork " +
+			" FROM github_watch " +
 			"where `description` LIKE \"database AND graph\";",
-		ExpectRowCt: 9,
+		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			u.Debugf("%#v", data)
-			assert.Tf(t, data.Name != "", "%v", data)
-			//assert.Tf(t, data.Ct == 74995 || data.Ct == 74994, "%v", data)
+			//u.Debugf("%#v", data)
+			assert.Tf(t, data.Name == "flockdb", "%v", data)
+			assert.Tf(t, data.Ct == 2348, "%v", data)
 		},
 		RowData: &data,
 	})
@@ -322,10 +322,10 @@ func TestSelectWhereIn(t *testing.T) {
 		Name  string `db:"repository.name"`
 	}{}
 	validateQuerySpec(t, QuerySpec{
-		Sql:         `select actor, repository.name from github_push where actor IN ("mdmarek", "epsniff", "schmichael", "kyledj", "ropes","araddon");`,
-		ExpectRowCt: 13,
+		Sql:         `select actor, repository.name from github_watch where repository.name IN ("node", "docker","d3","myicons", "bootstrap") limit 100;`,
+		ExpectRowCt: 37,
 		ValidateRowData: func() {
-			u.Debugf("%#v", data)
+			//u.Debugf("%#v", data)
 			assert.Tf(t, data.Name != "", "%v", data)
 			//assert.Tf(t, data.Ct == 74995 || data.Ct == 74994, "%v", data)
 		},
@@ -339,8 +339,8 @@ func TestSelectWhereBetween(t *testing.T) {
 		Name  string `db:"repository.name"`
 	}{}
 	validateQuerySpec(t, QuerySpec{
-		Sql:         `select actor, repository.name from github_push where repository.stargazers_count BETWEEN "1000" AND 1100;`,
-		ExpectRowCt: 20,
+		Sql:         `select actor, repository.name from github_watch where repository.stargazers_count BETWEEN "1000" AND 1100;`,
+		ExpectRowCt: 132,
 		ValidateRowData: func() {
 			//u.Debugf("%#v", data)
 			assert.Tf(t, data.Name != "", "%v", data)
@@ -348,18 +348,23 @@ func TestSelectWhereBetween(t *testing.T) {
 		},
 		RowData: &data,
 	})
+	data2 := struct {
+		Actor string
+		Org   string `db:"org"`
+	}{}
 	// Now one that is date based
+	// created_at: "2008-10-21T18:20:37Z
+	// curl -s XGET localhost:9200/github_watch/_search -d '{"filter": { "range": { "repository.created_at": {"gte": "2008-10-21T17:20:37Z","lte": "2008-10-21T19:20:37Z"}}}}' | jq '.'
 	validateQuerySpec(t, QuerySpec{
-		Sql: `SELECT actor, repository.name 
-			FROM github_push 
-			WHERE repository.created_at BETWEEN "2008-12-01" AND "2008-12-03";`,
-		ExpectRowCt: 4,
+		Sql: `SELECT actor, repository.organization AS org
+			FROM github_watch 
+			WHERE repository.created_at BETWEEN "2008-10-21T17:20:37Z" AND "2008-10-21T19:20:37Z";`,
+		ExpectRowCt: 3,
 		ValidateRowData: func() {
-			u.Debugf("%#v", data)
-			assert.Tf(t, data.Name == "jasmine", "%v", data)
-			//assert.Tf(t, data.Ct == 74995 || data.Ct == 74994, "%v", data)
+			u.Debugf("%#v", data2)
+			assert.Tf(t, data2.Org == "android", "%v", data2)
 		},
-		RowData: &data,
+		RowData: &data2,
 	})
 	datact := struct {
 		Actor string
@@ -371,16 +376,33 @@ func TestSelectWhereBetween(t *testing.T) {
 		Sql: `
 			SELECT 
 				actor, repository.name, repository.stargazers_count AS stars
-			FROM github_push 
+			FROM github_watch 
 			WHERE 
 				repository.stargazers_count BETWEEN 1000 AND 1100;
 		`,
-		ExpectRowCt: 20,
+		ExpectRowCt: 132,
 		ValidateRowData: func() {
 			//u.Debugf("%#v", datact)
 			assert.Tf(t, datact.Stars >= 1000 && datact.Stars < 1101, "%v", datact)
 		},
 		RowData: &datact,
+	})
+	data3 := struct {
+		Actor string
+		Org   sql.NullString `db:"org"`
+	}{}
+	// Try again but with missing field org to show it will return nil
+	validateQuerySpec(t, QuerySpec{
+		Sql: `SELECT actor, org
+			FROM github_watch 
+			WHERE repository.created_at BETWEEN "2008-10-21T17:20:37Z" AND "2008-10-21T19:20:37Z";`,
+		ExpectRowCt: 3,
+		ValidateRowData: func() {
+			u.Debugf("%#v", data3)
+			assert.T(t, data3.Org.Valid == false)
+			assert.Tf(t, data3.Org.String == "", "%v", data3.Org.String)
+		},
+		RowData: &data3,
 	})
 }
 
@@ -391,11 +413,11 @@ func TestSelectOrderBy(t *testing.T) {
 	}{}
 	validateQuerySpec(t, QuerySpec{
 		Sql: "select `repository.stargazers_count` AS ct, `repository.name` AS name " +
-			" FROM github_fork ORDER BY `repository.stargazers_count` DESC limit 3;",
+			" FROM github_watch ORDER BY `repository.stargazers_count` DESC limit 3;",
 		ExpectRowCt: 3,
 		ValidateRowData: func() {
 			assert.Tf(t, data.Name == "bootstrap", "%v", data)
-			assert.Tf(t, data.Ct == 74995 || data.Ct == 74994, "%v", data)
+			assert.Tf(t, data.Ct == 74907 || data.Ct == 74906, "%v", data)
 		},
 		RowData: &data,
 	})

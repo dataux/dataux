@@ -96,6 +96,7 @@ func (m *ResultReader) buildProjection() {
 				cols = append(cols, rel.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
 			} else {
 				u.Debugf("Could not find: %v", col.String())
+				cols = append(cols, rel.NewResultColumn(col.SourceField, len(cols), col, value.StringType))
 			}
 		}
 	}

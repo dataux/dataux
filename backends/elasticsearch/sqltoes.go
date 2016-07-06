@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	DefaultLimit = 20
+	DefaultLimit = 1000
 
 	// Implement Datasource interface that allows Mongo
 	//  to fully implement a full select statement
