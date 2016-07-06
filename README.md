@@ -44,8 +44,9 @@ go build
 # now that dataux is running use mysql-client to connect
 
 mysql -h 127.0.0.1 -P 4000
-
-# and run some queries
+```
+now run some queries
+```sql
 use datauxtest;
 
 show tables;
