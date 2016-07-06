@@ -27,7 +27,7 @@ easy to add custom data sources.
 * NOT Production ready.  Currently supporting a few non-critical use-cases (ad-hoc queries, support tool) in production.
 
 ## Try it Out
-This example imports a day worth of historical data
+This example imports a couple hours worth of historical data
 from  https://www.githubarchive.org/ into a local
 elasticsearch server for example.  Requires [nats.io](http://nats.io)
 and etcd server running local as well. Docker setup coming soon.
@@ -35,8 +35,6 @@ and etcd server running local as well. Docker setup coming soon.
 
 cd tools/importgithub
 # assuming elasticsearch on localhost elase --host=myeshost
-# this takes quite a while, i need to cut down to reduce it
-# but unit tests were written against it. sorry.
 go build && ./importgithub
 
 # using dataux.conf from root of this project
