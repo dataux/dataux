@@ -43,6 +43,34 @@ go build && ./importgithub
 go build
 ./dataux --config=dataux.conf
 
+# now that dataux is running use mysql-client to connect
+
+mysql -h 127.0.0.1 -P 4000
+
+# and run some queries
+use datauxtest;
+
+show tables;
+
+describe github_watch;
+
+select cardinality(`actor`) AS users_who_watched, min(`repository.id`) as oldest_repo from github_watch;
+
+SELECT actor, `repository.name`, `repository.stargazers_count`, `repository.language`
+FROM github_watch where `repository.language` = "Go";
+
+select actor, repository.name from github_watch where repository.stargazers_count BETWEEN "1000" AND 1100;
+
+SELECT actor, repository.organization AS org
+FROM github_watch 
+WHERE repository.created_at BETWEEN "2008-10-21T17:20:37Z" AND "2008-10-21T19:20:37Z";
+
+select actor, repository.name from github_watch where repository.name IN ("node", "docker","d3","myicons", "bootstrap") limit 100;
+
+select cardinality(`actor`) AS users_who_watched, count(*) as ct, min(`repository.id`) as oldest_repo
+FROM github_watch
+WHERE repository.description LIKE "database";
+
 # to add other data sources see dataux.conf example
 
 ```
