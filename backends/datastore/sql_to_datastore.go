@@ -23,12 +23,10 @@ import (
 )
 
 var (
-	DefaultLimit = 20
+	// Default LIMIT on DataStore Queries
+	DefaultLimit = 1000
 
-	_ = json.Marshal
-
-	// Implement Datasource interface that allows Mongo
-	//  to fully implement a full select statement
+	// ensure we implement appropriate interfaces
 	_ schema.Conn         = (*SqlToDatstore)(nil)
 	_ plan.SourcePlanner  = (*SqlToDatstore)(nil)
 	_ exec.ExecutorSource = (*SqlToDatstore)(nil)
@@ -37,6 +35,7 @@ var (
 
 // Sql To Google Datastore Maps a Sql request into an equivalent
 //    google data store query
+// - a dialect translator
 type SqlToDatstore struct {
 	*exec.TaskBase
 	resp           *ResultReader
@@ -55,6 +54,8 @@ type SqlToDatstore struct {
 
 }
 
+// NewSqlToDatastore Create a new translator to re-write a SQL AST query
+// into google data store
 func NewSqlToDatstore(table *schema.Table, cl *datastore.Client, ctx context.Context) *SqlToDatstore {
 	m := &SqlToDatstore{
 		tbl:      table,
@@ -66,16 +67,9 @@ func NewSqlToDatstore(table *schema.Table, cl *datastore.Client, ctx context.Con
 	return m
 }
 
-func (m *SqlToDatstore) Host() string {
-	//u.Warnf("TODO:  replace hardcoded es host")
-	//return m.schema.ChooseBackend()
-	return ""
-}
-
 func (m *SqlToDatstore) Query(req *rel.SqlSelect) (*ResultReader, error) {
 
 	m.query = datastore.NewQuery(m.tbl.NameOriginal)
-	//u.Debugf("%s   query:%p", m.tbl.NameOriginal, m.query)
 	var err error
 	m.sel = req
 	limit := req.Limit

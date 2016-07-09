@@ -123,7 +123,6 @@ func (m *ResultReader) Run() error {
 		return nil
 	}
 
-	//cols := m.proj.Columns
 	cols := m.Req.p.Proj.Columns
 	colNames := make(map[string]int, len(cols))
 	for i, col := range cols {
