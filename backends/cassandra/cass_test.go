@@ -80,18 +80,17 @@ func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
 func RunTestServer(t *testing.T) func() {
 	if !testServicesRunning {
 		testServicesRunning = true
+
+		loadTestData(t)
+
 		planner.GridConf.JobMaker = jobMaker
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
 		testmysql.RunTestServer(t)
 		quit := make(chan bool)
 		planner.RunWorkerNodes(quit, 2, testmysql.ServerCtx.Reg)
-
-		loadTestData(t)
 	}
-	return func() {
-		// placeholder
-	}
+	return func() {}
 }
 
 func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
@@ -102,16 +101,27 @@ func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
 func loadTestData(t *testing.T) {
 	loadTestDataOnce.Do(func() {
 		u.Debugf("loading cassandra test data")
-		cluster := gocql.NewCluster(*cassHost)
-		cluster.Keyspace = cassKeyspace
-		sess, err := cluster.CreateSession()
-		assert.Tf(t, err == nil, "Must create cassandra session")
-		session = sess
+		preKeyspace := gocql.NewCluster(*cassHost)
+		// no keyspace
+		s1, err := preKeyspace.CreateSession()
+		assert.Tf(t, err == nil, "Must create cassandra session got err=%v", err)
 		cqlKeyspace := fmt.Sprintf(`
 			CREATE KEYSPACE IF NOT EXISTS %s WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };`, cassKeyspace)
-		err = sess.Query(cqlKeyspace).Exec()
-		time.Sleep(time.Millisecond * 30)
-		assert.T(t, err == nil, "must create keyspace", err)
+		err = s1.Query(cqlKeyspace).Exec()
+		assert.Tf(t, err == nil, "Must create cassandra keyspace got err=%v", err)
+
+		cluster := gocql.NewCluster(*cassHost)
+		cluster.Keyspace = cassKeyspace
+		// Error querying table schema: Undefined name key_aliases in selection clause
+		cluster.ProtoVersion = 4
+		cluster.CQLVersion = "3.1.0"
+		// cluster.Timeout = time.Second * 10
+		// cluster.NumConns = 10
+		// cluster.SocketKeepalive = time.Duration(5 * time.Minute)
+		// cluster.RetryPolicy = &gocql.SimpleRetryPolicy{NumRetries: 5}
+		sess, err := cluster.CreateSession()
+		assert.Tf(t, err == nil, "Must create cassandra session got err=%v", err)
+
 		for _, table := range testTables {
 			err = sess.Query(table).Consistency(gocql.All).Exec()
 			time.Sleep(time.Millisecond * 30)
@@ -246,22 +256,22 @@ func TestDescribeTable(t *testing.T) {
 			assert.Tf(t, data.Field != "", "%v", data)
 			switch data.Field {
 			case "embedded":
-				assert.Tf(t, data.Type == "binary", "%#v", data)
+				assert.Tf(t, data.Type == "binary" || data.Type == "text", "%#v", data)
 				describedCt++
 			case "author":
-				assert.Tf(t, data.Type == "string", "data: %#v", data)
+				assert.Tf(t, data.Type == "varchar(255)", "data: %#v", data)
 				describedCt++
 			case "created":
 				assert.Tf(t, data.Type == "datetime", "data: %#v", data)
 				describedCt++
 			case "category":
-				assert.Tf(t, data.Type == "binary", "data: %#v", data)
+				assert.Tf(t, data.Type == "text", "data: %#v", data)
 				describedCt++
 			case "body":
-				assert.Tf(t, data.Type == "binary", "data: %#v", data)
+				assert.Tf(t, data.Type == "text", "data: %#v", data)
 				describedCt++
 			case "deleted":
-				assert.Tf(t, data.Type == "bool", "data: %#v", data)
+				assert.Tf(t, data.Type == "bool" || data.Type == "tinyint", "data: %#v", data)
 				describedCt++
 			}
 		},

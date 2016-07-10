@@ -34,7 +34,6 @@ cd $GOPATH/src/github.com/mb0/glob && git checkout master && git pull
 cd $GOPATH/src/github.com/nats-io/nats && git checkout master && git pull
 cd $GOPATH/src/github.com/pborman/uuid && git checkout master && git pull
 cd $GOPATH/src/github.com/rcrowley/go-metrics && git checkout master && git pull
-cd $GOPATH/src/github.com/relops/cqlc && git checkout master && git pull
 cd $GOPATH/src/github.com/sony/sonyflake && git checkout master && git pull
 
 # this one if updated breaks older versions of etcd

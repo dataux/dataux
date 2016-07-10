@@ -97,7 +97,7 @@ sources : [
     type : cassandra
     settings {
       keyspace  "datauxtest"
-      hosts    ["localhost"]
+      hosts    ["localhost:9042"]
     }
   }
   

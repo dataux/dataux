@@ -8,6 +8,7 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/gocql/gocql"
+	"github.com/hailocab/go-hostpool"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/rel"
@@ -42,11 +43,22 @@ func createCassSession(conf *schema.ConfigSource, keyspace string) (*gocql.Sessi
 	}
 	cluster := gocql.NewCluster(servers...)
 
+	// Error querying table schema: Undefined name key_aliases in selection clause
+	//  if on cass 2.1 use 3.0.0 for cqlversion
+	cluster.ProtoVersion = 4
+	cluster.CQLVersion = "3.1.0"
+
 	cluster.Keyspace = keyspace
+	cluster.NumConns = 10
 
 	if numconns := conf.Settings.Int("numconns"); numconns > 0 {
 		cluster.NumConns = numconns
 	}
+
+	cluster.Timeout = time.Second * 10
+	cluster.PoolConfig.HostSelectionPolicy = gocql.HostPoolHostPolicy(
+		hostpool.NewEpsilonGreedy(nil, 0, &hostpool.LinearEpsilonValueCalculator{}),
+	)
 
 	// load-balancers often kill idel conns so lets heart beat to keep alive
 	// see https://cloud.google.com/compute/docs/troubleshooting#communicatewithinternet
@@ -54,6 +66,8 @@ func createCassSession(conf *schema.ConfigSource, keyspace string) (*gocql.Sessi
 
 	if retries := conf.Settings.Int("retries"); retries > 0 {
 		cluster.RetryPolicy = &gocql.SimpleRetryPolicy{NumRetries: retries}
+	} else {
+		cluster.RetryPolicy = &gocql.SimpleRetryPolicy{NumRetries: 3}
 	}
 
 	return cluster.CreateSession()
@@ -96,7 +110,7 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 	m.conf = ss.Conf
 	m.db = strings.ToLower(ss.Name)
 
-	u.Infof("Init:  %#v", m.schema.Conf)
+	//u.Infof("Init:  %#v", m.schema.Conf)
 	if m.schema.Conf == nil {
 		return fmt.Errorf("Schema conf not found")
 	}
@@ -109,6 +123,7 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 
 	sess, err := createCassSession(m.conf, m.keyspace)
 	if err != nil {
+		u.Errorf("Could not create cass conn %v", err)
 		return err
 	}
 	m.session = sess
@@ -120,6 +135,7 @@ func (m *Source) loadSchema() error {
 
 	kmd, err := m.session.KeyspaceMetadata(m.keyspace)
 	if err != nil {
+		u.Warnf("ks:%v  change protocol version if 2.1 or earlier %v", m.keyspace, err)
 		return err
 	}
 	m.kmd = kmd
@@ -146,12 +162,15 @@ func (m *Source) loadSchema() error {
 			colName := strings.ToLower(col.Name)
 			colNames = append(colNames, colName)
 
+			u.Debugf("%s cass col %v ", colName, col.Type.Type())
 			var f *schema.Field
 			switch col.Type.Type() {
 			case gocql.TypeBlob:
-				f = schema.NewFieldBase(colName, value.StringType, 24, "blob")
-			case gocql.TypeVarchar, gocql.TypeText:
+				f = schema.NewFieldBase(colName, value.ByteSliceType, 2000, "blob")
+			case gocql.TypeVarchar:
 				f = schema.NewFieldBase(colName, value.StringType, 256, "string")
+			case gocql.TypeText:
+				f = schema.NewFieldBase(colName, value.StringType, 2000, "string")
 			case gocql.TypeInt, gocql.TypeTinyInt:
 				f = schema.NewFieldBase(colName, value.IntType, 32, "int")
 			case gocql.TypeBigInt:
@@ -171,7 +190,7 @@ func (m *Source) loadSchema() error {
 				case gocql.TypeInt, gocql.TypeBigInt, gocql.TypeTinyInt:
 					f.NativeType = value.IntType
 				}
-				u.Warnf("SET TYPE CASSANDRA Not handled very well?!")
+				u.Warnf("SET TYPE CASSANDRA Not handled very well?!  %v", col.Type.Type())
 			case gocql.TypeMap:
 
 				switch col.Type.Type() {
