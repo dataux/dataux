@@ -1,15 +1,18 @@
 github.com/araddon/dateparse a19b713c2e31cec89903deb95b4d053e9e7b4db5
 github.com/araddon/gou 50a94aa4a3fb69e8fbde05df290fcb49fa685e07
-github.com/araddon/qlbridge c3afaa6b00a9a4d83f08fc5f7e59fbce41dfdc36
+github.com/araddon/qlbridge 8b2f9b92555910593787b0417bd0e9f9643402f0
 github.com/bitly/go-hostpool d0e59c22a56e8dadfed24f74f452cea5a52722d2
 github.com/bmizerany/assert b7ed37b82869576c289d7d97fb2bbd8b64a0cb28
 github.com/coreos/etcd 207c92b62785d220edc74ed791fd8a22a18e378e
 github.com/coreos/go-etcd de3514f25635bbfb024fdaf2a8d5f67378492675
 github.com/dchest/siphash 6d8617816bb5d8268011ffbfb8720f17ce9af63c
 github.com/go-sql-driver/mysql 3654d25ec346ee8ce71a68431025458d52a38ac0
+github.com/gocql/gocql 261883b4ad61ed1b4820abf522f952d3e18b366c
 github.com/gogo/protobuf 2752d97bbd91927dd1c43296dbf8700e50e2708c
 github.com/golang/protobuf 3852dcfda249c2097355a6aabb199a28d97b30df
+github.com/golang/snappy 723cc1e459b8eea2dea4583200fd60757d40097a
 github.com/google/btree 7d79101e329e5a3adf994758c578dab82b90c017
+github.com/hailocab/go-hostpool e80d13ce29ede4452c43dea11e79b9bc8a15b478
 github.com/hashicorp/go-immutable-radix afc5a0dbb18abdf82c277a7bc01533e81fa1d6b8
 github.com/hashicorp/go-memdb 98f52f52d7a476958fa9da671354d270c50661a7
 github.com/hashicorp/golang-lru a0d98a5f288019575c6d1f4bb1573fef2d1fcdc4
@@ -38,4 +41,5 @@ golang.org/x/oauth2 7357e96168422ba1e6e7f21075713b72d58764e7
 google.golang.org/api c13a21ee847eca050f08db8373d8737494a1170e
 google.golang.org/cloud 83ee71d0fec26977bad1662134fa1e8c91268025
 google.golang.org/grpc 461dac99975b211ed3eda7eb45b997d82da4345a
+gopkg.in/inf.v0 c85f1217d51339c0fa3a498cc8b2075de695dae6
 gopkg.in/mgo.v2 22287bab4379e1fbf6002fb4eb769888f3fb224c
