@@ -26,6 +26,7 @@ type ResultReader struct {
 	cursor        int
 	proj          *rel.Projection
 	cols          []string
+	rewritenSql   string
 	Total         int
 	Req           *SqlToCql
 }
@@ -36,10 +37,11 @@ type ResultReaderNext struct {
 	*ResultReader
 }
 
-func NewResultReader(req *SqlToCql) *ResultReader {
+func NewResultReader(req *SqlToCql, rewritenSql string) *ResultReader {
 	m := &ResultReader{}
 	m.TaskBase = exec.NewTaskBase(req.Ctx)
 	m.Req = req
+	m.rewritenSql = rewritenSql
 	return m
 }
 
@@ -122,13 +124,13 @@ func (m *ResultReader) Run() error {
 	}
 
 	queryStart := time.Now()
-	cassQry := m.Req.s.session.Query(sql.String()).PageSize(limit)
+	cassQry := m.Req.s.session.Query(m.rewritenSql).PageSize(limit)
 	iter := cassQry.Iter()
 
 	for {
 		row := make(map[string]interface{})
 		if !iter.MapScan(row) {
-			u.Infof("done with query")
+			//u.Debugf("done with query")
 			break
 		}
 
@@ -139,7 +141,7 @@ func (m *ResultReader) Run() error {
 				//u.Infof("prop.name=%s col.Name=%s", prop.Name, col.Name)
 				if col.Name == k {
 					vals[i] = v
-					u.Debugf("%-2d col.name=%-10s prop.T %T\tprop.v%v", i, col.Name, v, v)
+					//u.Debugf("%-2d col.name=%-10s prop.T %T\tprop.v%v", i, col.Name, v, v)
 					found = true
 					break
 				}

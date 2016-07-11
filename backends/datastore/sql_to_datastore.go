@@ -67,8 +67,10 @@ func NewSqlToDatstore(table *schema.Table, cl *datastore.Client, ctx context.Con
 	return m
 }
 
-func (m *SqlToDatstore) Query(req *rel.SqlSelect) (*ResultReader, error) {
+func (m *SqlToDatstore) query(req *rel.SqlSelect) (*ResultReader, error) {
 
+	// Create our google data store query and we will walk
+	// our ast modifying it
 	m.query = datastore.NewQuery(m.tbl.NameOriginal)
 	var err error
 	m.sel = req
@@ -191,7 +193,7 @@ func (m *SqlToDatstore) WalkExecSource(p *plan.Source) (exec.Task, error) {
 	u.Debugf("%p walkexec: %#v", m, m.TaskBase)
 	m.Ctx = p.Context()
 	m.TaskBase = exec.NewTaskBase(m.Ctx)
-	reader, err := m.Query(p.Stmt.Source)
+	reader, err := m.query(p.Stmt.Source)
 	if err != nil {
 		return nil, nil
 	}

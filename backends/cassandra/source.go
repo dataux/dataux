@@ -70,7 +70,14 @@ func createCassSession(conf *schema.ConfigSource, keyspace string) (*gocql.Sessi
 		cluster.RetryPolicy = &gocql.SimpleRetryPolicy{NumRetries: 3}
 	}
 
-	return cluster.CreateSession()
+	sess, err := cluster.CreateSession()
+	if err != nil && strings.Contains(err.Error(), "Invalid or unsupported protocol version: 4") {
+		// cass < 2.2 ie 2.1, 2.0
+		cluster.ProtoVersion = 2
+		cluster.CQLVersion = "3.0.0"
+		sess, err = cluster.CreateSession()
+	}
+	return sess, err
 }
 
 // Source is a Cassandra datasource, this provides Reads, Insert, Update, Delete
@@ -162,7 +169,7 @@ func (m *Source) loadSchema() error {
 			colName := strings.ToLower(col.Name)
 			colNames = append(colNames, colName)
 
-			u.Debugf("%s cass col %v ", colName, col.Type.Type())
+			//u.Debugf("%-20s %-12s %-20s %d %-12s", colName, col.Type.Type(), col.Kind, col.ComponentIndex, col.ClusteringOrder)
 			var f *schema.Field
 			switch col.Type.Type() {
 			case gocql.TypeBlob:
@@ -209,13 +216,16 @@ func (m *Source) loadSchema() error {
 				u.Warnf("unknown column type %#v", col)
 			}
 			if f != nil {
+				// Lets save the Cass Column Metadata for later usage
+				f.AddContext("cass_column", col)
 				tbl.AddField(f)
 				//u.Debugf("col %+v    %#v", f, col)
 			}
 
 		}
 
-		u.Infof("%p  caching table %q  cols=%v", m.schema, tbl.Name, colNames)
+		tbl.AddContext("cass_table", cf)
+		//u.Infof("%p  caching table %q  cols=%v", m.schema, tbl.Name, colNames)
 		m.schema.AddTable(tbl)
 		tbl.SetColumns(colNames)
 	}
@@ -270,62 +280,4 @@ func (m *Source) Open(tableName string) (schema.Conn, error) {
 	}
 
 	return NewSqlToCql(m, tbl), nil
-}
-
-func (m *Source) selectQuery(stmt *rel.SqlSelect) (*ResultReader, error) {
-
-	//u.Debugf("get sourceTask for %v", stmt)
-	tblName := strings.ToLower(stmt.From[0].Name)
-
-	tbl, err := m.schema.Table(tblName)
-	if err != nil {
-		return nil, err
-	}
-	if tbl == nil {
-		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, tblName)
-		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, tblName)
-	}
-
-	s := NewSqlToCql(m, tbl)
-	//u.Debugf("SqlToDatstore: %#v", sqlDs)
-	resp, err := s.Query(stmt)
-	if err != nil {
-		u.Errorf("Google datastore query interpreter failed: %v", err)
-		return nil, err
-	}
-	return resp, nil
-}
-
-func titleCase(table string) string {
-	table = strings.ToLower(table)
-	return strings.ToUpper(table[0:1]) + table[1:]
-}
-
-func discoverType(iVal interface{}) value.ValueType {
-
-	switch iVal.(type) {
-	case map[string]interface{}:
-		return value.MapValueType
-	case int:
-		return value.IntType
-	case int64:
-		return value.IntType
-	case float64:
-		return value.NumberType
-	case string:
-		return value.StringType
-	case time.Time:
-		return value.TimeType
-	case *time.Time:
-		return value.TimeType
-	case []uint8:
-		return value.ByteSliceType
-	case []string:
-		return value.StringsType
-	case []interface{}:
-		return value.SliceValueType
-	default:
-		u.Warnf("not recognized type:  %T %#v", iVal, iVal)
-	}
-	return value.NilType
 }

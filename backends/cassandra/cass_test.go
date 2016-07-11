@@ -49,8 +49,8 @@ func init() {
 var testTables = []string{`
 -- DROP TABLE IF EXISTS article;
 CREATE TABLE IF NOT EXISTS article (
-  author varchar,
   title varchar,
+  author varchar,
   count int,
   count64 bigint,
   category set<text>,
@@ -60,9 +60,10 @@ CREATE TABLE IF NOT EXISTS article (
   f double,
   embedded blob,
   body blob,
-  PRIMARY KEY (author)
+  PRIMARY KEY (title)
 );`,
-	`CREATE TABLE IF NOT EXISTS user (
+	`
+CREATE TABLE IF NOT EXISTS user (
   id varchar,
   name varchar,
   deleted boolean,
@@ -70,7 +71,16 @@ CREATE TABLE IF NOT EXISTS article (
   created timestamp,
   updated timestamp,
   PRIMARY KEY (id)
-);`}
+);`, `
+-- Events Table
+CREATE TABLE IF NOT EXISTS event (
+  url varchar,
+  ts timestamp,
+  date text,
+  jsondata text,
+  PRIMARY KEY ((date, url), ts)
+);
+`}
 
 func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
 	ctx.Schema = testmysql.Schema
@@ -113,13 +123,16 @@ func loadTestData(t *testing.T) {
 		cluster := gocql.NewCluster(*cassHost)
 		cluster.Keyspace = cassKeyspace
 		// Error querying table schema: Undefined name key_aliases in selection clause
+		// this assumes cassandra 2.2.x ??
 		cluster.ProtoVersion = 4
 		cluster.CQLVersion = "3.1.0"
-		// cluster.Timeout = time.Second * 10
-		// cluster.NumConns = 10
-		// cluster.SocketKeepalive = time.Duration(5 * time.Minute)
-		// cluster.RetryPolicy = &gocql.SimpleRetryPolicy{NumRetries: 5}
 		sess, err := cluster.CreateSession()
+		if err != nil && strings.Contains(err.Error(), "Invalid or unsupported protocol version: 4") {
+			// cass < 2.2 ie 2.1, 2.0
+			cluster.ProtoVersion = 2
+			cluster.CQLVersion = "3.0.0"
+			sess, err = cluster.CreateSession()
+		}
 		assert.Tf(t, err == nil, "Must create cassandra session got err=%v", err)
 
 		for _, table := range testTables {
@@ -207,7 +220,7 @@ func TestShowTables(t *testing.T) {
 	found := false
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "show tables;",
-		ExpectRowCt: 2,
+		ExpectRowCt: 3,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
 			assert.Tf(t, data.Table != "", "%v", data)
@@ -290,7 +303,7 @@ func TestSimpleRowSelect(t *testing.T) {
 		// Category []string  // Crap, downside of sqlx/mysql is no complex types
 	}{}
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         "select title, count, deleted, author from article WHERE author = \"aaron\" LIMIT 1",
+		Sql:         "select title, count, deleted, author from article WHERE author = 'aaron' LIMIT 1",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
@@ -329,27 +342,47 @@ func TestSelectLimit(t *testing.T) {
 }
 
 func TestSelectWhereLike(t *testing.T) {
+
+	// We are testing the LIKE clause doesn't exist in Cassandra so we are polyfillying
 	data := struct {
-		Title string
-		Ct    int
+		Title  string
+		Author string
 	}{}
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         `SELECT title, count as ct from article WHERE title like "list%"`,
+		Sql:         `SELECT title, author from article WHERE title like "%stic%"`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			assert.Tf(t, data.Title == "listicle1", "%v", data)
 		},
 		RowData: &data,
 	})
-	// TODO:  poly fill this, as doesn't work in datastore
-	// validateQuerySpec(t, tu.QuerySpec{
-	// 	Sql:         `SELECT title, count as ct from article WHERE title like "%stic%"`,
-	// 	ExpectRowCt: 1,
-	// 	ValidateRowData: func() {
-	// 		assert.Tf(t, data.Title == "listicle1", "%v", data)
-	// 	},
-	// 	RowData: &data,
-	// })
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         `SELECT title, author from article WHERE title like "list%"`,
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			assert.Tf(t, data.Title == "listicle1", "%v", data)
+		},
+		RowData: &data,
+	})
+}
+
+func TestSelectProjectionRewrite(t *testing.T) {
+
+	data := struct {
+		Title string
+		Ct    int
+	}{}
+	// We are testing when we need to project twice (1: cassandra, 2: in dataux)
+	// - the "count AS ct" alias needs to be rewritten to NOT be projected
+	//      in cassandra and or be aware of it since we are projecting again
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         `SELECT title, count AS ct from article WHERE title like "list%"`,
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			assert.Tf(t, data.Title == "listicle1", "%v", data)
+		},
+		RowData: &data,
+	})
 }
 
 func TestSelectOrderBy(t *testing.T) {
@@ -377,33 +410,33 @@ func TestSelectOrderBy(t *testing.T) {
 	})
 }
 
-func TestInsertSimple(t *testing.T) {
+func TestMutationInsertSimple(t *testing.T) {
 	validateQuerySpec(t, tu.QuerySpec{
-		Exec:            `INSERT INTO DataUxTestUser (id, name, deleted, created, updated) VALUES ("user814", "test_name",false, now(), now());`,
+		Exec:            `INSERT INTO user (id, name, deleted, created, updated) VALUES ("user814", "test_name",false, now(), now());`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
 	})
 }
 
-func TestDeleteSimple(t *testing.T) {
+func TestMutationDeleteSimple(t *testing.T) {
 	validateQuerySpec(t, tu.QuerySpec{
-		Exec:            `INSERT INTO DataUxTestUser (id, name, deleted, created, updated) VALUES ("user814", "test_name",false, now(), now());`,
+		Exec:            `INSERT INTO user (id, name, deleted, created, updated) VALUES ("user814", "test_name",false, now(), now());`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
 	})
 	validateQuerySpec(t, tu.QuerySpec{
-		Exec:            `DELETE FROM DataUxTestUser WHERE id = "user814"`,
+		Exec:            `DELETE FROM user WHERE id = "user814"`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
 	})
 	validateQuerySpec(t, tu.QuerySpec{
-		Exec:            `SELECT * FROM DataUxTestUser WHERE id = "user814"`,
+		Exec:            `SELECT * FROM user WHERE id = "user814"`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     0,
 	})
 }
 
-func TestUpdateSimple(t *testing.T) {
+func TestMutationUpdateSimple(t *testing.T) {
 	data := struct {
 		Id      string
 		Name    string
@@ -414,7 +447,7 @@ func TestUpdateSimple(t *testing.T) {
 	}{}
 	//u.Warnf("about to insert")
 	validateQuerySpec(t, tu.QuerySpec{
-		Exec: `INSERT INTO DataUxTestUser 
+		Exec: `INSERT INTO user 
 							(id, name, deleted, created, updated, roles) 
 						VALUES 
 							("user815", "test_name", false, todate("2014/07/04"), now(), ["admin","sysadmin"]);`,
@@ -424,7 +457,7 @@ func TestUpdateSimple(t *testing.T) {
 	//u.Warnf("about to test post update")
 	//return
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         `select id, name, deleted, roles, created, updated from DataUxTestUser WHERE id = "user815"`,
+		Sql:         `select id, name, deleted, roles, created, updated from user WHERE id = "user815"`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
@@ -435,7 +468,7 @@ func TestUpdateSimple(t *testing.T) {
 		RowData: &data,
 	})
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         `SELECT id, name, deleted, roles, created, updated FROM DataUxTestUser WHERE id = "user815"`,
+		Sql:         `SELECT id, name, deleted, roles, created, updated FROM user WHERE id = "user815"`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			u.Infof("%v", data)
@@ -446,13 +479,13 @@ func TestUpdateSimple(t *testing.T) {
 	})
 	//u.Warnf("about to update")
 	validateQuerySpec(t, tu.QuerySpec{
-		Exec:            `UPDATE DataUxTestUser SET name = "was_updated", [deleted] = true WHERE id = "user815"`,
+		Exec:            `UPDATE user SET name = "was_updated", [deleted] = true WHERE id = "user815"`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
 	})
 	//u.Warnf("about to final read")
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         `SELECT id, name, deleted, roles, created, updated FROM DataUxTestUser WHERE id = "user815"`,
+		Sql:         `SELECT id, name, deleted, roles, created, updated FROM user WHERE id = "user815"`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			u.Infof("%v", data)
