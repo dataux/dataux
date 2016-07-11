@@ -138,7 +138,7 @@ func (s *Server) runMaker(quit chan bool, actorMaker grid.ActorMaker) error {
 		os.Exit(1)
 	case <-started:
 		s.started = true
-		u.Debugf("%p now started", s)
+		//u.Debugf("%p now started", s)
 	}
 	<-exit
 	//u.Debug("shutdown complete")

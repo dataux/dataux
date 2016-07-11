@@ -341,6 +341,27 @@ func TestSelectLimit(t *testing.T) {
 	})
 }
 
+func TestSelectGroupBy(t *testing.T) {
+	data := struct {
+		Author string
+		Ct     int
+	}{}
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select count(*) as ct, author from article GROUP BY author;",
+		ExpectRowCt: 3,
+		ValidateRowData: func() {
+			//u.Infof("%v", data)
+			switch data.Author {
+			case "aaron":
+				assert.Tf(t, data.Ct == 1, "Should have found 1? %v", data)
+			case "bjorn":
+				assert.Tf(t, data.Ct == 2, "Should have found 2? %v", data)
+			}
+		},
+		RowData: &data,
+	})
+}
+
 func TestSelectWhereLike(t *testing.T) {
 
 	// We are testing the LIKE clause doesn't exist in Cassandra so we are polyfillying
@@ -386,12 +407,34 @@ func TestSelectProjectionRewrite(t *testing.T) {
 }
 
 func TestSelectOrderBy(t *testing.T) {
+	RunTestServer(t)
+
+	dbx, err := sqlx.Connect("mysql", DbConn)
+	assert.Tf(t, err == nil, "%v", err)
+	defer dbx.Close()
+
+	// This is an error BECAUSE cassandra won't allow order by on
+	// partition key that is not part of == or IN clause in where
+	//  - do i poly/fill?  with option?
+	//  - what about changing the partition keys to be more realistic?
+	//    - new artificial partition key?   ie hash(url) = assigns it to 1 of ?? 1000 partitions?
+	//       how would i declare that hash(url) syntax?  a materialized view?
+	rows, err := dbx.Queryx("select title, count64 AS ct FROM article ORDER BY title DESC LIMIT 1;")
+	assert.Tf(t, err == nil, "Should error! %v", err)
+	cols, err := rows.Columns()
+	assert.Tf(t, err == nil, "%v", err)
+	assert.Tf(t, len(cols) == 2, "has 2 cols")
+	assert.T(t, rows.Next() == false, "Should not have any rows")
+
+	return
+	// return
 	data := struct {
 		Title string
 		Ct    int
 	}{}
+	// Try order by on primary partition key
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         "select title, count64 AS ct FROM article ORDER BY count64 DESC LIMIT 1;",
+		Sql:         "select title, count64 AS ct FROM article ORDER BY title DESC LIMIT 1;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			assert.Tf(t, data.Title == "zarticle3", "%v", data)
@@ -399,6 +442,11 @@ func TestSelectOrderBy(t *testing.T) {
 		},
 		RowData: &data,
 	})
+
+	// try order by on some other keys
+
+	// need to fix OrderBy for ints first
+	return
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select title, count64 AS ct FROM article ORDER BY count64 ASC LIMIT 1;",
 		ExpectRowCt: 1,

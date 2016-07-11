@@ -200,7 +200,7 @@ func (m *GoogleDSDataSource) selectQuery(stmt *rel.SqlSelect) (*ResultReader, er
 
 	sqlDs := NewSqlToDatstore(tbl, m.dsClient, m.dsCtx)
 	//u.Debugf("SqlToDatstore: %#v", sqlDs)
-	resp, err := sqlDs.Query(stmt)
+	resp, err := sqlDs.query(stmt)
 	if err != nil {
 		u.Errorf("Google datastore query interpreter failed: %v", err)
 		return nil, err
@@ -300,7 +300,7 @@ func (m *GoogleDSDataSource) loadTableSchema(tableLower, tableOriginal string) (
 			case int:
 				f = schema.NewFieldBase(colName, value.IntType, 32, "int")
 			case int64:
-				tf = schema.NewFieldBase(colName, value.IntType, 64, "long")
+				f = schema.NewFieldBase(colName, value.IntType, 64, "long")
 			case float64:
 				f = schema.NewFieldBase(colName, value.NumberType, 64, "float64")
 			case bool:

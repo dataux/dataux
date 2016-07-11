@@ -26,7 +26,6 @@ type ResultReader struct {
 	cursor        int
 	proj          *rel.Projection
 	cols          []string
-	rewritenSql   string
 	Total         int
 	Req           *SqlToCql
 }
@@ -37,11 +36,10 @@ type ResultReaderNext struct {
 	*ResultReader
 }
 
-func NewResultReader(req *SqlToCql, rewritenSql string) *ResultReader {
+func NewResultReader(req *SqlToCql) *ResultReader {
 	m := &ResultReader{}
 	m.TaskBase = exec.NewTaskBase(req.Ctx)
 	m.Req = req
-	m.rewritenSql = rewritenSql
 	return m
 }
 
@@ -100,9 +98,7 @@ func (m *ResultReader) Run() error {
 	m.finalized = true
 	m.buildProjection()
 
-	sql := m.Req.sel
-
-	if sql.CountStar() {
+	if m.Req.sel.CountStar() {
 		// Count(*) Do we really want to do push-down here?
 		//  possibly default to not allowing this and allow a setting?
 		u.Warnf("Count(*) on Cassandra, your crazy!")
@@ -119,12 +115,12 @@ func (m *ResultReader) Run() error {
 	}
 
 	limit := DefaultLimit
-	if sql.Limit > 0 {
-		limit = sql.Limit
+	if m.Req.sel.Limit > 0 {
+		limit = m.Req.sel.Limit
 	}
-
+	u.Debugf("%p cass limit: %d sel:%s", m.Req.sel, limit, m.Req.sel)
 	queryStart := time.Now()
-	cassQry := m.Req.s.session.Query(m.rewritenSql).PageSize(limit)
+	cassQry := m.Req.s.session.Query(m.Req.sel.String()).PageSize(limit)
 	iter := cassQry.Iter()
 
 	for {
@@ -151,7 +147,7 @@ func (m *ResultReader) Run() error {
 			}
 		}
 
-		u.Debugf("new row ct: %v cols:%v vals:%v", m.Total, colNames, vals)
+		//u.Debugf("new row ct: %v cols:%v vals:%v", m.Total, colNames, vals)
 		//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
 		msg := datasource.NewSqlDriverMessageMap(uint64(m.Total), vals, colNames)
 		m.Total++

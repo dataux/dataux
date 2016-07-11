@@ -270,7 +270,10 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		u.Errorf("error on Query.Run(): %v", err)
 	}
 	//u.Infof("mysqlhandler %p task.Close() start for %T", job.RootTask, job.RootTask)
-	err = job.Close()
+	closeErr := job.Close()
+	if closeErr != nil {
+		u.Errorf("could not close ? %v", closeErr)
+	}
 	//u.Infof("mysqlhandler %p task.Close() complete  err=%v", job.RootTask, err)
 	return err
 }

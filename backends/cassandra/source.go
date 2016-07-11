@@ -264,7 +264,7 @@ func (m *Source) Table(table string) (*schema.Table, error) {
 }
 
 func (m *Source) Open(tableName string) (schema.Conn, error) {
-	u.Debugf("Open(%v)", tableName)
+	//u.Debugf("Open(%v)", tableName)
 	if m.schema == nil {
 		u.Warnf("no schema?")
 		return nil, nil

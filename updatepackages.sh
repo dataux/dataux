@@ -17,12 +17,18 @@ cd $GOPATH/src/github.com/go-sql-driver/mysql && git checkout master && git pull
 cd $GOPATH/src/github.com/gocql/gocql && git checkout master && git pull
 cd $GOPATH/src/github.com/gogo/protobuf && git checkout master && git pull
 cd $GOPATH/src/github.com/golang/protobuf && git checkout master && git pull
+cd $GOPATH/src/github.com/golang/snappy && git checkout master && git pull
 cd $GOPATH/src/github.com/google/btree && git checkout master && git pull
+cd $GOPATH/src/github.com/hailocab/go-hostpool && git checkout master && git pull
+cd $GOPATH/src/github.com/hashicorp/go-immutable-radix && git checkout master && git pull
+cd $GOPATH/src/github.com/hashicorp/go-memdb && git checkout master && git pull
+cd $GOPATH/src/github.com/hashicorp/golang-lru && git checkout master && git pull
 cd $GOPATH/src/github.com/jmoiron/sqlx && git checkout master && git pull
 cd $GOPATH/src/github.com/kr/pretty && git checkout master && git pull
 cd $GOPATH/src/github.com/kr/pty && git checkout master && git pull
 cd $GOPATH/src/github.com/kr/text && git checkout master && git pull
 cd $GOPATH/src/github.com/leekchan/timeutil && git checkout master && git pull
+cd $GOPATH/src/github.com/lytics/cloudstorage && git checkout master && git pull
 cd $GOPATH/src/github.com/lytics/confl && git checkout master && git pull
 cd $GOPATH/src/github.com/lytics/datemath && git checkout master && git pull
 cd $GOPATH/src/github.com/lytics/dfa && git checkout master && git pull
@@ -31,22 +37,24 @@ cd $GOPATH/src/github.com/lytics/metafora && git checkout master && git pull
 cd $GOPATH/src/github.com/lytics/sereno && git checkout master && git pull
 cd $GOPATH/src/github.com/mattbaird/elastigo && git checkout master && git pull
 cd $GOPATH/src/github.com/mb0/glob && git checkout master && git pull
+cd $GOPATH/src/github.com/nats-io/gnatsd && git checkout master && git pull
 cd $GOPATH/src/github.com/nats-io/nats && git checkout master && git pull
+cd $GOPATH/src/github.com/nats-io/nuid && git checkout master && git pull
 cd $GOPATH/src/github.com/pborman/uuid && git checkout master && git pull
 cd $GOPATH/src/github.com/rcrowley/go-metrics && git checkout master && git pull
 cd $GOPATH/src/github.com/sony/sonyflake && git checkout master && git pull
 
 # this one if updated breaks older versions of etcd
 #cd $GOPATH/src/github.com/ugorji/go && git checkout master && git pull
+cd $GOPATH/src/golang.org/x/crypto && git checkout master && git pull
 cd $GOPATH/src/golang.org/x/net && git checkout master && git pull
 cd $GOPATH/src/golang.org/x/oauth2 && git checkout master && git pull
 cd $GOPATH/src/google.golang.org/api && git checkout master && git pull
 cd $GOPATH/src/google.golang.org/cloud && git checkout master && git pull
 cd $GOPATH/src/google.golang.org/grpc && git checkout master && git pull
+cd $GOPATH/src/gopkg.in/inf.v0 && git checkout master && git pull
 # this one is a pain, don't update manually, c headers?
 #cd $GOPATH/src/gopkg.in/mgo.v2 && git checkout master && git pull
-
-
 
 #go get -u -v ./...
 

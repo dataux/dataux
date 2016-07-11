@@ -54,6 +54,7 @@ type SqlToCql struct {
 	needsPolyFill        bool              // polyfill?
 	needsWherePolyFill   bool              // do we request that features be polyfilled?
 	needsProjectPolyFill bool              // do we request that features be polyfilled?
+	needsOrderByPolyFill bool
 }
 
 // NewSqlToCql create a SQL -> CQL ast converter
@@ -66,14 +67,14 @@ func NewSqlToCql(s *Source, t *schema.Table) *SqlToCql {
 	return m
 }
 
-func (m *SqlToCql) query(original *rel.SqlSelect) (*ResultReader, error) {
+func (m *SqlToCql) queryRewrite(original *rel.SqlSelect) error {
 
 	//u.Debugf("%p  %s query:%s", m, m.tbl.Name, m.sel)
 	m.original = original
 
 	cf, ok := m.tbl.Context["cass_table"].(*gocql.TableMetadata)
 	if !ok {
-		return nil, fmt.Errorf("What, expected gocql.TableMetadata but got %T", m.tbl.Context["cass_table"])
+		return fmt.Errorf("What, expected gocql.TableMetadata but got %T", m.tbl.Context["cass_table"])
 	}
 	m.cf = cf
 
@@ -84,13 +85,15 @@ func (m *SqlToCql) query(original *rel.SqlSelect) (*ResultReader, error) {
 		limit = DefaultLimit
 	}
 
+	req.RewriteAsRawSelect()
+
 	if req.Where != nil {
 		u.Debugf("original vs new: \n%s\n%s", original.Where, req.Where)
 		m.whereIdents = make(map[string]bool)
 		w, err := m.walkWhereNode(req.Where.Expr)
 		if err != nil {
 			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.String(), err)
-			return nil, err
+			return err
 		}
 		req.Where = nil
 		if w != nil {
@@ -100,16 +103,31 @@ func (m *SqlToCql) query(original *rel.SqlSelect) (*ResultReader, error) {
 	}
 
 	// Obviously we aren't doing group-by
-	if req.GroupBy != nil {
+	if len(req.GroupBy) > 0 {
 		u.Debugf(" poly-filling groupby")
 		req.GroupBy = nil
 	}
 
-	u.Infof("%s", req)
+	if len(req.OrderBy) > 0 {
+		u.Debugf("orderby?")
+		ob := req.OrderBy
+		req.OrderBy = make(rel.Columns, 0, len(ob))
+		for _, c := range ob {
+			if c.Expr == nil {
+				u.Warnf("nil expr orderby %#v", c)
+			} else {
+				newOrderExpr, _ := m.walkOrderBy(c.Expr)
+				if newOrderExpr != nil {
+					c.Expr = newOrderExpr
+					u.Debugf("yay can orderby %s", c)
+					req.OrderBy = append(req.OrderBy, c)
+				}
+			}
+		}
+	}
 
-	resultReader := NewResultReader(m, req.String())
-	m.resp = resultReader
-	return resultReader, nil
+	u.Infof("%s", req)
+	return nil
 }
 
 // WalkSourceSelect An interface implemented by this connection allowing the planner
@@ -126,7 +144,7 @@ func (m *SqlToCql) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 func (m *SqlToCql) WalkExecSource(p *plan.Source) (exec.Task, error) {
 
 	//u.Debugf("%p WalkExecSource():  %T nil?%v %#v", m, p, p == nil, p)
-	//u.Debugf("m? %v", m == nil)
+	//u.Debugf("%p WalkExecSource()  %s", m, p.Stmt)
 
 	if p.Stmt == nil {
 		return nil, fmt.Errorf("Plan did not include Sql Statement?")
@@ -154,23 +172,19 @@ func (m *SqlToCql) WalkExecSource(p *plan.Source) (exec.Task, error) {
 					if pt.Id == partitionId {
 						//u.Debugf("partition: %s   %#v", partitionId, pt)
 						m.partition = pt
-						if pt.Left == "" {
-							//m.filter = bson.M{p.Tbl.Partition.Keys[0]: bson.M{"$lt": pt.Right}}
-						} else if pt.Right == "" {
-							//m.filter = bson.M{p.Tbl.Partition.Keys[0]: bson.M{"$gte": pt.Left}}
-						} else {
-
-						}
 					}
 				}
 			}
 		}
 	}
 
-	reader, err := m.query(p.Stmt.Source)
+	err := m.queryRewrite(p.Stmt.Source)
 	if err != nil {
 		return nil, nil
 	}
+
+	reader := NewResultReader(m)
+	m.resp = reader
 
 	// For aggregations, group-by, or limit clauses we will need to do final
 	// aggregation here in master as the reduce step
@@ -179,16 +193,39 @@ func (m *SqlToCql) WalkExecSource(p *plan.Source) (exec.Task, error) {
 		gbplan := plan.NewGroupBy(m.sel)
 		gb := exec.NewGroupByFinal(m.Ctx, gbplan)
 		reader.Add(gb)
+		m.needsPolyFill = true
 	}
 
 	if m.needsWherePolyFill {
 		wp := plan.NewWhere(m.sel)
 		wt := exec.NewWhere(m.Ctx, wp)
 		reader.Add(wt)
+		m.needsPolyFill = true
 	}
+
 	// do we need poly fill Having?
 	if m.sel.Having != nil {
 		u.Infof("needs HAVING polyfill")
+	}
+
+	if m.needsOrderByPolyFill {
+		u.Infof("adding order by poly fill")
+		op := plan.NewOrder(m.sel)
+		ot := exec.NewOrder(m.Ctx, op)
+		reader.Add(ot)
+		m.needsPolyFill = true
+	}
+
+	u.Infof("%p  needsPolyFill?%v  limit:%d ", m.sel, m.needsPolyFill, m.sel.Limit)
+	if m.needsPolyFill {
+		if m.sel.Limit > 0 {
+			// Since we are poly-filling we need to over-read
+			// because group-by's, order-by's, where poly-fills mean
+			// cass limits aren't valid from original statement
+			m.sel.Limit = 0
+			reader.Req.sel.Limit = 0
+			u.Warnf("%p setting limit up!!!!!! %v", m.sel, m.sel.Limit)
+		}
 	}
 
 	return reader, nil
@@ -487,4 +524,36 @@ func (m *SqlToCql) walkFilterBinary(node *expr.BinaryNode) (expr.Node, error) {
 		u.Warnf("not implemented: %s", node)
 	}
 	return nil, nil
+}
+
+func (m *SqlToCql) walkOrderBy(node expr.Node) (expr.Node, error) {
+	switch n := node.(type) {
+	case *expr.IdentityNode:
+		if m.canOrder(n) {
+			return node, nil
+		}
+	default:
+		m.needsOrderByPolyFill = true
+		u.Warnf("un-handled order clause expression type?  %T %#v", node, n)
+		//return fmt.Errorf("Not implemented node: %s", n)
+	}
+	return nil, nil
+}
+
+func (m *SqlToCql) canOrder(in *expr.IdentityNode) bool {
+
+	_, lhIdentityName, _ := in.LeftRight()
+	_, exists := m.tbl.FieldMap[lhIdentityName]
+	if !exists {
+		// Doesn't exist in cassandra? possibly json path?
+		return false
+	}
+	// if it is an identity lets make sure it is in parition or cluster key
+	if !m.isCassKey(lhIdentityName) {
+		m.needsOrderByPolyFill = true
+		u.Warnf("cannot use [%s] in ORDER BY due to not being part of key", in)
+		return false
+	}
+
+	return true
 }

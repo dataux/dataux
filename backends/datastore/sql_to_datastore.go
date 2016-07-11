@@ -46,7 +46,7 @@ type SqlToDatstore struct {
 	schema         *schema.SchemaSource
 	dsCtx          context.Context
 	dsClient       *datastore.Client
-	query          *datastore.Query
+	dsq            *datastore.Query
 	hasMultiValue  bool              // Multi-Value vs Single-Value aggs
 	hasSingleValue bool              // single value agg
 	partition      *schema.Partition // current partition for this request
@@ -71,7 +71,7 @@ func (m *SqlToDatstore) query(req *rel.SqlSelect) (*ResultReader, error) {
 
 	// Create our google data store query and we will walk
 	// our ast modifying it
-	m.query = datastore.NewQuery(m.tbl.NameOriginal)
+	m.dsq = datastore.NewQuery(m.tbl.NameOriginal)
 	var err error
 	m.sel = req
 	limit := req.Limit
@@ -108,11 +108,11 @@ func (m *SqlToDatstore) query(req *rel.SqlSelect) (*ResultReader, error) {
 			// We really need to look at any funcs?   walk this out
 			switch col.Order {
 			case "ASC":
-				m.query = m.query.Order(fmt.Sprintf("%q", col.Key()))
+				m.dsq = m.dsq.Order(fmt.Sprintf("%q", col.Key()))
 			case "DESC":
-				m.query = m.query.Order(fmt.Sprintf("-%q", col.Key()))
+				m.dsq = m.dsq.Order(fmt.Sprintf("-%q", col.Key()))
 			default:
-				m.query = m.query.Order(fmt.Sprintf("%q", col.Key()))
+				m.dsq = m.dsq.Order(fmt.Sprintf("%q", col.Key()))
 			}
 		}
 	}
@@ -125,7 +125,7 @@ func (m *SqlToDatstore) query(req *rel.SqlSelect) (*ResultReader, error) {
 
 func (m *SqlToDatstore) getEntity(req *rel.SqlSelect) (*Row, error) {
 
-	m.query = datastore.NewQuery(m.tbl.NameOriginal)
+	m.dsq = datastore.NewQuery(m.tbl.NameOriginal)
 	if req.Where != nil {
 		err := m.WalkWhereNode(req.Where.Expr)
 		if err != nil {
@@ -135,7 +135,7 @@ func (m *SqlToDatstore) getEntity(req *rel.SqlSelect) (*Row, error) {
 	}
 
 	var rows []*Row
-	keys, err := m.dsClient.GetAll(m.dsCtx, m.query, &rows)
+	keys, err := m.dsClient.GetAll(m.dsCtx, m.dsq, &rows)
 	if err != nil {
 		return nil, err
 	}
@@ -450,19 +450,19 @@ func (m *SqlToDatstore) walkFilterBinary(node *expr.BinaryNode) error {
 	case lex.TokenLogicOr:
 		return fmt.Errorf("DataStore does not implement OR: %v", node.String())
 	case lex.TokenEqual, lex.TokenEqualEqual:
-		//u.Debugf("query: %p", m.query)
-		m.query = m.query.Filter(fmt.Sprintf("%q =", lhval.ToString()), rhval.Value())
+		//u.Debugf("dsq: %p", m.dsq)
+		m.dsq = m.dsq.Filter(fmt.Sprintf("%q =", lhval.ToString()), rhval.Value())
 	case lex.TokenNE:
 		// WARNING:  datastore only allows 1, warn?
-		m.query = m.query.Filter(fmt.Sprintf("%q !=", lhval.ToString()), rhval.Value())
+		m.dsq = m.dsq.Filter(fmt.Sprintf("%q !=", lhval.ToString()), rhval.Value())
 	case lex.TokenLE:
-		m.query = m.query.Filter(fmt.Sprintf("%q <=", lhval.ToString()), rhval.Value())
+		m.dsq = m.dsq.Filter(fmt.Sprintf("%q <=", lhval.ToString()), rhval.Value())
 	case lex.TokenLT:
-		m.query = m.query.Filter(fmt.Sprintf("%q <", lhval.ToString()), rhval.Value())
+		m.dsq = m.dsq.Filter(fmt.Sprintf("%q <", lhval.ToString()), rhval.Value())
 	case lex.TokenGE:
-		m.query = m.query.Filter(fmt.Sprintf("%q >=", lhval.ToString()), rhval.Value())
+		m.dsq = m.dsq.Filter(fmt.Sprintf("%q >=", lhval.ToString()), rhval.Value())
 	case lex.TokenGT:
-		m.query = m.query.Filter(fmt.Sprintf("%q >", lhval.ToString()), rhval.Value())
+		m.dsq = m.dsq.Filter(fmt.Sprintf("%q >", lhval.ToString()), rhval.Value())
 	case lex.TokenLike:
 		// Ancestors support some type of prefix query?
 		// this only works on String columns?
@@ -471,7 +471,7 @@ func (m *SqlToDatstore) walkFilterBinary(node *expr.BinaryNode) error {
 			// Need to polyFill?  Or Error
 			return fmt.Errorf("Google Datastore does not support % prefix", lhs)
 		}
-		m.query = m.query.Filter(fmt.Sprintf("%q >=", lhs), rhval.Value())
+		m.dsq = m.dsq.Filter(fmt.Sprintf("%q >=", lhs), rhval.Value())
 	default:
 		u.Warnf("not implemented: %v", node.Operator)
 		return fmt.Errorf("not implemented %v", node.String())
