@@ -169,7 +169,7 @@ func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
 	case len(testSpec.Exec) > 0:
 		result, err := dbx.Exec(testSpec.Exec)
 		assert.Tf(t, err == nil, "%v", err)
-		//u.Infof("result: %Ev", result)
+		u.Infof("result: %#v", result)
 		if testSpec.ExpectRowCt > -1 {
 			affected, err := result.RowsAffected()
 			assert.Tf(t, err == nil, "%v", err)

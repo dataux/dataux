@@ -80,7 +80,11 @@ CREATE TABLE IF NOT EXISTS event (
   jsondata text,
   PRIMARY KEY ((date, url), ts)
 );
-`}
+`,
+	`truncate event`,
+	`truncate user`,
+	`truncate article`,
+}
 
 func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
 	ctx.Schema = testmysql.Schema
@@ -460,25 +464,45 @@ func TestSelectOrderBy(t *testing.T) {
 
 func TestMutationInsertSimple(t *testing.T) {
 	validateQuerySpec(t, tu.QuerySpec{
+		Sql:             "select id, name from user;",
+		ExpectRowCt:     3,
+		ValidateRowData: func() {},
+	})
+	validateQuerySpec(t, tu.QuerySpec{
 		Exec:            `INSERT INTO user (id, name, deleted, created, updated) VALUES ("user814", "test_name",false, now(), now());`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
+	})
+	validateQuerySpec(t, tu.QuerySpec{
+		Exec: `
+		INSERT INTO user (id, name, deleted, created, updated) 
+		VALUES 
+			("user815", "test_name2",false, now(), now()),
+			("user816", "test_name3",false, now(), now());
+		`,
+		ValidateRowData: func() {},
+		ExpectRowCt:     2,
+	})
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:             "select id, name from user;",
+		ExpectRowCt:     6,
+		ValidateRowData: func() {},
 	})
 }
 
 func TestMutationDeleteSimple(t *testing.T) {
 	validateQuerySpec(t, tu.QuerySpec{
-		Exec:            `INSERT INTO user (id, name, deleted, created, updated) VALUES ("user814", "test_name",false, now(), now());`,
+		Exec:            `INSERT INTO user (id, name, deleted, created, updated) VALUES ("user817", "test_name",false, now(), now());`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
 	})
 	validateQuerySpec(t, tu.QuerySpec{
-		Exec:            `DELETE FROM user WHERE id = "user814"`,
+		Exec:            `DELETE FROM user WHERE id = "user817"`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
 	})
 	validateQuerySpec(t, tu.QuerySpec{
-		Exec:            `SELECT * FROM user WHERE id = "user814"`,
+		Exec:            `SELECT * FROM user WHERE id = "user817"`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     0,
 	})

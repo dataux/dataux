@@ -143,6 +143,7 @@ func (c *Conn) Run() {
 			}
 
 			if err != mysql.ErrBadConn {
+				u.Warnf("writing error %v", err)
 				c.WriteError(err)
 			}
 		}

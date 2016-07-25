@@ -3,6 +3,11 @@
 
 
 ```
+# log onto container to get a cqlsh
+docker run -it --rm --net container:lioenv_cass_1 cassandra:2 cqlsh
+
+INSERT INTO user (id, name, deleted, created, updated) VALUES ('user814', 'test_name', false, '2016-07-24','2016-07-24 23:46:01')
+
 cqlsh:datauxtest> select * from system.schema_columnfamilies WHERE keyspace_name = "datauxtest";
 SyntaxException: <ErrorMessage code=2000 [Syntax error in CQL query] message="line 1:65 no viable alternative at input 'datauxtest' (...system.schema_columnfamilies WHERE keyspace_name = ["datauxtes]...)">
 

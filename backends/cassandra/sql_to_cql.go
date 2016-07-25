@@ -1,4 +1,4 @@
-// Cassandra implements a data source (backend) to allow
+// package Cassandra implements a data source (backend) to allow
 // dataux to query cassandra via sql
 package cassandra
 
@@ -255,25 +255,22 @@ func (m *SqlToCql) Put(ctx context.Context, key schema.Key, val interface{}) (sc
 		return nil, fmt.Errorf("Must have schema for updates in cassandra")
 	}
 
-	// TODO:
-	// 1) rewrite statement
-	// 2) move to ?? some place more like a prepared statement
-
 	cols := m.tbl.Columns()
 	if m.stmt == nil {
 		return nil, fmt.Errorf("Must have stmts to infer columns ")
 	}
+	upsertCql := ""
 	switch q := m.stmt.(type) {
 	case *rel.SqlInsert:
 		cols = q.ColumnNames()
-		u.Debugf("nice, columns %v", cols)
+		upsertCql = q.RewriteAsPrepareable(1, '?')
+		//u.Debugf("prepared:  \n%s", upsertCql)
+	default:
+		return nil, fmt.Errorf("%T not yet supported ", q)
 	}
 
 	var row []driver.Value
 	colNames := make(map[string]int, len(cols))
-
-	// TODO:  rewrite insert/update"
-	upsertCql := m.stmt.String()
 
 	for i, colName := range cols {
 		colNames[colName] = i
@@ -283,29 +280,25 @@ func (m *SqlToCql) Put(ctx context.Context, key schema.Key, val interface{}) (sc
 	switch valT := val.(type) {
 	case []driver.Value:
 		row = valT
-		u.Infof("row len=%v   fieldlen=%v col len=%v", len(row), len(m.tbl.Fields), len(cols))
+		//u.Debugf("row:  %v", row)
+		//u.Debugf("row len=%v   fieldlen=%v col len=%v", len(row), len(m.tbl.Fields), len(cols))
 		for _, f := range m.tbl.Fields {
 			for i, colName := range cols {
 				if f.Name == colName {
 					if len(row) <= i-1 {
 						u.Errorf("bad column count?  %d vs %d  col: %+v", len(row), i, f)
 					} else {
-						u.Debugf("col info?  %d vs %d  col: %+v", len(row), i, f)
 						switch val := row[i].(type) {
 						case string, []byte, int, int64, bool, time.Time:
-							u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, row[i], row[i])
-							//props = append(props, datastore.Property{Name: f.Name, Value: val})
 							curRow[i] = val
 						case []value.Value:
 							by, err := json.Marshal(val)
 							if err != nil {
 								u.Errorf("Error converting field %v  err=%v", val, err)
 							}
-							u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, string(by), by)
-							//props = append(props, datastore.Property{Name: f.Name, Value: by})
+							//u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, string(by), by)
 						default:
 							u.Warnf("unsupported conversion: %T  %v", val, val)
-							//props = append(props, datastore.Property{Name: f.Name, Value: val})
 						}
 					}
 					break
@@ -317,7 +310,6 @@ func (m *SqlToCql) Put(ctx context.Context, key schema.Key, val interface{}) (sc
 		for i, f := range m.tbl.Fields {
 			for colName, driverVal := range valT {
 				if f.Name == colName {
-					//u.Debugf("PUT field: i=%d col=%s val=%v  T:%T cur:%v", i, colName, driverVal, driverVal, curRow[i])
 					switch val := driverVal.(type) {
 					case string, []byte, int, int64, bool:
 						curRow[i] = val
@@ -336,9 +328,6 @@ func (m *SqlToCql) Put(ctx context.Context, key schema.Key, val interface{}) (sc
 					break
 				}
 			}
-			//u.Infof(" %v curRow? %d %#v", f.Name, len(curRow), curRow)
-			//u.Debugf("%d writing %-10s %T\t%v", i, f.Name, curRow[i], curRow[i])
-			//props = append(props, datastore.Property{Name: f.Name, Value: curRow[i]})
 		}
 
 	default:
@@ -346,13 +335,11 @@ func (m *SqlToCql) Put(ctx context.Context, key schema.Key, val interface{}) (sc
 		return nil, fmt.Errorf("Was not []driver.Value?  %T", val)
 	}
 
-	u.Debugf("%s", upsertCql)
 	err := m.s.session.Query(upsertCql, curRow...).Exec()
 	if err != nil {
 		u.Errorf("could not insert: %v", err)
 		return nil, err
 	}
-	u.Infof("err %v", err)
 	newKey := datasource.NewKeyCol("id", "fixme")
 	return newKey, nil
 }
@@ -363,14 +350,28 @@ func (m *SqlToCql) PutMulti(ctx context.Context, keys []schema.Key, src interfac
 
 // Delete delete by row
 func (m *SqlToCql) Delete(key driver.Value) (int, error) {
+	u.Warnf("hm, in delete?  %v", key)
 	return 0, schema.ErrNotImplemented
 }
 
 // DeleteExpression - delete by expression (where clause)
 //  - For where columns contained in Partition Keys we can push to cassandra
 //  - for others we might have to do a select -> delete
-func (m *SqlToCql) DeleteExpression(where expr.Node) (int, error) {
-	return 0, schema.ErrNotImplemented
+func (m *SqlToCql) DeleteExpression(p interface{}, where expr.Node) (int, error) {
+	u.Warnf("hm, in delete?  %v   %T", where, p)
+	pd, ok := p.(*plan.Delete)
+	if !ok {
+		return 0, plan.ErrNoPlan
+	}
+	cql := fmt.Sprintf("DELETE FROM %s WHERE %s", pd.Stmt.Table, where)
+	err := m.s.session.Query(cql).Exec()
+	if err != nil {
+		u.Errorf("could not delete: %v", err)
+		return 0, err
+	}
+	// Wow, we have serious problems here because cql/cassandra doesn't
+	// tell us how many were deleted.  hm
+	return 1, nil
 }
 
 func (m *SqlToCql) isCassKey(name string) bool {
