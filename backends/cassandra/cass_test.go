@@ -146,6 +146,7 @@ func loadTestData(t *testing.T) {
 		}
 		err = sess.Query("CREATE INDEX IF NOT EXISTS ON article (category);").Exec()
 		assert.T(t, err == nil)
+		session = sess
 
 		/*
 		   type Article struct {
@@ -491,10 +492,28 @@ func TestMutationInsertSimple(t *testing.T) {
 }
 
 func TestMutationDeleteSimple(t *testing.T) {
+	data := struct {
+		Id, Name string
+	}{}
+	ct := 0
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select id, name from user;",
+		ExpectRowCt: -1, // don't evaluate row count
+		ValidateRowData: func() {
+			ct++
+			u.Debugf("data: %+v  ct:%v", data, ct)
+		},
+		RowData: &data,
+	})
 	validateQuerySpec(t, tu.QuerySpec{
 		Exec:            `INSERT INTO user (id, name, deleted, created, updated) VALUES ("user817", "test_name",false, now(), now());`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
+	})
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:             "select id, name from user;",
+		ExpectRowCt:     ct + 1,
+		ValidateRowData: func() {},
 	})
 	validateQuerySpec(t, tu.QuerySpec{
 		Exec:            `DELETE FROM user WHERE id = "user817"`,
@@ -502,9 +521,12 @@ func TestMutationDeleteSimple(t *testing.T) {
 		ExpectRowCt:     1,
 	})
 	validateQuerySpec(t, tu.QuerySpec{
-		Exec:            `SELECT * FROM user WHERE id = "user817"`,
-		ValidateRowData: func() {},
-		ExpectRowCt:     0,
+		Exec:        `SELECT * FROM user WHERE id = "user817"`,
+		ExpectRowCt: 0,
+	})
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select id, name from user;",
+		ExpectRowCt: ct,
 	})
 }
 

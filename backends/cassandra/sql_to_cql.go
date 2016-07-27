@@ -296,7 +296,7 @@ func (m *SqlToCql) Put(ctx context.Context, key schema.Key, val interface{}) (sc
 							if err != nil {
 								u.Errorf("Error converting field %v  err=%v", val, err)
 							}
-							//u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, string(by), by)
+							u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, string(by), by)
 						default:
 							u.Warnf("unsupported conversion: %T  %v", val, val)
 						}
@@ -358,12 +358,15 @@ func (m *SqlToCql) Delete(key driver.Value) (int, error) {
 //  - For where columns contained in Partition Keys we can push to cassandra
 //  - for others we might have to do a select -> delete
 func (m *SqlToCql) DeleteExpression(p interface{}, where expr.Node) (int, error) {
-	u.Warnf("hm, in delete?  %v   %T", where, p)
+	//u.Warnf("hm, in delete?  %v   %T", where, p)
 	pd, ok := p.(*plan.Delete)
 	if !ok {
 		return 0, plan.ErrNoPlan
 	}
-	cql := fmt.Sprintf("DELETE FROM %s WHERE %s", pd.Stmt.Table, where)
+	dw := expr.NewDialectWriter('\'', '"')
+	where.WriteDialect(dw)
+	cql := fmt.Sprintf("DELETE FROM %s WHERE %s", pd.Stmt.Table, dw.String())
+	u.Warnf("about to run:  %s", cql)
 	err := m.s.session.Query(cql).Exec()
 	if err != nil {
 		u.Errorf("could not delete: %v", err)

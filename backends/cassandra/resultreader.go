@@ -161,11 +161,9 @@ func (m *ResultReader) Run() error {
 		//u.Debugf("vals:  %v", row.Vals)
 	}
 	err := iter.Close()
-
-	if err != nil {
-		u.Errorf("could not close iter err:%v", err)
-		return err
-	}
+	//if err != nil {
+	//u.Errorf("could not close iter %T err:%v", err, err)
+	//}
 	u.Infof("finished query, took: %v for %v rows err:%v", time.Now().Sub(queryStart), m.Total, err)
-	return err
+	return nil
 }
