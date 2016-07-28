@@ -8,6 +8,7 @@ import (
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
+	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/value"
 )
@@ -16,6 +17,10 @@ var (
 	// Ensure we implement TaskRunner
 	_ exec.TaskRunner = (*ResultReader)(nil)
 )
+
+func NewCassDialect() expr.DialectWriter {
+	return expr.NewDialectWriter('\'', '"')
+}
 
 // ResultReader implements result paging, reading
 type ResultReader struct {
@@ -118,9 +123,14 @@ func (m *ResultReader) Run() error {
 	if m.Req.sel.Limit > 0 {
 		limit = m.Req.sel.Limit
 	}
-	u.Debugf("%p cass limit: %d sel:%s", m.Req.sel, limit, m.Req.sel)
+
+	sel := m.Req.Sel
+
+	u.Debugf("%p cass limit: %d sel:%s", m.Req.sel, limit, sel)
 	queryStart := time.Now()
-	cassQry := m.Req.s.session.Query(m.Req.sel.String()).PageSize(limit)
+
+	cqlQuery := sel.WriteDialect(NewCassDialect())
+	cassQry := m.Req.s.session.Query().PageSize(limit)
 	iter := cassQry.Iter()
 
 	for {
@@ -147,7 +157,7 @@ func (m *ResultReader) Run() error {
 			}
 		}
 
-		//u.Debugf("new row ct: %v cols:%v vals:%v", m.Total, colNames, vals)
+		u.Debugf("new row ct: %v cols:%v vals:%v", m.Total, colNames, vals)
 		//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
 		msg := datasource.NewSqlDriverMessageMap(uint64(m.Total), vals, colNames)
 		m.Total++

@@ -539,41 +539,39 @@ func TestMutationUpdateSimple(t *testing.T) {
 		Created time.Time
 		Updated time.Time
 	}{}
-	//u.Warnf("about to insert")
 	validateQuerySpec(t, tu.QuerySpec{
 		Exec: `INSERT INTO user 
 							(id, name, deleted, created, updated, roles) 
 						VALUES 
-							("user815", "test_name", false, todate("2014/07/04"), now(), ["admin","sysadmin"]);`,
+							("update123", "test_name", false, todate("2014/07/04"), now(), ["admin","sysadmin"]);`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
 	})
-	//u.Warnf("about to test post update")
-	//return
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         `select id, name, deleted, roles, created, updated from user WHERE id = "user815"`,
+		Sql:         `select id, name, deleted, roles, created, updated from user WHERE id = "update123"`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
-			assert.Tf(t, data.Id == "user815", "%v", data)
+			assert.Tf(t, data.Id == "update123", "%v", data)
 			assert.Tf(t, data.Name == "test_name", "%v", data)
 			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
 		},
 		RowData: &data,
 	})
+	return
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         `SELECT id, name, deleted, roles, created, updated FROM user WHERE id = "user815"`,
+		Sql:         `SELECT id, name, deleted, roles, created, updated FROM user WHERE id = "update123"`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			u.Infof("%v", data)
-			assert.Tf(t, data.Id == "user815", "%v", data)
+			assert.Tf(t, data.Id == "update123", "%v", data)
 			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
 		},
 		RowData: &data,
 	})
 	//u.Warnf("about to update")
 	validateQuerySpec(t, tu.QuerySpec{
-		Exec:            `UPDATE user SET name = "was_updated", [deleted] = true WHERE id = "user815"`,
+		Exec:            `UPDATE user SET name = "was_updated", [deleted] = true WHERE id = "update123"`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
 	})
