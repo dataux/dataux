@@ -292,11 +292,26 @@ func (m *SqlToCql) Put(ctx context.Context, key schema.Key, val interface{}) (sc
 						case string, []byte, int, int64, bool, time.Time:
 							curRow[i] = val
 						case []value.Value:
-							by, err := json.Marshal(val)
-							if err != nil {
-								u.Errorf("Error converting field %v  err=%v", val, err)
+							switch f.Type {
+							case value.StringsType:
+								vals := make([]string, len(val))
+								for si, sv := range val {
+									vals[si] = sv.ToString()
+								}
+								curRow[i] = vals
+
+							default:
+								u.Warnf("what type? %s", f.Type)
+								by, err := json.Marshal(val)
+								if err != nil {
+									u.Errorf("Error converting field %v  err=%v", val, err)
+									curRow[i] = ""
+								} else {
+									curRow[i] = string(by)
+								}
+								u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, string(by), by)
 							}
-							u.Debugf("PUT field: i=%d col=%s row[i]=%v  T:%T", i, colName, string(by), by)
+
 						default:
 							u.Warnf("unsupported conversion: %T  %v", val, val)
 						}
@@ -335,6 +350,7 @@ func (m *SqlToCql) Put(ctx context.Context, key schema.Key, val interface{}) (sc
 		return nil, fmt.Errorf("Was not []driver.Value?  %T", val)
 	}
 
+	//u.Debugf("writing %s \n%v", upsertCql, curRow)
 	err := m.s.session.Query(upsertCql, curRow...).Exec()
 	if err != nil {
 		u.Errorf("could not insert: %v", err)

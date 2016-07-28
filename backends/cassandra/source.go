@@ -189,15 +189,31 @@ func (m *Source) loadSchema() error {
 			case gocql.TypeDate, gocql.TypeTimestamp:
 				f = schema.NewFieldBase(colName, value.TimeType, 64, "datetime")
 			case gocql.TypeSet:
-				f = schema.NewFieldBase(colName, value.ByteSliceType, 256, "[]byte")
-				switch col.Type.Type() {
-				case gocql.TypeVarchar, gocql.TypeText:
-					f.Type = value.StringsType
-					f.NativeType = value.StringsType
-				case gocql.TypeInt, gocql.TypeBigInt, gocql.TypeTinyInt:
-					f.NativeType = value.IntType
+				switch nt := col.Type.(type) {
+				case gocql.CollectionType:
+					//u.Warnf("SET TYPE CASSANDRA Not handled very well?!  \n%v  \n%#v \n%#v", nt.Type(), nt, col)
+					switch nt.Elem.Type() {
+					case gocql.TypeText, gocql.TypeVarchar:
+						f = schema.NewFieldBase(colName, value.StringsType, 256, "[]string")
+					case gocql.TypeInt, gocql.TypeBigInt, gocql.TypeTinyInt:
+						f = schema.NewFieldBase(colName, value.SliceValueType, 256, "[]int")
+						f.NativeType = value.IntType
+					default:
+						u.Warnf("SET TYPE CASSANDRA Not handled very well?!  %v  \n%v", nt.Type(), nt.NativeType.Type())
+					}
 				}
-				u.Warnf("SET TYPE CASSANDRA Not handled very well?!  %v", col.Type.Type())
+				/*
+					switch col.Type.(type) {
+					case gocql.TypeVarchar, gocql.TypeText:
+						f = schema.NewFieldBase(colName, value.StringsType, 256, "[]string")
+					case gocql.TypeInt, gocql.TypeBigInt, gocql.TypeTinyInt:
+						f = schema.NewFieldBase(colName, value.SliceValueType, 256, "[]int")
+						f.NativeType = value.IntType
+					default:
+						u.Warnf("SET TYPE CASSANDRA Not handled very well?!  %#v  \n%#v", col.Type, col)
+					}
+				*/
+
 			case gocql.TypeMap:
 
 				switch col.Type.Type() {
