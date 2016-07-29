@@ -124,13 +124,15 @@ func (m *ResultReader) Run() error {
 		limit = m.Req.sel.Limit
 	}
 
-	sel := m.Req.Sel
+	sel := m.Req.sel
 
 	u.Debugf("%p cass limit: %d sel:%s", m.Req.sel, limit, sel)
 	queryStart := time.Now()
 
-	cqlQuery := sel.WriteDialect(NewCassDialect())
-	cassQry := m.Req.s.session.Query().PageSize(limit)
+	cassWriter := NewCassDialect()
+	sel.WriteDialect(cassWriter)
+	cqlQuery := cassWriter.String()
+	cassQry := m.Req.s.session.Query(cqlQuery).PageSize(limit)
 	iter := cassQry.Iter()
 
 	for {

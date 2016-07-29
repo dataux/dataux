@@ -506,7 +506,10 @@ func TestMutationDeleteSimple(t *testing.T) {
 		RowData: &data,
 	})
 	validateQuerySpec(t, tu.QuerySpec{
-		Exec:            `INSERT INTO user (id, name, deleted, created, updated) VALUES ("user817", "test_name",false, now(), now());`,
+		Exec: `
+			INSERT INTO user (id, name, deleted, created, updated) 
+			VALUES 
+				("deleteuser123", "test_name",false, now(), now());`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
 	})
@@ -516,12 +519,12 @@ func TestMutationDeleteSimple(t *testing.T) {
 		ValidateRowData: func() {},
 	})
 	validateQuerySpec(t, tu.QuerySpec{
-		Exec:            `DELETE FROM user WHERE id = "user817"`,
+		Exec:            `DELETE FROM user WHERE id = "deleteuser123"`,
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
 	})
 	validateQuerySpec(t, tu.QuerySpec{
-		Exec:        `SELECT * FROM user WHERE id = "user817"`,
+		Exec:        `SELECT * FROM user WHERE id = "deleteuser123"`,
 		ExpectRowCt: 0,
 	})
 	validateQuerySpec(t, tu.QuerySpec{
