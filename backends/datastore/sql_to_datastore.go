@@ -370,7 +370,7 @@ func (m *SqlToDatstore) Delete(key driver.Value) (int, error) {
 	}
 	return 1, nil
 }
-func (m *SqlToDatstore) DeleteExpression(where expr.Node) (int, error) {
+func (m *SqlToDatstore) DeleteExpression(p interface{}, where expr.Node) (int, error) {
 	delKey := datasource.KeyFromWhere(where)
 	if delKey != nil {
 		return m.Delete(delKey.Key())
