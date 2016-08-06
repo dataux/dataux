@@ -40,7 +40,7 @@ cd $GOPATH/src/github.com/sony/sonyflake && git checkout master && git pull
 cd $GOPATH/src/golang.org/x/net && git checkout master && git pull
 cd $GOPATH/src/golang.org/x/oauth2 && git checkout master && git pull
 cd $GOPATH/src/google.golang.org/api && git checkout master && git pull
-cd $GOPATH/src/google.golang.org/cloud && git checkout master && git pull
+cd $GOPATH/src/cloud.google.com/go/ && git checkout master && git pull
 cd $GOPATH/src/google.golang.org/grpc && git checkout master && git pull
 # this one is a pain, don't update manually, c headers?
 #cd $GOPATH/src/gopkg.in/mgo.v2 && git checkout master && git pull

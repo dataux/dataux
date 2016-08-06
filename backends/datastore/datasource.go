@@ -10,12 +10,12 @@ import (
 	"sync"
 	"time"
 
+	"cloud.google.com/go/datastore"
 	u "github.com/araddon/gou"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2/jwt"
-	"google.golang.org/cloud"
-	"google.golang.org/cloud/datastore"
+	"google.golang.org/api/option"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/rel"
@@ -147,7 +147,10 @@ func (m *GoogleDSDataSource) connect() error {
 	m.authConfig = conf
 
 	ctx := context.Background()
-	client, err := datastore.NewClient(ctx, m.cloudProjectId, cloud.WithTokenSource(conf.TokenSource(ctx)))
+
+	//client, err := datastore.NewClient(ctx, "project-id", option.WithTokenSource(conf.TokenSource(ctx)))
+	client, err := datastore.NewClient(ctx, m.cloudProjectId, option.WithTokenSource(conf.TokenSource(ctx)))
+	//client, err := datastore.NewClient(ctx, m.cloudProjectId, google.WithTokenSource(conf.TokenSource(ctx)))
 	if err != nil {
 		u.Errorf("could not create google datastore client: project:%s jwt:%s  err=%v", m.cloudProjectId, m.jwtFile, err)
 		return err
