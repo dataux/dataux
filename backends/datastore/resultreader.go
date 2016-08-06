@@ -4,8 +4,8 @@ import (
 	"database/sql/driver"
 	"time"
 
+	"cloud.google.com/go/datastore"
 	u "github.com/araddon/gou"
-	"google.golang.org/cloud/datastore"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"

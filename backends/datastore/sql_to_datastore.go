@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/datastore"
 	u "github.com/araddon/gou"
 	"golang.org/x/net/context"
-	"google.golang.org/cloud/datastore"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
@@ -370,7 +370,7 @@ func (m *SqlToDatstore) Delete(key driver.Value) (int, error) {
 	}
 	return 1, nil
 }
-func (m *SqlToDatstore) DeleteExpression(p interface{}, where expr.Node) (int, error) {
+func (m *SqlToDatstore) DeleteExpression(pln interface{}, where expr.Node) (int, error) {
 	delKey := datasource.KeyFromWhere(where)
 	if delKey != nil {
 		return m.Delete(delKey.Key())

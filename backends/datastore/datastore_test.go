@@ -12,14 +12,14 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/datastore"
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
-	"google.golang.org/cloud"
-	"google.golang.org/cloud/datastore"
+	"google.golang.org/api/option"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/plan"
@@ -243,9 +243,10 @@ func loadAuth(jsonKey []byte) (context.Context, *datastore.Client) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	//ctx := cloud.NewContext(*gds.GoogleProject, conf.Client(oauth2.NoContext))
 	ctx := context.Background()
-	client, err := datastore.NewClient(ctx, *gds.GoogleProject, cloud.WithTokenSource(conf.TokenSource(ctx)))
+	//client, err := datastore.NewClient(ctx, *gds.GoogleProject, cloud.WithTokenSource(conf.TokenSource(ctx)))
+
+	client, err := datastore.NewClient(ctx, *gds.GoogleProject, option.WithTokenSource(conf.TokenSource(ctx)))
 	if err != nil {
 		panic(err.Error())
 	}
