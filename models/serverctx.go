@@ -17,8 +17,8 @@ import (
 type ServerCtx struct {
 	// The dataux server config info on schema, backends, frontends, etc
 	Config *Config
-	// The underlying qlbridge schema holds info about the
-	//  available datasource's
+
+	// The underlying qlbridge schema holds info about the available datasource's
 	Reg *datasource.Registry
 	// Grid is our real-time multi-node coordination and messaging system
 	Grid *planner.Server
@@ -48,7 +48,11 @@ func (m *ServerCtx) Init() error {
 	planner.GridConf.EtcdServers = m.Config.Etcd
 
 	// how many worker nodes?
-	m.Grid = planner.NewServerGrid(2, m.Reg)
+	if m.Config.WorkerCt == 0 {
+		m.Config.WorkerCt = 2
+	}
+
+	m.Grid = planner.NewServerGrid(m.Config.WorkerCt, m.Reg)
 
 	return nil
 }

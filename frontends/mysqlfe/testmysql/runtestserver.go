@@ -113,6 +113,7 @@ sources : [
     settings : {
       type             : localfs
       path             : "tables/"
+      localpath        : "tables/"
       format           : "csv"
     }
   }

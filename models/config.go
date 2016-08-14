@@ -17,7 +17,6 @@ func LoadConfigFromFile(filename string) (*Config, error) {
 	if _, err = confl.Decode(string(confBytes), &c); err != nil {
 		return nil, err
 	}
-	//u.Debug(string(confBytes))
 	return &c, nil
 }
 
@@ -39,6 +38,7 @@ func LoadConfig(conf string) (*Config, error) {
 //   5) nats,etcd coordinators
 type Config struct {
 	SupressRecover bool                   `json:"supress_recover"` // do we recover?
+	WorkerCt       int                    `json:"worker_ct"`       // 4 how many worker nodes on this instance
 	LogLevel       string                 `json:"log_level"`       // [debug,info,error,]
 	Etcd           []string               `json:"etcd"`            // list of etcd servers http://127.0.0.1:2379,http://127.0.0.1:2380
 	Nats           []string               `json:"nats"`            // list of nats servers http://127.0.0.1:4222,http://127.0.0.1:4223

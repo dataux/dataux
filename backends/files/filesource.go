@@ -365,6 +365,7 @@ func createConfStore(ss *schema.SchemaSource) (cloudstorage.Store, error) {
 	if ss == nil || ss.Conf == nil {
 		return nil, fmt.Errorf("No config info for files source")
 	}
+
 	u.Debugf("json conf:\n%s", ss.Conf.Settings.PrettyJson())
 	cloudstorage.LogConstructor = func(prefix string) logging.Logger {
 		return logging.NewStdLogger(true, logging.DEBUG, prefix)
@@ -396,7 +397,7 @@ func createConfStore(ss *schema.SchemaSource) (cloudstorage.Store, error) {
 		c := cloudstorage.CloudStoreContext{
 			LogggingContext: "localfiles",
 			TokenSource:     cloudstorage.LocalFileSource,
-			LocalFS:         conf.String("localpath"),
+			LocalFS:         conf.String("path"),
 			TmpDir:          "/tmp/localcache",
 		}
 		if c.LocalFS == "" {
