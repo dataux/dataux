@@ -203,7 +203,7 @@ func (m *GoogleDSDataSource) selectQuery(stmt *rel.SqlSelect) (*ResultReader, er
 
 	sqlDs := NewSqlToDatstore(tbl, m.dsClient, m.dsCtx)
 	//u.Debugf("SqlToDatstore: %#v", sqlDs)
-	resp, err := sqlDs.Query(stmt)
+	resp, err := sqlDs.query(stmt)
 	if err != nil {
 		u.Errorf("Google datastore query interpreter failed: %v", err)
 		return nil, err
@@ -278,12 +278,6 @@ func (m *GoogleDSDataSource) loadTableSchema(tableLower, tableOriginal string) (
 		return tbl, nil
 	}
 
-	/*
-		- Datastore keeps list of all indexed properties available
-		- then we will need to ?? sample some others?
-		TODO:
-			- Need to recurse through enough records to get good idea of types
-	*/
 	u.Debugf("loadTableSchema lower:%q original:%q", tableLower, tableOriginal)
 	tbl = schema.NewTable(tableOriginal, m.schema)
 	colNames := make([]string, 0)
@@ -294,64 +288,45 @@ func (m *GoogleDSDataSource) loadTableSchema(tableLower, tableOriginal string) (
 	for _, row := range props {
 
 		for _, p := range row.props {
-			//u.Warnf("%#v ", p)
 			colName := strings.ToLower(p.Name)
 
 			if tbl.HasField(colName) {
 				continue
 			}
 			//u.Debugf("%d found col: %s %T=%v", i, colName, p.Value, p.Value)
+			var f *schema.Field
 			switch val := p.Value.(type) {
 			case *datastore.Key:
-				//u.Debugf("found datastore.Key: %v='%#v'", colName, val)
-				tbl.AddField(schema.NewFieldBase(p.Name, value.StringType, 24, "Key"))
-				//tbl.AddValues([]driver.Value{p.Name, "string", "NO", "PRI", "Key", ""})
+				f = schema.NewFieldBase(p.Name, value.StringType, 24, "Key")
 			case string:
-				//u.Debugf("found property.Value string: %v='%#v'", colName, val)
-				tbl.AddField(schema.NewFieldBase(colName, value.StringType, 32, "string"))
-				//tbl.AddValues([]driver.Value{colName, "string", "NO", "", "", "string"})
+				f = schema.NewFieldBase(colName, value.StringType, 256, "string")
 			case int:
-				//u.Debugf("found int: %v='%v'", colName, val)
-				tbl.AddField(schema.NewFieldBase(colName, value.IntType, 32, "int"))
-				//tbl.AddValues([]driver.Value{colName, "int", "NO", "", "", "int"})
+				f = schema.NewFieldBase(colName, value.IntType, 32, "int")
 			case int64:
-				//u.Debugf("found int64: %v='%v'", colName, val)
-				tbl.AddField(schema.NewFieldBase(colName, value.IntType, 32, "long"))
-				//tbl.AddValues([]driver.Value{colName, "long", "NO", "", "", "long"})
+				f = schema.NewFieldBase(colName, value.IntType, 64, "long")
 			case float64:
-				//u.Debugf("found float64: %v='%v'", colName, val)
-				tbl.AddField(schema.NewFieldBase(colName, value.NumberType, 32, "float64"))
-				//tbl.AddValues([]driver.Value{colName, "float64", "NO", "", "", "float64"})
+				f = schema.NewFieldBase(colName, value.NumberType, 64, "float64")
 			case bool:
-				//u.Debugf("found string: %v='%v'", colName, val)
-				tbl.AddField(schema.NewFieldBase(colName, value.BoolType, 1, "bool"))
-				//tbl.AddValues([]driver.Value{colName, "bool", "NO", "", "", "bool"})
+				f = schema.NewFieldBase(colName, value.BoolType, 1, "bool")
 			case time.Time:
-				//u.Debugf("found time.Time: %v='%v'", colName, val)
-				tbl.AddField(schema.NewFieldBase(colName, value.TimeType, 32, "datetime"))
-				//tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
-			// case *time.Time: // datastore doesn't allow pointers
-			// 	//u.Debugf("found time.Time: %v='%v'", colName, val)
-			// 	tbl.AddField(schema.NewFieldBase(colName, value.TimeType, 32, "datetime"))
-			// 	tbl.AddValues([]driver.Value{colName, "datetime", "NO", "", "", "datetime"})
+				f = schema.NewFieldBase(colName, value.TimeType, 32, "datetime")
 			case []uint8:
-				tbl.AddField(schema.NewFieldBase(colName, value.ByteSliceType, 256, "[]byte"))
-				//tbl.AddValues([]driver.Value{colName, "binary", "NO", "", "", "[]byte"})
+				f = schema.NewFieldBase(colName, value.ByteSliceType, 256, "[]byte")
 			default:
-				u.Warnf("gds unknown type %T  %#v", val, p)
+				u.Warnf("google datastore unknown type %T  %#v", val, p)
 			}
-			colNames = append(colNames, colName)
+			if f != nil {
+				tbl.AddField(f)
+				colNames = append(colNames, colName)
+			}
+
 		}
 	}
-	//if len(tbl.FieldMap) > 0 {
 
-	u.Infof("caching schema:%p   %q  cols=%v", m.schema, tableOriginal, colNames)
+	u.Infof("%p caching table schema  %q  cols=%v", m.schema, tableOriginal, colNames)
 	m.schema.AddTable(tbl)
 	tbl.SetColumns(colNames)
 	return tbl, nil
-	//}
-
-	//return nil, fmt.Errorf("not found")
 }
 
 func titleCase(table string) string {

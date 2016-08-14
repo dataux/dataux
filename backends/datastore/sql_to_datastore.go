@@ -23,12 +23,10 @@ import (
 )
 
 var (
-	DefaultLimit = 20
+	// Default LIMIT on DataStore Queries
+	DefaultLimit = 1000
 
-	_ = json.Marshal
-
-	// Implement Datasource interface that allows Mongo
-	//  to fully implement a full select statement
+	// ensure we implement appropriate interfaces
 	_ schema.Conn         = (*SqlToDatstore)(nil)
 	_ plan.SourcePlanner  = (*SqlToDatstore)(nil)
 	_ exec.ExecutorSource = (*SqlToDatstore)(nil)
@@ -37,6 +35,7 @@ var (
 
 // Sql To Google Datastore Maps a Sql request into an equivalent
 //    google data store query
+// - a dialect translator
 type SqlToDatstore struct {
 	*exec.TaskBase
 	resp           *ResultReader
@@ -47,7 +46,7 @@ type SqlToDatstore struct {
 	schema         *schema.SchemaSource
 	dsCtx          context.Context
 	dsClient       *datastore.Client
-	query          *datastore.Query
+	dsq            *datastore.Query
 	hasMultiValue  bool              // Multi-Value vs Single-Value aggs
 	hasSingleValue bool              // single value agg
 	partition      *schema.Partition // current partition for this request
@@ -55,6 +54,8 @@ type SqlToDatstore struct {
 
 }
 
+// NewSqlToDatastore Create a new translator to re-write a SQL AST query
+// into google data store
 func NewSqlToDatstore(table *schema.Table, cl *datastore.Client, ctx context.Context) *SqlToDatstore {
 	m := &SqlToDatstore{
 		tbl:      table,
@@ -66,16 +67,11 @@ func NewSqlToDatstore(table *schema.Table, cl *datastore.Client, ctx context.Con
 	return m
 }
 
-func (m *SqlToDatstore) Host() string {
-	//u.Warnf("TODO:  replace hardcoded es host")
-	//return m.schema.ChooseBackend()
-	return ""
-}
+func (m *SqlToDatstore) query(req *rel.SqlSelect) (*ResultReader, error) {
 
-func (m *SqlToDatstore) Query(req *rel.SqlSelect) (*ResultReader, error) {
-
-	m.query = datastore.NewQuery(m.tbl.NameOriginal)
-	//u.Debugf("%s   query:%p", m.tbl.NameOriginal, m.query)
+	// Create our google data store query and we will walk
+	// our ast modifying it
+	m.dsq = datastore.NewQuery(m.tbl.NameOriginal)
 	var err error
 	m.sel = req
 	limit := req.Limit
@@ -112,11 +108,11 @@ func (m *SqlToDatstore) Query(req *rel.SqlSelect) (*ResultReader, error) {
 			// We really need to look at any funcs?   walk this out
 			switch col.Order {
 			case "ASC":
-				m.query = m.query.Order(fmt.Sprintf("%q", col.Key()))
+				m.dsq = m.dsq.Order(fmt.Sprintf("%q", col.Key()))
 			case "DESC":
-				m.query = m.query.Order(fmt.Sprintf("-%q", col.Key()))
+				m.dsq = m.dsq.Order(fmt.Sprintf("-%q", col.Key()))
 			default:
-				m.query = m.query.Order(fmt.Sprintf("%q", col.Key()))
+				m.dsq = m.dsq.Order(fmt.Sprintf("%q", col.Key()))
 			}
 		}
 	}
@@ -129,7 +125,7 @@ func (m *SqlToDatstore) Query(req *rel.SqlSelect) (*ResultReader, error) {
 
 func (m *SqlToDatstore) getEntity(req *rel.SqlSelect) (*Row, error) {
 
-	m.query = datastore.NewQuery(m.tbl.NameOriginal)
+	m.dsq = datastore.NewQuery(m.tbl.NameOriginal)
 	if req.Where != nil {
 		err := m.WalkWhereNode(req.Where.Expr)
 		if err != nil {
@@ -139,7 +135,7 @@ func (m *SqlToDatstore) getEntity(req *rel.SqlSelect) (*Row, error) {
 	}
 
 	var rows []*Row
-	keys, err := m.dsClient.GetAll(m.dsCtx, m.query, &rows)
+	keys, err := m.dsClient.GetAll(m.dsCtx, m.dsq, &rows)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +193,7 @@ func (m *SqlToDatstore) WalkExecSource(p *plan.Source) (exec.Task, error) {
 	u.Debugf("%p walkexec: %#v", m, m.TaskBase)
 	m.Ctx = p.Context()
 	m.TaskBase = exec.NewTaskBase(m.Ctx)
-	reader, err := m.Query(p.Stmt.Source)
+	reader, err := m.query(p.Stmt.Source)
 	if err != nil {
 		return nil, nil
 	}
@@ -454,19 +450,19 @@ func (m *SqlToDatstore) walkFilterBinary(node *expr.BinaryNode) error {
 	case lex.TokenLogicOr:
 		return fmt.Errorf("DataStore does not implement OR: %v", node.String())
 	case lex.TokenEqual, lex.TokenEqualEqual:
-		//u.Debugf("query: %p", m.query)
-		m.query = m.query.Filter(fmt.Sprintf("%q =", lhval.ToString()), rhval.Value())
+		//u.Debugf("dsq: %p", m.dsq)
+		m.dsq = m.dsq.Filter(fmt.Sprintf("%q =", lhval.ToString()), rhval.Value())
 	case lex.TokenNE:
 		// WARNING:  datastore only allows 1, warn?
-		m.query = m.query.Filter(fmt.Sprintf("%q !=", lhval.ToString()), rhval.Value())
+		m.dsq = m.dsq.Filter(fmt.Sprintf("%q !=", lhval.ToString()), rhval.Value())
 	case lex.TokenLE:
-		m.query = m.query.Filter(fmt.Sprintf("%q <=", lhval.ToString()), rhval.Value())
+		m.dsq = m.dsq.Filter(fmt.Sprintf("%q <=", lhval.ToString()), rhval.Value())
 	case lex.TokenLT:
-		m.query = m.query.Filter(fmt.Sprintf("%q <", lhval.ToString()), rhval.Value())
+		m.dsq = m.dsq.Filter(fmt.Sprintf("%q <", lhval.ToString()), rhval.Value())
 	case lex.TokenGE:
-		m.query = m.query.Filter(fmt.Sprintf("%q >=", lhval.ToString()), rhval.Value())
+		m.dsq = m.dsq.Filter(fmt.Sprintf("%q >=", lhval.ToString()), rhval.Value())
 	case lex.TokenGT:
-		m.query = m.query.Filter(fmt.Sprintf("%q >", lhval.ToString()), rhval.Value())
+		m.dsq = m.dsq.Filter(fmt.Sprintf("%q >", lhval.ToString()), rhval.Value())
 	case lex.TokenLike:
 		// Ancestors support some type of prefix query?
 		// this only works on String columns?
@@ -475,7 +471,7 @@ func (m *SqlToDatstore) walkFilterBinary(node *expr.BinaryNode) error {
 			// Need to polyFill?  Or Error
 			return fmt.Errorf("Google Datastore does not support % prefix", lhs)
 		}
-		m.query = m.query.Filter(fmt.Sprintf("%q >=", lhs), rhval.Value())
+		m.dsq = m.dsq.Filter(fmt.Sprintf("%q >=", lhs), rhval.Value())
 	default:
 		u.Warnf("not implemented: %v", node.Operator)
 		return fmt.Errorf("not implemented %v", node.String())

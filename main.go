@@ -7,6 +7,7 @@ import (
 	"runtime/pprof"
 
 	// Backend Side-Effect imports
+	_ "github.com/dataux/dataux/backends/cassandra"
 	_ "github.com/dataux/dataux/backends/datastore"
 	_ "github.com/dataux/dataux/backends/elasticsearch"
 	_ "github.com/dataux/dataux/backends/files"

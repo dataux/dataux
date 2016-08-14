@@ -104,8 +104,8 @@ func (m *ResultReader) Run() error {
 	m.buildProjection()
 
 	sql := m.Req.sel
-	//u.Infof("query: %#v", m.Req.query)
-	q := m.Req.query
+	//u.Infof("query: %#v", m.Req.dsq)
+	q := m.Req.dsq
 
 	m.Vals = make([][]driver.Value, 0)
 
@@ -123,7 +123,6 @@ func (m *ResultReader) Run() error {
 		return nil
 	}
 
-	//cols := m.proj.Columns
 	cols := m.Req.p.Proj.Columns
 	colNames := make(map[string]int, len(cols))
 	for i, col := range cols {

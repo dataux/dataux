@@ -2,6 +2,7 @@ package mysqlfe
 
 import (
 	"database/sql/driver"
+	"errors"
 	"time"
 
 	u "github.com/araddon/gou"
@@ -42,6 +43,8 @@ type MySqlExecResultWriter struct {
 	writer models.ResultWriter
 	schema *schema.Schema
 	Rs     *mysql.Result
+	ct     int64
+	err    error
 }
 
 func NewMySqlResultWriter(writer models.ResultWriter, ctx *plan.Context) *MySqlResultWriter {
@@ -353,7 +356,7 @@ func NewMySqlExecResultWriter(writer models.ResultWriter, ctx *plan.Context) *My
 	m := &MySqlExecResultWriter{writer: writer, schema: ctx.Schema}
 	m.TaskBase = exec.NewTaskBase(ctx)
 	m.Rs = mysql.NewResult()
-	m.Handler = nilWriter(m)
+	m.Handler = m.ResultWriter()
 	return m
 }
 func (m *MySqlExecResultWriter) Close() error {
@@ -364,18 +367,41 @@ func (m *MySqlExecResultWriter) Close() error {
 	if m.writer == nil {
 		u.Warnf("wat?  nil writer? ")
 	}
-	//u.Debugf("rs?%#v  writer?%#v", m.Rs, m.writer)
-	// TODO: we need to send a message to get this count
-	m.Rs.AffectedRows = 1
+	if m.err != nil {
+		m.Rs.Status = mysql.ER_UNKNOWN_ERROR
+	} else {
+		m.Rs.AffectedRows = uint64(m.ct)
+	}
 	m.writer.WriteResult(m.Rs)
 	return m.TaskBase.Close()
 }
 func (m *MySqlExecResultWriter) Finalize() error {
 	return nil
 }
-func nilWriter(m *MySqlExecResultWriter) exec.MessageHandler {
+func (m *MySqlExecResultWriter) ResultWriter() exec.MessageHandler {
 	return func(_ *plan.Context, msg schema.Message) bool {
-		u.Debugf("in nilWriter:  %#v", msg)
+
+		var vals []driver.Value
+		switch mt := msg.Body().(type) {
+		case *datasource.SqlDriverMessageMap:
+			vals = mt.Values()
+		case []driver.Value:
+			vals = mt
+		default:
+			u.Warnf("%T not supported", mt)
+			return false
+		}
+		if len(vals) == 2 {
+			switch rt := vals[0].(type) {
+			case string: // error
+				m.err = errors.New(rt)
+			default:
+				if affectedCt, isInt := vals[1].(int64); isInt {
+					m.ct = affectedCt
+				}
+			}
+			return true
+		}
 		return false
 	}
 }

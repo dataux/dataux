@@ -65,7 +65,7 @@ frontends [
 schemas : [
   {
     name : datauxtest
-    sources : [ "mgo_datauxtest", "es_test", "localfiles" , "google_ds_test"]
+    sources : [ "mgo_datauxtest", "es_test", "localfiles" , "google_ds_test", "cass"]
   }
 ]
 
@@ -91,6 +91,17 @@ sources : [
         }
     ]
   }
+  
+  {
+    name : cass
+    type : cassandra
+    settings {
+      keyspace  "datauxtest"
+      hosts    ["localhost:9042"]
+    }
+  }
+  
+
   {
     name : es_test
     type : elasticsearch

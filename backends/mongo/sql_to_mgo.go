@@ -31,8 +31,10 @@ var (
 	_ exec.ExecutorSource = (*SqlToMgo)(nil)
 )
 
-// Sql To Mongo Request
-//   Map sql queries into Mongo bson Requests
+// SqlToMgo Rewrite a Sql AST statement to a Mongo request
+//  - Walk the AST and see what can be pushed down and what can't
+//  - try to poly-fill the missing pieces.
+//
 type SqlToMgo struct {
 	*exec.TaskBase
 	resp           *ResultReader
@@ -63,11 +65,11 @@ func NewSqlToMgo(table *schema.Table, sess *mgo.Session) *SqlToMgo {
 	return sm
 }
 
-func (m *SqlToMgo) Columns() []string {
-	return m.tbl.Columns()
-}
+// Columns return list of column names
+func (m *SqlToMgo) Columns() []string { return m.tbl.Columns() }
 
-// Called by Planner, pre-executor
+// WalkSourceSelect An interface implemented by this connection allowing the planner
+// to push down as much logic into mongo as possible
 func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.Task, error) {
 
 	//u.Debugf("WalkSourceSelect %p", m)
@@ -84,14 +86,10 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 	var err error
 	m.p = p
 	req := p.Stmt.Source
-	//u.Debugf("mongo.VisitSubSelect %v final:%v", req.String(), sp.Final)
 
 	if p.Proj == nil {
-		//u.Debugf("%p no projection?  ", p)
 		proj := plan.NewProjectionInProcess(p.Stmt.Source)
 		p.Proj = proj.Proj
-	} else {
-		//u.Debugf("%p has projection!!! %s sqltomgo %p", p, p.Stmt, m)
 	}
 
 	m.sel = req
@@ -113,7 +111,7 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 		}
 	}
 
-	// Evaluate the Select columns
+	// Evaluate the Select columns make sure we can pass them down or polyfill
 	err = m.WalkSelectList()
 	if err != nil {
 		u.Warnf("Could Not evaluate Columns/Aggs %s %v", req.Columns.String(), err)

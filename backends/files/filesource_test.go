@@ -240,5 +240,4 @@ func TestSimpleRowSelect(t *testing.T) {
 		},
 		RowData: &data,
 	})
-
 }

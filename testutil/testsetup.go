@@ -100,6 +100,11 @@ func (a *Article) Header() string {
 func (a *Article) Row() string {
 	return fmt.Sprintf("%s,%s,%v,%v,%v,%v,%v", a.Title, a.Author, a.Count, a.Deleted, a.Created, a.Updated, a.F)
 }
+func (a *Article) Values() []interface{} {
+	return []interface{}{
+		a.Title, a.Author, a.Count, a.Count64, a.Deleted, a.Category, a.Created, a.Updated, a.F, a.Body,
+	}
+}
 func (a *Article) UrlMsg() url.Values {
 	msg := url.Values{}
 	msg.Add("title", a.Title)
@@ -126,6 +131,11 @@ func (u *User) Header() string {
 }
 func (u *User) Row() string {
 	return fmt.Sprintf("%s,%s,%v,%v,%v", u.Id, u.Name, u.Deleted, u.Created, u.Updated)
+}
+func (u *User) Values() []interface{} {
+	return []interface{}{
+		u.Id, u.Name, u.Deleted, u.Roles, u.Created, u.Updated,
+	}
 }
 
 type QuerySpec struct {
@@ -159,7 +169,7 @@ func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
 	case len(testSpec.Exec) > 0:
 		result, err := dbx.Exec(testSpec.Exec)
 		assert.Tf(t, err == nil, "%v", err)
-		//u.Infof("result: %Ev", result)
+		u.Infof("result: %#v", result)
 		if testSpec.ExpectRowCt > -1 {
 			affected, err := result.RowsAffected()
 			assert.Tf(t, err == nil, "%v", err)
