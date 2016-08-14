@@ -68,9 +68,6 @@ type mysqlListener struct {
 }
 
 func (m *mysqlListener) Init(conf *models.ListenerConfig, svr *models.ServerCtx) error {
-	// m.svr = svr
-	// m.conf = conf
-	u.Warnf("has listener")
 	return nil
 }
 
@@ -117,7 +114,6 @@ func (m *mysqlListener) OnConn(c net.Conn) {
 		conn.Close()
 	}()
 
-	//u.Infof("client connected")
 	if err := conn.Handshake(); err != nil {
 		u.Errorf("handshake error %s", err.Error())
 		c.Close()

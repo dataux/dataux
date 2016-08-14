@@ -102,10 +102,9 @@ func newConn(m *mysqlListener, co net.Conn) *Conn {
 func (c *Conn) Run() {
 
 	if !c.noRecover {
-		u.Debugf("running recovery? %v", !c.noRecover)
 		defer func() {
 			if r := recover(); r != nil {
-				u.LogTracef(u.ERROR, "conn.Run() recover:%v", r)
+				u.Errorf("conn.Run() recover:%v", r)
 			}
 			c.Close()
 		}()
@@ -122,28 +121,13 @@ func (c *Conn) Run() {
 			return
 		}
 
-		//u.Debugf("Run() -> handler.Handle(): %v", string(data))
-		if err := c.handler.Handle(c, &models.Request{Raw: data}); err != nil {
-
-			if se, ok := err.(*mysql.SqlError); ok {
-				if se.Code == mysql.ER_WARN_DEPRECATED_SYNTAX {
-					//u.Debugf("deprecated %v", err)
-				} else {
-					//u.Warnf("Handler() error %v", err)
-				}
-			} else {
-				//u.Warnf("Handler() error %v", err)
-			}
-			es := err.Error()
-			switch {
-			case strings.Contains(es, "COM_FIELD_LIST"):
-				// ignore
-			default:
+		// c.handler is the front-end handler
+		err = c.handler.Handle(c, &models.Request{Raw: data})
+		if err != nil {
+			if !ignoreableErr(err) {
 				u.Warnf("got error on handle %v", err)
 			}
-
 			if err != mysql.ErrBadConn {
-				u.Warnf("writing error %v", err)
 				c.WriteError(err)
 			}
 		}
@@ -156,15 +140,27 @@ func (c *Conn) Run() {
 	}
 }
 
+func ignoreableErr(err error) bool {
+	sqlErr, isMysqlError := err.(*mysql.SqlError)
+	es := strings.ToLower(err.Error())
+	switch {
+	case isMysqlError && sqlErr.Code == mysql.ER_WARN_DEPRECATED_SYNTAX:
+		return true
+	case strings.Contains(es, "deprecated"):
+		return true
+	}
+	return false
+}
+
 func (c *Conn) Handshake() error {
 
 	if err := c.writeInitialHandshake(); err != nil {
-		u.Errorf("send initial handshake error %s", err.Error())
+		u.Errorf("send initial handshake error %v", err)
 		return err
 	}
 
 	if err := c.readHandshakeResponse(); err != nil {
-		u.Errorf("recv handshake response error %s", err.Error())
+		u.Errorf("recv handshake response error %v", err)
 
 		c.WriteError(err)
 
@@ -172,7 +168,7 @@ func (c *Conn) Handshake() error {
 	}
 
 	if err := c.WriteOK(nil); err != nil {
-		u.Errorf("write ok fail %s", err.Error())
+		u.Errorf("write ok fail %v", err)
 		return err
 	}
 
@@ -193,15 +189,9 @@ func (c *Conn) Close() error {
 	if c.closed {
 		return nil
 	}
-
-	//u.LogTracef(u.WARN, "mysql conn listener closing")
-
 	c.c.Close()
-
 	c.rollback()
-
 	c.closed = true
-
 	return nil
 }
 

@@ -2,9 +2,11 @@ package main
 
 import (
 	"flag"
+	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"runtime"
-	"runtime/pprof"
 
 	// Backend Side-Effect imports
 	_ "github.com/dataux/dataux/backends/cassandra"
@@ -20,17 +22,17 @@ import (
 )
 
 var (
-	configFile     string
-	cpuProfileFile string
-	memProfileFile string
-	logLevel       = "info"
+	configFile string
+	pprofPort  string
+	workerCt   int
+	logLevel   = "info"
 )
 
 func init() {
 	flag.StringVar(&configFile, "config", "dataux.conf", "dataux proxy config file")
 	flag.StringVar(&logLevel, "loglevel", "debug", "logging [ debug,info,warn,error ]")
-	flag.StringVar(&cpuProfileFile, "cpuprofile", "", "cpuprofile")
-	flag.StringVar(&memProfileFile, "memprofile", "", "memProfileFile")
+	flag.StringVar(&pprofPort, "pprof", ":18008", "pprof and metrics port")
+	flag.IntVar(&workerCt, "workerct", 3, "Number of worker nodes")
 	flag.Parse()
 }
 func main() {
@@ -44,16 +46,21 @@ func main() {
 	u.SetupLogging(logLevel)
 	u.SetColorIfTerminal()
 
-	if cpuProfileFile != "" {
-		f, err := os.Create(cpuProfileFile)
-		if err != nil {
-			u.Errorf("could not care cpu file: %v", err)
-		}
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
-	}
-
 	proxy.LoadConfig(configFile)
 
-	proxy.RunDaemon(true, 2)
+	if pprofPort != "" {
+		conn, err := net.Listen("tcp", pprofPort)
+		if err != nil {
+			u.Warnf("Error listening on %s: %v", pprofPort, err)
+			os.Exit(1)
+		}
+		go func() {
+			if err := http.Serve(conn, http.DefaultServeMux); err != nil {
+				u.Errorf("Error from profile HTTP server: %v", err)
+			}
+			conn.Close()
+		}()
+	}
+
+	proxy.RunDaemon(true, workerCt)
 }

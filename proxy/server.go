@@ -46,8 +46,7 @@ func banner() string {
 //
 //  @listener  true/false   do we run the listeneners (mysql)?
 //              if not then this is a worker only node
-//  @workerct  2 ?   How many worker services do we start?   Say, one per proc/core?
-//
+//  @workerct  over-ride # of workers
 func RunDaemon(listener bool, workerCt int) {
 
 	svrCtx := models.NewServerCtx(Conf)
@@ -81,6 +80,9 @@ func RunDaemon(listener bool, workerCt int) {
 
 	fmt.Println(banner())
 
+	if workerCt == 0 && Conf.WorkerCt > 0 {
+		workerCt = Conf.WorkerCt
+	}
 	if workerCt > 0 {
 		go planner.RunWorkerNodes(quit, workerCt, svrCtx.Reg)
 	}
