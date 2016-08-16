@@ -41,7 +41,6 @@ func init() {
 	Conf = conf
 }
 func SchemaLoader(name string) (*schema.Schema, error) {
-	//u.Infof("SchemaLoader")
 	return Schema, nil
 }
 
@@ -185,14 +184,16 @@ func NewTestServerForDb(t *testing.T, db string) {
 		planner.GridConf.EtcdServers = etcdServers
 
 		ServerCtx = models.NewServerCtx(Conf)
+		//u.Infof("init")
 		ServerCtx.Init()
+		//u.Infof("after init")
 		quit := make(chan bool)
 		go func() {
 			ServerCtx.Grid.RunMaster(quit)
 		}()
 
 		Schema, _ = ServerCtx.Schema(db)
-		//u.Infof("starting %q schema in test", db)
+		u.Infof("starting %q schema in test", db)
 
 		svr, err := proxy.NewServer(ServerCtx)
 		assert.T(t, err == nil, "must start without error ", err)

@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	u "github.com/araddon/gou"
 
@@ -95,8 +96,14 @@ func (m *ResultReader) buildProjection() {
 				//u.Debugf("column: %#v", col)
 				cols = append(cols, rel.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
 			} else {
-				u.Debugf("Could not find: %v", col.String())
-				cols = append(cols, rel.NewResultColumn(col.SourceField, len(cols), col, value.StringType))
+				if fld, ok := m.Req.tbl.FieldMap[col.As]; ok {
+					//u.Debugf("column: %#v", col)
+					cols = append(cols, rel.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
+				} else {
+					//u.Debugf("col %#v", col)
+					//u.Debugf("Could not find: %v  sourcefield?%v  fields:%v", col.As, col.SourceField, m.Req.tbl.Columns())
+					cols = append(cols, rel.NewResultColumn(col.SourceField, len(cols), col, value.StringType))
+				}
 			}
 		}
 	}
@@ -152,6 +159,7 @@ func (m *ResultReader) Run() error {
 
 	} else if len(m.Aggs) > 0 {
 
+		//u.Debugf("aggs: multi?%v single?%v", m.Req.hasMultiValue, m.Req.hasSingleValue)
 		if m.Req.hasMultiValue && m.Req.hasSingleValue {
 			return fmt.Errorf("Must not mix single value and multi-value aggs")
 		}
@@ -250,10 +258,6 @@ func (m *ResultReader) pageDocs() error {
 	//         "_source":map[string]interface {}{"repository.name":[]interface {}{"fluentd-ui"}, "actor":[]interface {}{"uu59"}}}
 	keyPath := "_source."
 	useFields := false
-	// if len(m.Req.projections) > 0 {
-	// 	keyPath = "fields."
-	// 	useFields = true
-	// }
 
 	cols := m.proj.Columns
 	if len(cols) == 0 {
@@ -261,8 +265,8 @@ func (m *ResultReader) pageDocs() error {
 	}
 	for _, doc := range m.Docs {
 		if len(doc) > 0 {
-			//by, _ := json.MarshalIndent(doc, " ", " ")
-			//u.Debugf("doc: %v", string(by))
+			// by, _ := json.MarshalIndent(doc, " ", " ")
+			// u.Debugf("doc: %v", string(by))
 			if useFields {
 				doc = doc.Helper("fields")
 				if len(doc) < 1 {
@@ -275,77 +279,88 @@ func (m *ResultReader) pageDocs() error {
 
 			for _, col := range cols {
 				key := keyPath + col.Name
+				keyCandiates := []string{key}
 				if _, ok := metaFields[col.Name]; ok {
 					key = col.Name
+					keyCandiates[0] = key
+				} else if strings.Contains(col.Col.SourceOriginal, ".") {
+					keyCandiates = append(keyCandiates, keyPath+col.Col.SourceOriginal)
 				}
-				//u.Debugf("looking for? %v in %#v", key, doc)
-
-				if useFields {
-					u.Debugf("use fields: '%s' type=%v Strings()='%v'  doc=%#v", col.Name, col.Type.String(), doc.Strings(key), doc)
-					switch col.Type {
-					case value.StringType:
-						if docVals := doc.Strings(col.Name); len(docVals) > 0 {
-							vals[fldI] = docVals[0]
-						} else {
-							u.Warnf("no vals for %v?  %#v", col.Name, docVals)
-						}
-					case value.TimeType:
-						if docVals := doc.Strings(col.Name); len(docVals) > 0 {
-							vals[fldI] = docVals[0]
-						} else {
-							u.Warnf("no vals?  %#v", docVals)
-						}
-					case value.IntType, value.NumberType:
-						if docVals := doc.List(col.Name); len(docVals) > 0 {
-							vals[fldI] = docVals[0]
-						} else {
-							u.Warnf("no vals?  %#v", docVals)
-						}
-					case value.ByteSliceType:
-						u.Debugf("blob?  %v", key)
-						if docVal := doc.Get(col.Name); docVal != nil {
-							by, _ := json.Marshal(docVal)
-							vals[fldI] = string(by)
-						}
-					default:
-						u.Warnf("unrecognized type: %v  %T", col.Name, col.Type)
+				//u.Debugf("%#v", col.Col)
+				for _, key := range keyCandiates {
+					if docVal := doc.Get(key); docVal == nil {
+						//u.Debugf("skipping %q in %v", key, doc.Keys())
+						continue
 					}
-				} else {
+					//u.Debugf("looking for? %v %#v", key, col.Col)
+					//u.Debugf("looking for %q", key)
+					if useFields {
+						//u.Debugf("use fields: '%s' type=%v Strings()='%v'  doc=%#v", col.Name, col.Type.String(), doc.Strings(key), doc)
+						switch col.Type {
+						case value.StringType:
+							if docVals := doc.Strings(key); len(docVals) > 0 {
+								vals[fldI] = docVals[0]
+							} else {
+								u.Warnf("no vals for %v?  %#v", col.Name, docVals)
+							}
+						case value.TimeType:
+							if docVals := doc.Strings(key); len(docVals) > 0 {
+								vals[fldI] = docVals[0]
+							} else {
+								u.Warnf("no vals?  %#v", docVals)
+							}
+						case value.IntType, value.NumberType:
+							if docVals := doc.List(key); len(docVals) > 0 {
+								vals[fldI] = docVals[0]
+							} else {
+								u.Warnf("no vals?  %#v", docVals)
+							}
+						case value.ByteSliceType:
+							u.Debugf("blob?  %v", key)
+							if docVal := doc.Get(key); docVal != nil {
+								by, _ := json.Marshal(docVal)
+								vals[fldI] = string(by)
+							}
+						default:
+							u.Warnf("unrecognized type: %v  %T", key, col.Type)
+						}
+					} else {
 
-					//u.Debugf("col.type %v type %v", key, col.Type.String())
+						//u.Debugf("col.type %v type %v", key, col.Type.String())
 
-					switch col.Type {
-					case value.StringType:
-
-						strVal := doc.String(key)
-						//u.Debugf("strval: %s=%q", key, strVal)
-						if strVal != "" {
-							vals[fldI] = strVal
-						} else {
-							jhVal := doc.Helper(key)
-							if len(jhVal) > 0 {
-								//u.Debugf("looking for? key:%v type:%s   val:%s", key, col.Type.String(), jhVal)
-								jsonBytes, err := json.Marshal(jhVal)
-								if err == nil {
-									vals[fldI] = string(jsonBytes)
+						switch col.Type {
+						case value.StringType:
+							vals[fldI] = ""
+							strVal := doc.String(key)
+							//u.Debugf("strval: %s? or %s? =%q", key, col.As, strVal)
+							if strVal != "" {
+								vals[fldI] = strVal
+							} else {
+								jhVal := doc.Helper(key)
+								if len(jhVal) > 0 {
+									//u.Debugf("looking for? key:%v type:%s   val:%s", key, col.Type.String(), jhVal)
+									jsonBytes, err := json.Marshal(jhVal)
+									if err == nil {
+										vals[fldI] = string(jsonBytes)
+									}
 								}
 							}
-						}
 
-					case value.TimeType:
-						vals[fldI] = doc.String(key)
-					case value.IntType:
-						vals[fldI] = doc.Int64(key)
-					case value.NumberType:
-						vals[fldI] = doc.Float64(key)
-					case value.ByteSliceType:
-						//u.Debugf("blob?  %v", key)
-						if docVal := doc.Get(key); docVal != nil {
-							by, _ := json.Marshal(docVal)
-							vals[fldI] = string(by)
+						case value.TimeType:
+							vals[fldI] = doc.String(key)
+						case value.IntType:
+							vals[fldI] = doc.Int64(key)
+						case value.NumberType:
+							vals[fldI] = doc.Float64(key)
+						case value.ByteSliceType:
+							//u.Debugf("blob?  %v", key)
+							if docVal := doc.Get(key); docVal != nil {
+								by, _ := json.Marshal(docVal)
+								vals[fldI] = string(by)
+							}
+						default:
+							u.Warnf("unrecognized type: %v  %T", col.Name, col.Type)
 						}
-					default:
-						u.Warnf("unrecognized type: %v  %T", col.Name, col.Type)
 					}
 				}
 

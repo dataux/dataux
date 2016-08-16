@@ -2,6 +2,7 @@ package cassandra
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -89,6 +90,7 @@ type Source struct {
 	keyspace         string
 	kmd              *gocql.KeyspaceMetadata
 	tables           []string // Lower cased
+	tablemap         map[string]*schema.Table
 	conf             *schema.ConfigSource
 	schema           *schema.SchemaSource
 	session          *gocql.Session
@@ -116,6 +118,7 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 	m.schema = ss
 	m.conf = ss.Conf
 	m.db = strings.ToLower(ss.Name)
+	m.tablemap = make(map[string]*schema.Table)
 
 	//u.Infof("Init:  %#v", m.schema.Conf)
 	if m.schema.Conf == nil {
@@ -135,7 +138,8 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 	}
 	m.session = sess
 
-	return m.loadSchema()
+	m.loadSchema()
+	return nil
 }
 
 func (m *Source) loadSchema() error {
@@ -147,9 +151,11 @@ func (m *Source) loadSchema() error {
 	}
 	m.kmd = kmd
 	m.lastSchemaUpdate = time.Now()
+	m.tables = make([]string, 0)
 
 	for _, cf := range kmd.Tables {
-		tbl := schema.NewTable(strings.ToLower(cf.Name), m.schema)
+		tbl := schema.NewTable(strings.ToLower(cf.Name))
+		//u.Infof("building tbl schema %v", cf.Name)
 		colNames := make([]string, 0)
 		/*
 			col &gocql.ColumnMetadata{Keyspace:"datauxtest", Table:"article", Name:"author", ComponentIndex:0, Kind:"partition_key",
@@ -242,9 +248,11 @@ func (m *Source) loadSchema() error {
 
 		tbl.AddContext("cass_table", cf)
 		//u.Infof("%p  caching table %q  cols=%v", m.schema, tbl.Name, colNames)
-		m.schema.AddTable(tbl)
 		tbl.SetColumns(colNames)
+		m.tablemap[tbl.Name] = tbl
+		m.tables = append(m.tables, tbl.Name)
 	}
+	sort.Strings(m.tables)
 	return nil
 }
 
@@ -258,15 +266,16 @@ func (m *Source) Close() error {
 }
 
 func (m *Source) DataSource() schema.Source { return m }
-func (m *Source) Tables() []string          { return m.schema.Tables() }
+func (m *Source) Tables() []string          { return m.tables }
 func (m *Source) Table(table string) (*schema.Table, error) {
 
 	if m.schema == nil {
+		u.Warnf("no schema in use?")
 		return nil, fmt.Errorf("no schema in use")
 	}
 
 	table = strings.ToLower(table)
-	tbl, _ := m.schema.Table(table)
+	tbl := m.tablemap[table]
 	if tbl != nil {
 		return tbl, nil
 	}
