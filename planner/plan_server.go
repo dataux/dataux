@@ -63,15 +63,6 @@ func NextId() (uint64, error) {
 	return sf.NextID()
 }
 
-func NewServerPlanner(nodeCt int, r *datasource.Registry) *PlannerGrid {
-	nextId, _ := NextId()
-
-	conf := GridConf.Clone()
-	conf.NodeCt = nodeCt
-	conf.Hostname = NodeName(nextId)
-	return &PlannerGrid{Conf: conf, reg: r}
-}
-
 func NodeName(id uint64) string {
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -95,6 +86,15 @@ type PlannerGrid struct {
 	Grid       grid.Grid
 	started    bool
 	lastTaskId uint64
+}
+
+func NewServerPlanner(nodeCt int, r *datasource.Registry) *PlannerGrid {
+	nextId, _ := NextId()
+
+	conf := GridConf.Clone()
+	conf.NodeCt = nodeCt
+	conf.Hostname = NodeName(nextId)
+	return &PlannerGrid{Conf: conf, reg: r}
 }
 
 // Submits a Sql Select statement task for planning across multiple nodes

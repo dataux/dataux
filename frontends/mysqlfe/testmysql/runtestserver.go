@@ -189,7 +189,7 @@ func NewTestServerForDb(t *testing.T, db string) {
 		//u.Infof("after init")
 		quit := make(chan bool)
 		go func() {
-			ServerCtx.Grid.RunMaster(quit)
+			ServerCtx.PlanGrid.Run(quit)
 		}()
 
 		Schema, _ = ServerCtx.Schema(db)

@@ -35,7 +35,7 @@ func BuildMySqlJob(svr *models.ServerCtx, ctx *plan.Context) (*MySqlJob, error) 
 	job := &planner.ExecutorGrid{JobExecutor: baseJob}
 	//baseJob.Executor = job  // ??
 	job.Executor = job
-	job.GridServer = svr.Grid
+	job.GridServer = svr.PlanGrid
 	//u.Infof("executor: %T    sub.executor: %T", job, job.Executor)
 	job.Ctx = ctx
 	task, err := exec.BuildSqlJobPlanned(job.Planner, job.Executor, ctx)
