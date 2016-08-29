@@ -81,12 +81,12 @@ ADD "column_name" "Data Type";
 func TestSqlCreate(t *testing.T) {
 	t.Parallel()
 
-	ss := schema.NewSourceSchema("test", "test")
-	tbl := schema.NewTable("equipment", ss)
-	tbl.AddField(schema.NewField("id", value.IntType, 64, "Id is auto-generated random uuid"))
-	tbl.AddField(schema.NewField("name", value.StringType, 20, ""))
-	tbl.AddField(schema.NewField("installed", value.TimeType, 0, "When was this installed?"))
-	tbl.AddField(schema.NewField("jsondata", value.ByteSliceType, 0, "Json Data"))
+	//ss := schema.NewSourceSchema("test", "test")
+	tbl := schema.NewTable("equipment")
+	tbl.AddField(schema.NewFieldBase("id", value.IntType, 64, "Id is auto-generated random uuid"))
+	tbl.AddField(schema.NewFieldBase("name", value.StringType, 20, ""))
+	tbl.AddField(schema.NewFieldBase("installed", value.TimeType, 0, "When was this installed?"))
+	tbl.AddField(schema.NewFieldBase("jsondata", value.ByteSliceType, 0, "Json Data"))
 
 	expected := "CREATE TABLE `equipment` (\n" +
 		"    `id` bigint DEFAULT NULL COMMENT \"Id is auto-generated random uuid\",\n" +
@@ -96,7 +96,9 @@ func TestSqlCreate(t *testing.T) {
 		") ENGINE=InnoDB DEFAULT CHARSET=utf8;"
 
 	createStmt, err := TableCreate(tbl)
-	assert.T(t, err == nil)
+	assert.Equal(t, err, nil)
+	u.Debugf("\n%s\n%s", expected, createStmt)
+	assert.Equal(t, expected, createStmt)
 	for i, _ := range expected {
 		if expected[i] != createStmt[i] {
 			end := i + 20

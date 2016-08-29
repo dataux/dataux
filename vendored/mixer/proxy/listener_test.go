@@ -107,24 +107,28 @@ schemas : [
 `
 
 type testListenerWraper struct {
-	*MysqlListener
+	*mysqlListener
 	nodes map[string]*Node
 }
 
 func newTestServer(t *testing.T) *testListenerWraper {
 	f := func() {
-		cfg, err := models.LoadConfig(testConfigData)
+		Conf, err := models.LoadConfig(testConfigData)
 		assert.Tf(t, err == nil, "must load config without err: %v", err)
 
-		myl, err := NewMysqlListener(cfg.Frontends[0], cfg)
+		u.Debugf("conf: %+v", Conf.Frontends[0])
+		myl, err := newMysqlListener(Conf.Frontends[0], Conf, nil)
 		assert.Tf(t, err == nil, "must create listener without err: %v", err)
-		handler, err := NewHandlerSharded(cfg)
+		handler, err := NewHandlerSharded(Conf)
 		assert.Tf(t, err == nil, "must create handler without err: %v", err)
 		testHandler = handler.(*HandlerSharded)
 
-		testListener = &testListenerWraper{myl, testHandler.nodes}
+		ServerCtx := models.NewServerCtx(Conf)
 
-		go testListener.Run(testHandler, make(chan bool))
+		testListener = &testListenerWraper{myl, testHandler.nodes}
+		testListener.Init(Conf.Frontends[0], ServerCtx)
+
+		go testListener.Run(make(chan bool))
 
 		// delay to ensure we have time to connect
 		time.Sleep(100 * time.Millisecond)

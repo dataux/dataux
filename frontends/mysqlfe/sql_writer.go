@@ -162,9 +162,7 @@ func TableCreate(tbl *schema.Table) (string, error) {
 		fmt.Fprint(w, "\n    ")
 		writeField(w, fld)
 	}
-	fmt.Fprint(w, "\n) ENGINE=InnoDB DEFAULT CHARSET=utf8")
-	//tblStr := fmt.Sprintf("CREATE TABLE `%s` (\n\n);", tbl.Name, strings.Join(cols, ","))
-	//return tblStr, nil
+	fmt.Fprint(w, "\n) ENGINE=InnoDB DEFAULT CHARSET=utf8;")
 	return w.String(), nil
 }
 func writeField(w *bytes.Buffer, fld *schema.Field) {

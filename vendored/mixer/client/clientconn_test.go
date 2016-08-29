@@ -14,7 +14,7 @@ func init() {
 func newTestConn() *Conn {
 	c := new(Conn)
 
-	if err := c.Connect("localhost:3307", "mixer", "", "mixer"); err != nil {
+	if err := c.Connect("localhost:13307", "mixer", "", "mixer"); err != nil {
 		panic(err)
 	}
 
