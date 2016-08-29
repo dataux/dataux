@@ -169,7 +169,7 @@ func (m *FileSource) init() error {
 
 		// We are going to create a DB/Store to be allow the
 		// entire list of files to be shown as a meta-table of sorts
-		db, err := memdb.NewMemDbForSchema(m.filesTable, m.ss, m.fdbcols)
+		db, err := memdb.NewMemDbForSchema(m.filesTable, m.fdbcols)
 		if err != nil {
 			u.Errorf("could not create db %v", err)
 			return err
@@ -335,7 +335,7 @@ func (m *FileSource) buildTable(tableName string) (*schema.Table, error) {
 		return nil, fmt.Errorf("Must have Columns to Introspect Tables")
 	}
 
-	t := schema.NewTable(tableName, nil)
+	t := schema.NewTable(tableName)
 	t.SetColumns(colScanner.Columns())
 
 	// we are going to look at ~10 rows to create schema for it
@@ -365,6 +365,7 @@ func createConfStore(ss *schema.SchemaSource) (cloudstorage.Store, error) {
 	if ss == nil || ss.Conf == nil {
 		return nil, fmt.Errorf("No config info for files source")
 	}
+
 	u.Debugf("json conf:\n%s", ss.Conf.Settings.PrettyJson())
 	cloudstorage.LogConstructor = func(prefix string) logging.Logger {
 		return logging.NewStdLogger(true, logging.DEBUG, prefix)
@@ -396,7 +397,7 @@ func createConfStore(ss *schema.SchemaSource) (cloudstorage.Store, error) {
 		c := cloudstorage.CloudStoreContext{
 			LogggingContext: "localfiles",
 			TokenSource:     cloudstorage.LocalFileSource,
-			LocalFS:         conf.String("localpath"),
+			LocalFS:         conf.String("path"),
 			TmpDir:          "/tmp/localcache",
 		}
 		if c.LocalFS == "" {

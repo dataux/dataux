@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"database/sql"
 	"io/ioutil"
+	"os"
 	"testing"
 
 	u "github.com/araddon/gou"
@@ -35,7 +36,7 @@ var (
 var localconfig = &cloudstorage.CloudStoreContext{
 	LogggingContext: "unittest",
 	TokenSource:     cloudstorage.LocalFileSource,
-	LocalFS:         "/tmp/mockcloud",
+	LocalFS:         "tables/",
 	TmpDir:          "/tmp/localcache",
 }
 
@@ -79,11 +80,8 @@ func createLocalStore() (cloudstorage.Store, error) {
 
 	var config *cloudstorage.CloudStoreContext
 	//os.RemoveAll("/tmp/mockcloud")
-	//os.RemoveAll("/tmp/localcache")
+	os.RemoveAll("/tmp/localcache")
 	config = localconfig
-	// else {
-	// 	config = gcsIntconfig
-	// }
 	return cloudstorage.NewStore(config)
 }
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -37,6 +36,7 @@ var (
 	DbConn = "root@tcp(127.0.0.1:13307)/datauxtest?parseTime=true"
 
 	loadTestDataOnce sync.Once
+	skip             = false
 
 	now = time.Now()
 
@@ -51,18 +51,19 @@ func init() {
 	tu.Setup()
 
 	if *gds.GoogleJwt == "" {
+		skip = true
 		u.Errorf("must have google oauth jwt")
-		os.Exit(1)
 	}
 	if *gds.GoogleProject == "" {
 		u.Errorf("must have google cloud project")
-		os.Exit(1)
+		skip = true
 	}
 
 	jsonKey, err := ioutil.ReadFile(*gds.GoogleJwt)
 	if err != nil {
 		u.Errorf("Could not open Google Auth Token JWT file %v", err)
-		os.Exit(1)
+		skip = true
+		return
 	}
 	ctx, client = loadAuth(jsonKey)
 }
@@ -75,6 +76,9 @@ func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
 
 func RunTestServer(t *testing.T) func() {
 	if !testServicesRunning {
+		if skip {
+			t.Skip("Skipping, provide google JWT tokens if you want to test")
+		}
 		testServicesRunning = true
 		planner.GridConf.JobMaker = jobMaker
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
@@ -189,7 +193,7 @@ func (m *User) Load(props []datastore.Property) error {
 func (m *User) Save() ([]datastore.Property, error) {
 	props := make([]datastore.Property, 6)
 	roles, _ := m.Roles.Value()
-	u.Infof("roles: %T", roles)
+	//u.Infof("roles: %T", roles)
 	props[0] = datastore.Property{Name: "id", Value: m.Id}                    // Indexed
 	props[1] = datastore.Property{Name: "name", Value: m.Id}                  // Indexed
 	props[2] = datastore.Property{Name: "deleted", Value: m.Deleted}          // Indexed
@@ -200,6 +204,9 @@ func (m *User) Save() ([]datastore.Property, error) {
 }
 
 func loadTestData(t *testing.T) {
+	if skip {
+		t.Skip("Skipping, provide JWT tokens in ENV if desired")
+	}
 	loadTestDataOnce.Do(func() {
 
 		for _, article := range tu.Articles {
@@ -519,7 +526,7 @@ func TestUpdateSimple(t *testing.T) {
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
 			assert.Tf(t, data.Id == "user815", "%v", data)
-			assert.Tf(t, data.Name == "test_name", "%v", data)
+			assert.Tf(t, data.Name == "test_name", "Name: %v", data.Name)
 			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
 		},
 		RowData: &data,
@@ -551,5 +558,10 @@ func TestUpdateSimple(t *testing.T) {
 			assert.Tf(t, data.Deleted == true, "fr3 deleted? %v", data)
 		},
 		RowData: &data,
+	})
+	validateQuerySpec(t, tu.QuerySpec{
+		Exec:            `DELETE FROM DataUxTestUser WHERE id = "user815"`,
+		ValidateRowData: func() {},
+		ExpectRowCt:     1,
 	})
 }

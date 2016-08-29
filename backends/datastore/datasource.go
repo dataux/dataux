@@ -48,7 +48,8 @@ type GoogleDSDataSource struct {
 	db             string
 	namespace      string
 	databases      []string
-	tablesLower    []string          // Lower cased
+	tablesLower    []string // Lower cased
+	tables         map[string]*schema.Table
 	tablesOriginal map[string]string // google is case sensitive  map[lower]Original
 	cloudProjectId string
 	jwtFile        string
@@ -76,6 +77,7 @@ func (m *GoogleDSDataSource) Setup(ss *schema.SchemaSource) error {
 	m.schema = ss
 	m.conf = ss.Conf
 	m.db = strings.ToLower(ss.Name)
+	m.tables = make(map[string]*schema.Table)
 
 	m.cloudProjectId = *GoogleProject
 	m.jwtFile = *GoogleJwt
@@ -164,7 +166,7 @@ func (m *GoogleDSDataSource) DataSource() schema.Source {
 	return m
 }
 func (m *GoogleDSDataSource) Tables() []string {
-	return m.schema.Tables()
+	return m.tablesLower
 }
 
 func (m *GoogleDSDataSource) Open(tableName string) (schema.Conn, error) {
@@ -221,7 +223,7 @@ func (m *GoogleDSDataSource) loadDatabases() error {
 	dbs := make([]string, 0)
 	sort.Strings(dbs)
 	m.databases = dbs
-	u.Debugf("found database names: %v", m.databases)
+	//u.Debugf("found database names: %v", m.databases)
 	found := false
 	for _, db := range dbs {
 		if strings.ToLower(db) == strings.ToLower(m.schema.Name) {
@@ -273,13 +275,14 @@ func (m *GoogleDSDataSource) loadTableSchema(tableLower, tableOriginal string) (
 		return nil, fmt.Errorf("no schema in use")
 	}
 
-	tbl, _ := m.schema.Table(tableLower)
+	tbl := m.tables[tableLower]
 	if tbl != nil {
 		return tbl, nil
 	}
 
 	u.Debugf("loadTableSchema lower:%q original:%q", tableLower, tableOriginal)
-	tbl = schema.NewTable(tableOriginal, m.schema)
+	tbl = schema.NewTable(tableOriginal)
+	m.tables[tableLower] = tbl
 	colNames := make([]string, 0)
 
 	// We are going to scan this table, introspecting a few rows
@@ -324,7 +327,7 @@ func (m *GoogleDSDataSource) loadTableSchema(tableLower, tableOriginal string) (
 	}
 
 	u.Infof("%p caching table schema  %q  cols=%v", m.schema, tableOriginal, colNames)
-	m.schema.AddTable(tbl)
+	//m.schema.AddTable(tbl)
 	tbl.SetColumns(colNames)
 	return tbl, nil
 }

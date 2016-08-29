@@ -71,6 +71,7 @@ func (m *SqlToDatstore) query(req *rel.SqlSelect) (*ResultReader, error) {
 
 	// Create our google data store query and we will walk
 	// our ast modifying it
+	u.Debugf("query: %v", m.tbl.NameOriginal)
 	m.dsq = datastore.NewQuery(m.tbl.NameOriginal)
 	var err error
 	m.sel = req

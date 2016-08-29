@@ -105,7 +105,7 @@ func (m *HandlerSharded) SchemaUse(db string) *schema.Schema {
 	schema, ok := m.schemas[db]
 	if ok {
 		m.schema = schema
-		return schema.SchemaSource.Schema
+		return schema.SchemaSource.Schema()
 	}
 
 	u.Errorf("Could not find schema for db=%s", db)

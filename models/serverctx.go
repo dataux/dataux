@@ -17,8 +17,8 @@ import (
 type ServerCtx struct {
 	// The dataux server config info on schema, backends, frontends, etc
 	Config *Config
-	// The underlying qlbridge schema holds info about the
-	//  available datasource's
+
+	// The underlying qlbridge schema holds info about the available datasource's
 	Reg *datasource.Registry
 	// Grid is our real-time multi-node coordination and messaging system
 	Grid *planner.Server
@@ -48,7 +48,11 @@ func (m *ServerCtx) Init() error {
 	planner.GridConf.EtcdServers = m.Config.Etcd
 
 	// how many worker nodes?
-	m.Grid = planner.NewServerGrid(2, m.Reg)
+	if m.Config.WorkerCt == 0 {
+		m.Config.WorkerCt = 2
+	}
+
+	m.Grid = planner.NewServerGrid(m.Config.WorkerCt, m.Reg)
 
 	return nil
 }
@@ -126,9 +130,9 @@ func (m *ServerCtx) loadConfig() error {
 				return fmt.Errorf("Could not find Source Config for %v", sourceName)
 			}
 
+			//u.Debugf("new Source: %s   %+v", sourceName, sourceConf)
 			ss := schema.NewSchemaSource(sourceName, sourceConf.SourceType)
 			ss.Conf = sourceConf
-			ss.Schema = sch
 			//u.Infof("found sourceName: %q schema.Name=%q conf=%+v", sourceName, ss.Name, sourceConf)
 
 			if len(m.Config.Nodes) == 0 {
@@ -146,7 +150,9 @@ func (m *ServerCtx) loadConfig() error {
 				}
 			}
 
+			//u.Debugf("s:%p  ss:%p  adding ss", sch, ss)
 			sch.AddSourceSchema(ss)
+			//u.Debug("after add source schema")
 
 			ds := m.Reg.Get(sourceConf.SourceType)
 			//u.Debugf("after reg.Get(%q)  %#v", sourceConf.SourceType, ds)
@@ -156,15 +162,20 @@ func (m *ServerCtx) loadConfig() error {
 				ss.DS = ds
 				ss.Partitions = sourceConf.Partitions
 				if dsConfig, getsConfig := ss.DS.(schema.SourceSetup); getsConfig {
+					//u.Debugf("about to Setup %#v", dsConfig)
 					if err := dsConfig.Setup(ss); err != nil {
 						u.Errorf("Error setuping up %v  %v", sourceName, err)
 					}
 				}
-				m.Reg.SourceSchemaAdd(ss)
+				//u.Infof("about to SourceSchemaAdd")
+				m.Reg.SourceSchemaAdd(sch.Name, ss)
+				//u.Infof("after source schema add")
 			}
-
 		}
 
+		// Now refresh the schema, ie load meta-data about the now
+		// defined sub-schemas
+		sch.RefreshSchema()
 	}
 
 	return nil

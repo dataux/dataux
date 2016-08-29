@@ -36,6 +36,7 @@ func init() {
 type MongoDataSource struct {
 	db             string   // the underlying mongo database name
 	databases      []string // all available database names from this mongo instance
+	tables         []string // tables
 	srcschema      *schema.SchemaSource
 	mu             sync.Mutex
 	sess           *mgo.Session
@@ -92,12 +93,7 @@ func (m *MongoDataSource) Close() error {
 }
 
 func (m *MongoDataSource) DataSource() schema.Source { return m }
-func (m *MongoDataSource) Tables() []string {
-	if m.srcschema == nil {
-		return nil
-	}
-	return m.srcschema.Tables()
-}
+func (m *MongoDataSource) Tables() []string          { return m.tables }
 func (m *MongoDataSource) Table(table string) (*schema.Table, error) {
 	if !m.loadedSchema {
 		m.loadedSchema = true
@@ -126,6 +122,7 @@ func (m *MongoDataSource) Open(collectionName string) (schema.Conn, error) {
 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.srcschema.Name, collectionName)
 	}
 
+	//u.Debugf("creating sqltomgo %v", tbl.Name)
 	mgoSource := NewSqlToMgo(tbl, m.sess.Clone())
 	//u.Debugf("SqlToMgo: %T  %#v", mgoSource, mgoSource)
 	return mgoSource, nil
@@ -137,7 +134,6 @@ func (m *MongoDataSource) loadSchema() error {
 		u.Errorf("could not load mongo databases: %v", err)
 		return err
 	}
-
 	if err := m.loadTableNames(); err != nil {
 		u.Errorf("could not load mongo tables: %v", err)
 		return err
@@ -229,11 +225,14 @@ func (m *MongoDataSource) loadTableNames() error {
 	if err != nil {
 		return err
 	}
-
-	for _, tableName := range tables {
-		m.srcschema.AddTableName(tableName)
-		//u.Debugf("found table %q", tableName)
-	}
+	sort.Strings(tables)
+	m.tables = tables
+	// for _, tableName := range tables {
+	// 	u.Debugf("ss:%p AddTableName", m.srcschema)
+	// 	//m.srcschema.AddTableName(tableName)
+	// 	u.Debugf("ss:%p AFTER AddTableName", m.srcschema)
+	// 	//u.Debugf("found table %q", tableName)
+	// }
 	//u.Debugf("found tables: %v", tables)
 	return nil
 }
@@ -243,16 +242,9 @@ func (m *MongoDataSource) loadTableSchema(table string) (*schema.Table, error) {
 	if m.srcschema == nil {
 		return nil, fmt.Errorf("no schema in use")
 	}
-	/*
-		TODO:
-			- Need to read the indexes, and include that info
-			- make recursive
-			- allow future columns to get refreshed/discovered at runtime?
-			- Resolve differences between object's/schemas? having different fields, types, nested
-				- use new structure for Observations
-			- shared pkg for data-inspection, data builder
-	*/
-	tbl := schema.NewTable(table, m.srcschema)
+
+	//u.Infof("Loading Table Schema %q", table)
+	tbl := schema.NewTable(table)
 	coll := m.sess.DB(m.db).C(table)
 	colNames := make([]string, 0)
 	errs := make(map[string]string)
@@ -334,7 +326,7 @@ func (m *MongoDataSource) loadTableSchema(table string) (*schema.Table, error) {
 		}
 	}
 	tbl.SetColumns(colNames)
-	m.srcschema.AddTable(tbl)
+	//m.srcschema.AddTable(tbl)
 
 	return tbl, nil
 }
