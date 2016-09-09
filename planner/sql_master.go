@@ -17,7 +17,7 @@ import (
 
 // sql task, the master process to run the child actors
 type sqlMasterTask struct {
-	s              *Server
+	s              *PlannerGrid
 	p              *plan.Select
 	ns             *SourceNats
 	flow           Flow
@@ -26,7 +26,9 @@ type sqlMasterTask struct {
 	done           chan bool
 }
 
-func newSqlMasterTask(s *Server, completionTask exec.TaskRunner, ns *SourceNats, flow Flow, p *plan.Select) *sqlMasterTask {
+func newSqlMasterTask(s *PlannerGrid, completionTask exec.TaskRunner,
+	ns *SourceNats, flow Flow, p *plan.Select) *sqlMasterTask {
+
 	return &sqlMasterTask{
 		s:              s,
 		p:              p,

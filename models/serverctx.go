@@ -20,8 +20,8 @@ type ServerCtx struct {
 
 	// The underlying qlbridge schema holds info about the available datasource's
 	Reg *datasource.Registry
-	// Grid is our real-time multi-node coordination and messaging system
-	Grid *planner.Server
+	// PlanGrid is our real-time multi-node coordination and messaging system
+	PlanGrid *planner.PlannerGrid
 
 	schemas map[string]*schema.Schema
 }
@@ -52,7 +52,7 @@ func (m *ServerCtx) Init() error {
 		m.Config.WorkerCt = 2
 	}
 
-	m.Grid = planner.NewServerGrid(m.Config.WorkerCt, m.Reg)
+	m.PlanGrid = planner.NewServerPlanner(m.Config.WorkerCt, m.Reg)
 
 	return nil
 }
@@ -87,7 +87,7 @@ func (m *ServerCtx) InfoSchema() (*schema.Schema, error) {
 
 func (m *ServerCtx) JobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
 	//u.Debugf("jobMaker, going to do a partial plan?")
-	return planner.BuildExecutorUnPlanned(ctx, m.Grid)
+	return planner.BuildExecutorUnPlanned(ctx, m.PlanGrid)
 }
 
 // Table Get by schema, name

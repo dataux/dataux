@@ -19,20 +19,20 @@ var (
 )
 
 // Build a Sql Job which may be a Grid/Distributed job
-func BuildSqlJob(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
+func BuildSqlJob(ctx *plan.Context, pg *PlannerGrid) (*ExecutorGrid, error) {
 	sqlPlanner := plan.NewPlanner(ctx)
 	baseJob := exec.NewExecutor(ctx, sqlPlanner)
 
 	job := &ExecutorGrid{JobExecutor: baseJob}
 	baseJob.Executor = job
-	job.GridServer = gs
+	job.GridServer = pg
 	job.Ctx = ctx
 	u.Debugf("buildsqljob: %T p:%p  %T p:%p", job, job, job.Executor, job.JobExecutor)
-	if gs == nil {
-		u.Warnf("Grid Server Doesn't exist %v", gs)
-	} else if gs.Grid == nil {
+	if pg == nil {
+		u.Warnf("Grid Server Doesn't exist %v", pg)
+	} else if pg.Grid == nil {
 		u.Warnf("Grid doens't exist? ")
-	} else if gs.Grid.Nats() == nil {
+	} else if pg.Grid.Nats() == nil {
 		u.Warnf("Grid.Nats() doesnt exist")
 	}
 	//u.Debugf("buildsqljob2: %T  %T", baseJob, baseJob.Executor)
@@ -49,14 +49,14 @@ func BuildSqlJob(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
 }
 
 // Build a Sql Job which has already been planned so this is just execution runner
-func BuildExecutorUnPlanned(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
+func BuildExecutorUnPlanned(ctx *plan.Context, pg *PlannerGrid) (*ExecutorGrid, error) {
 
 	baseJob := exec.NewExecutor(ctx, nil)
 
 	job := &ExecutorGrid{JobExecutor: baseJob}
 	baseJob.Executor = job
-	job.GridServer = gs
-	if gs == nil {
+	job.GridServer = pg
+	if pg == nil {
 		u.Warnf("nope, need a grid server ")
 		//return nil, fmt.Errorf("no grid server")
 	}
@@ -72,7 +72,7 @@ type ExecutorGrid struct {
 	*exec.JobExecutor
 	distributed bool
 	sp          *plan.Select
-	GridServer  *Server
+	GridServer  *PlannerGrid
 }
 
 // Finalize is after the Dag of Relational-algebra tasks have been assembled

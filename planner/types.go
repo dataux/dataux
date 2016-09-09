@@ -1,7 +1,7 @@
 package planner
 
 import (
-	"encoding/gob"
+	"fmt"
 
 	"github.com/lytics/dfa"
 
@@ -28,12 +28,25 @@ var (
 	Exit               = dfa.Letter("exit")
 )
 
-func init() {
-	gob.Register(ResultMsg{})
-	gob.Register(DataMsg{})
+type JobMaker func(ctx *plan.Context) (*ExecutorGrid, error)
+
+type Flow string
+
+func NewFlow(nr uint64) Flow {
+	return Flow(fmt.Sprintf("sql-%v", nr))
 }
 
-type JobMaker func(ctx *plan.Context) (*ExecutorGrid, error)
+func (f Flow) NewContextualName(name string) string {
+	return fmt.Sprintf("%v-%v", f, name)
+}
+
+func (f Flow) Name() string {
+	return string(f)
+}
+
+func (f Flow) String() string {
+	return string(f)
+}
 
 type Conf struct {
 	JobMaker       JobMaker
@@ -63,16 +76,4 @@ func (c *Conf) Clone() *Conf {
 		EtcdServers:    c.EtcdServers,
 		NatsServers:    c.NatsServers,
 	}
-}
-
-type DataMsg struct {
-	Producer string
-	Data     string
-}
-
-type ResultMsg struct {
-	Producer string
-	From     string
-	Count    int
-	Duration float64
 }

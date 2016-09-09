@@ -8,73 +8,57 @@ import (
 	u "github.com/araddon/gou"
 	"github.com/lytics/grid"
 	"github.com/lytics/grid/condition"
-	"github.com/sony/sonyflake"
 
 	"github.com/araddon/qlbridge/datasource"
-	"github.com/araddon/qlbridge/exec"
-	"github.com/araddon/qlbridge/plan"
 )
 
-var sf *sonyflake.Sonyflake
+func RunWorkerNodes(quit chan bool, nodeCt int, r *datasource.Registry) {
 
-func init() {
-	var st sonyflake.Settings
-	// TODO, ensure we get a unique etcdid for machineid
-	st.StartTime = time.Now()
-	sf = sonyflake.NewSonyflake(st)
-	// Lets use our distributed generator
-	plan.NextId = NextIdUnsafe
-}
+	loggingOnce.Do(setupLogging)
+	nextId, _ := NextId()
 
-func NextIdUnsafe() uint64 {
-	uv, err := NextId()
-	if err != nil {
-		u.Errorf("error generating nextId %v", err)
+	for i := 0; i < nodeCt; i++ {
+		go func(nodeId int) {
+			s := NewTaskServer(nodeCt, r)
+			s.Conf.Hostname = NodeName2(nextId, uint64(nodeId))
+			err := s.Run(quit) // blocking
+			if err != nil {
+				u.Warnf("could not start worker")
+			}
+		}(i)
 	}
-	return uv
+	time.Sleep(time.Millisecond * 80)
 }
 
-func NextId() (uint64, error) {
-	return sf.NextID()
-}
-
-// Server that manages the sql tasks, workers
-type Server struct {
+// TaskServer accepts and performs
+type TaskServer struct {
 	Conf       *Conf
 	reg        *datasource.Registry
+	maker      grid.ActorMaker
 	Grid       grid.Grid
 	started    bool
 	lastTaskId uint64
 }
 
-// Submits a Sql Select statement task for planning across multiple nodes
-func (m *Server) RunSqlMaster(completionTask exec.TaskRunner, ns *SourceNats, flow Flow, p *plan.Select) error {
+func NewTaskServer(nodeCt int, r *datasource.Registry) *TaskServer {
+	nextId, _ := NextId()
 
-	t := newSqlMasterTask(m, completionTask, ns, flow, p)
-	return t.Run()
-}
-
-func (m *Server) RunWorker(quit chan bool) error {
-	//u.Debugf("%p starting grid worker", m)
-	actor, err := newActorMaker(m.Conf)
+	conf := GridConf.Clone()
+	maker, err := newActorMaker(conf)
 	if err != nil {
-		u.Errorf("failed to make actor maker: %v", err)
-		return err
+		panic(fmt.Errorf("could not start worker %v", err))
 	}
-	return m.runMaker(quit, actor)
+	conf.NodeCt = nodeCt
+	conf.Hostname = NodeName(nextId)
+	return &TaskServer{Conf: conf, reg: r, maker: maker}
 }
 
-func (m *Server) RunMaster(quit chan bool) error {
-	//u.Debugf("%p start grid master", m)
-	return m.runMaker(quit, &nilMaker{})
-}
-
-func (s *Server) runMaker(quit chan bool, actorMaker grid.ActorMaker) error {
+func (s *TaskServer) Run(quit chan bool) error {
 
 	// We are going to start a "Grid" with specified maker
 	//   - nilMaker = "master" only used for submitting tasks, not performing them
 	//   - normal maker;  performs specified work units
-	s.Grid = grid.New(s.Conf.GridName, s.Conf.Hostname, s.Conf.EtcdServers, s.Conf.NatsServers, actorMaker)
+	s.Grid = grid.New(s.Conf.GridName, s.Conf.Hostname, s.Conf.EtcdServers, s.Conf.NatsServers, s.maker)
 
 	//u.Debugf("%p created new distributed grid sql job maker: %#v", s, s.Grid)
 	exit, err := s.Grid.Start()
@@ -143,22 +127,4 @@ func (s *Server) runMaker(quit chan bool, actorMaker grid.ActorMaker) error {
 	<-exit
 	//u.Debug("shutdown complete")
 	return nil
-}
-
-type Flow string
-
-func NewFlow(nr uint64) Flow {
-	return Flow(fmt.Sprintf("sql-%v", nr))
-}
-
-func (f Flow) NewContextualName(name string) string {
-	return fmt.Sprintf("%v-%v", f, name)
-}
-
-func (f Flow) Name() string {
-	return string(f)
-}
-
-func (f Flow) String() string {
-	return string(f)
 }

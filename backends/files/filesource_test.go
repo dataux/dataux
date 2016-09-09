@@ -56,7 +56,7 @@ func init() {
 
 func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
 	ctx.Schema = testmysql.Schema
-	return planner.BuildSqlJob(ctx, testmysql.ServerCtx.Grid)
+	return planner.BuildSqlJob(ctx, testmysql.ServerCtx.PlanGrid)
 }
 
 func RunTestServer(t *testing.T) {

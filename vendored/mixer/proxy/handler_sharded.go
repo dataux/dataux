@@ -64,20 +64,25 @@ type HandlerSharded struct {
 	conn *Conn
 }
 
-// func NewHandlerSharded(conf *models.Config) (models.Listener, error) {
-// 	sharedHandler := &HandlerShardedShared{
-// 		conf: conf,
-// 	}
-// 	handler := &HandlerSharded{HandlerShardedShared: sharedHandler}
-// 	err := handler.Init()
-// 	return handler, err
-// }
+func NewHandlerSharded(conf *models.Config) (models.Listener, error) {
+	sharedHandler := &HandlerShardedShared{
+		conf: conf,
+	}
+	handler := &HandlerSharded{HandlerShardedShared: sharedHandler}
+	//err := handler.Init()
+	return handler, nil
+}
 
-func (m *HandlerSharded) Init() error {
+func (m *HandlerSharded) Init(*models.ListenerConfig, *models.ServerCtx) error {
 
 	if err := m.startBackendNodes(); err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func (m *HandlerSharded) Run(stop chan bool) error {
 
 	return nil
 }

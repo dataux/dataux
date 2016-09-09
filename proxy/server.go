@@ -89,10 +89,10 @@ func RunDaemon(listener bool, workerCt int) {
 
 	if listener {
 		go func() {
-			// Master is the Grid master that coordinates
+			// PlanGrid is the master that coordinates
 			// with etcd, nats, etc, submit tasks to worker nodes
 			// Only needed on listener nodes
-			svrCtx.Grid.RunMaster(quit)
+			svrCtx.PlanGrid.Run(quit)
 		}()
 		// Listeners are the tcp-inbound connections
 		svr.RunListeners()

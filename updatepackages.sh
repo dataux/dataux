@@ -28,7 +28,7 @@ cd $GOPATH/src/github.com/kr/pretty && git checkout master && git pull
 cd $GOPATH/src/github.com/kr/pty && git checkout master && git pull
 cd $GOPATH/src/github.com/kr/text && git checkout master && git pull
 cd $GOPATH/src/github.com/leekchan/timeutil && git checkout master && git pull
-cd $GOPATH/src/github.com/lytics/cloudstorage && git checkout master && git pull
+#cd $GOPATH/src/github.com/lytics/cloudstorage && git checkout master && git pull
 cd $GOPATH/src/github.com/lytics/confl && git checkout master && git pull
 cd $GOPATH/src/github.com/lytics/datemath && git checkout master && git pull
 cd $GOPATH/src/github.com/lytics/dfa && git checkout master && git pull
