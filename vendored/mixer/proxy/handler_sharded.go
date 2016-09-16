@@ -166,7 +166,7 @@ func (m *HandlerSharded) createSqlVm(sql string) (sqlVm rel.SqlStatement, err er
 			u.Error(err)
 		}
 	}()
-	sqlVm, err = rel.ParseSqlVm(sql)
+	sqlVm, err = rel.ParseSql(sql)
 	if err != nil {
 		u.Errorf("could not parse sql vm %v", err)
 	} else {
