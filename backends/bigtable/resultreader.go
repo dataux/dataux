@@ -1,14 +1,17 @@
-package cassandra
+package bigtable
 
 import (
 	"database/sql/driver"
+	"fmt"
 	"time"
 
 	u "github.com/araddon/gou"
 
+	"cloud.google.com/go/bigtable"
+	"golang.org/x/net/context"
+
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
-	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/value"
 )
@@ -17,10 +20,6 @@ var (
 	// Ensure we implement TaskRunner
 	_ exec.TaskRunner = (*ResultReader)(nil)
 )
-
-func NewCassDialect() expr.DialectWriter {
-	return expr.NewDialectWriter('\'', '"')
-}
 
 // ResultReader implements result paging, reading
 type ResultReader struct {
@@ -32,7 +31,7 @@ type ResultReader struct {
 	proj          *rel.Projection
 	cols          []string
 	Total         int
-	Req           *SqlToCql
+	Req           *SqlToBT
 }
 
 // A wrapper, allowing us to implement sql/driver Next() interface
@@ -41,7 +40,7 @@ type ResultReaderNext struct {
 	*ResultReader
 }
 
-func NewResultReader(req *SqlToCql) *ResultReader {
+func NewResultReader(req *SqlToBT) *ResultReader {
 	m := &ResultReader{}
 	m.TaskBase = exec.NewTaskBase(req.Ctx)
 	m.Req = req
@@ -87,7 +86,7 @@ func (m *ResultReader) buildProjection() {
 	//u.Debugf("leaving Columns:  %v", len(m.proj.Columns))
 }
 
-// Runs the Cassandra Query
+// Runs the Google BigTable exec
 func (m *ResultReader) Run() error {
 
 	sigChan := m.SigChan()
@@ -98,12 +97,24 @@ func (m *ResultReader) Run() error {
 	}()
 	m.finalized = true
 	m.buildProjection()
+	sel := m.Req.sel
 
-	if m.Req.sel.CountStar() {
+	if sel.CountStar() {
 		// Count(*) Do we really want to do push-down here?
-		//  possibly default to not allowing this and allow a setting?
-		u.Warnf("Count(*) on Cassandra, your crazy!")
+		//  possibly default to not allowing this and allow via setting?
+		u.Warnf("Count(*) on BigTable, your crazy!")
 	}
+
+	tableName := ""
+	if len(sel.From) > 1 {
+		froms := make([]string, 0, len(sel.From))
+		for _, f := range sel.From {
+			froms = append(froms, f.Name)
+		}
+		return fmt.Errorf("Only 1 source supported on BigTable queries got %v", froms)
+	}
+
+	tableName = sel.From[0].Name
 
 	cols := m.Req.p.Proj.Columns
 	colNames := make(map[string]int, len(cols))
@@ -120,58 +131,76 @@ func (m *ResultReader) Run() error {
 		limit = m.Req.sel.Limit
 	}
 
-	sel := m.Req.sel
-
 	u.Debugf("%p cass limit: %d sel:%s", m.Req.sel, limit, sel)
 	queryStart := time.Now()
 
-	cassWriter := NewCassDialect()
-	sel.WriteDialect(cassWriter)
-	cqlQuery := cassWriter.String()
-	cassQry := m.Req.s.session.Query(cqlQuery).PageSize(limit)
-	iter := cassQry.Iter()
+	ctx := context.Background()
+	tbl := m.Req.s.client.Open(tableName)
+	var rr bigtable.RowRange
+	var opts []bigtable.ReadOption
+	/*
 
-	for {
-		row := make(map[string]interface{})
-		if !iter.MapScan(row) {
-			//u.Debugf("done with query")
-			break
+		if start, end := parsed["start"], parsed["end"]; end != "" {
+			rr = bigtable.NewRange(start, end)
+		} else if start != "" {
+			rr = bigtable.InfiniteRange(start)
+		}
+		if prefix := parsed["prefix"]; prefix != "" {
+			rr = bigtable.PrefixRange(prefix)
 		}
 
-		vals := make([]driver.Value, len(cols))
-		for k, v := range row {
-			found := false
-			for i, col := range cols {
-				//u.Infof("prop.name=%s col.Name=%s", prop.Name, col.Name)
-				if col.Name == k {
-					vals[i] = v
-					//u.Debugf("%-2d col.name=%-10s prop.T %T\tprop.v%v", i, col.Name, v, v)
-					found = true
-					break
+		if count := parsed["count"]; count != "" {
+			n, err := strconv.ParseInt(count, 0, 64)
+			if err != nil {
+				log.Fatalf("Bad count %q: %v", count, err)
+			}
+			opts = append(opts, bigtable.LimitRows(n))
+		}
+	*/
+	for {
+
+		err := tbl.ReadRows(ctx, rr, func(r bigtable.Row) bool {
+			//printRow(r)
+			row := make(map[string]interface{})
+
+			vals := make([]driver.Value, len(cols))
+			for k, v := range row {
+				found := false
+				for i, col := range cols {
+					//u.Infof("prop.name=%s col.Name=%s", prop.Name, col.Name)
+					if col.Name == k {
+						vals[i] = v
+						//u.Debugf("%-2d col.name=%-10s prop.T %T\tprop.v%v", i, col.Name, v, v)
+						found = true
+						break
+					}
+				}
+				if !found {
+					u.Warnf("not found? %s=%v", k, v)
 				}
 			}
-			if !found {
-				u.Warnf("not found? %s=%v", k, v)
+
+			u.Debugf("new row ct: %v cols:%v vals:%v", m.Total, colNames, vals)
+			//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
+			msg := datasource.NewSqlDriverMessageMap(uint64(m.Total), vals, colNames)
+			m.Total++
+			//u.Debugf("In gds source iter %#v", vals)
+			select {
+			case <-sigChan:
+				return false
+			case outCh <- msg:
+				// continue
 			}
+			//u.Debugf("vals:  %v", row.Vals)
+
+			return true
+		}, opts...)
+		if err != nil {
+			u.Errorf("Reading rows: %v", err)
 		}
 
-		u.Debugf("new row ct: %v cols:%v vals:%v", m.Total, colNames, vals)
-		//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
-		msg := datasource.NewSqlDriverMessageMap(uint64(m.Total), vals, colNames)
-		m.Total++
-		//u.Debugf("In gds source iter %#v", vals)
-		select {
-		case <-sigChan:
-			return nil
-		case outCh <- msg:
-			// continue
-		}
-		//u.Debugf("vals:  %v", row.Vals)
 	}
-	err := iter.Close()
-	//if err != nil {
-	//u.Errorf("could not close iter %T err:%v", err, err)
-	//}
-	u.Infof("finished query, took: %v for %v rows err:%v", time.Now().Sub(queryStart), m.Total, err)
+
+	u.Infof("finished query, took: %v for %v rows", time.Now().Sub(queryStart), m.Total)
 	return nil
 }

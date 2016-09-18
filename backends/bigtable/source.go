@@ -1,4 +1,4 @@
-package cassandra
+package bigtable
 
 import (
 	"fmt"
@@ -8,8 +8,9 @@ import (
 	"time"
 
 	u "github.com/araddon/gou"
-	"github.com/gocql/gocql"
-	"github.com/hailocab/go-hostpool"
+
+	"cloud.google.com/go/bigtable"
+	"golang.org/x/net/context"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/rel"
@@ -18,7 +19,7 @@ import (
 )
 
 const (
-	DataSourceLabel = "cassandra"
+	DataSourceLabel = "bigtable"
 )
 
 var (
@@ -26,8 +27,13 @@ var (
 
 	SchemaRefreshInterval = time.Duration(time.Minute * 5)
 
-	// Ensure our Cassandra source implements schema.Source interface
+	// Ensure our Google BigTable implements schema.Source interface
 	_ schema.Source = (*Source)(nil)
+
+	// BigTable client stuff
+	client              *bigtable.Client
+	adminClient         *bigtable.AdminClient
+	instanceAdminClient *bigtable.InstanceAdminClient
 )
 
 func init() {
@@ -35,71 +41,44 @@ func init() {
 	datasource.Register(DataSourceLabel, &Source{})
 }
 
-// Create a gocql session
-func createCassSession(conf *schema.ConfigSource, keyspace string) (*gocql.Session, error) {
-
-	servers := conf.Settings.Strings("hosts")
-	if len(servers) == 0 {
-		return nil, fmt.Errorf("No 'hosts' for cassandra found in config %v", conf.Settings)
+func getClient(project, instance string) (*bigtable.Client, error) {
+	if client == nil {
+		var err error
+		client, err = bigtable.NewClient(context.Background(), project, instance)
+		return client, err
 	}
-	cluster := gocql.NewCluster(servers...)
-
-	// Error querying table schema: Undefined name key_aliases in selection clause
-	//  if on cass 2.1 use 3.0.0 for cqlversion
-	cluster.ProtoVersion = 4
-	cluster.CQLVersion = "3.1.0"
-
-	cluster.Keyspace = keyspace
-	cluster.NumConns = 10
-
-	if numconns := conf.Settings.Int("numconns"); numconns > 0 {
-		cluster.NumConns = numconns
-	}
-
-	cluster.Timeout = time.Second * 10
-	cluster.PoolConfig.HostSelectionPolicy = gocql.HostPoolHostPolicy(
-		hostpool.NewEpsilonGreedy(nil, 0, &hostpool.LinearEpsilonValueCalculator{}),
-	)
-
-	// load-balancers often kill idel conns so lets heart beat to keep alive
-	// see https://cloud.google.com/compute/docs/troubleshooting#communicatewithinternet
-	cluster.SocketKeepalive = time.Duration(5 * time.Minute)
-
-	if retries := conf.Settings.Int("retries"); retries > 0 {
-		cluster.RetryPolicy = &gocql.SimpleRetryPolicy{NumRetries: retries}
-	} else {
-		cluster.RetryPolicy = &gocql.SimpleRetryPolicy{NumRetries: 3}
-	}
-
-	sess, err := cluster.CreateSession()
-	if err != nil && strings.Contains(err.Error(), "Invalid or unsupported protocol version: 4") {
-		// cass < 2.2 ie 2.1, 2.0
-		cluster.ProtoVersion = 2
-		cluster.CQLVersion = "3.0.0"
-		sess, err = cluster.CreateSession()
-	}
-	return sess, err
+	return client, nil
 }
 
-// Source is a Cassandra datasource, this provides Reads, Insert, Update, Delete
+func getAdminClient(project, instance string) (*bigtable.AdminClient, error) {
+	if adminClient == nil {
+		var err error
+		adminClient, err = bigtable.NewAdminClient(context.Background(), project, instance)
+		return adminClient, err
+	}
+	return adminClient, nil
+}
+
+// Source is a BigTable datasource, this provides Reads, Insert, Update, Delete
 // - singleton shared instance
-// - creates connections to cassandra (connections perform queries)
-// - provides schema info about cassandra keyspace
+// - creates clients to bigtable (clients perform queries)
+// - provides schema info about bigtable table/column-families
 type Source struct {
 	db               string
-	keyspace         string
-	kmd              *gocql.KeyspaceMetadata
+	project          string
+	instance         string
 	tables           []string // Lower cased
 	tablemap         map[string]*schema.Table
 	conf             *schema.ConfigSource
 	schema           *schema.SchemaSource
-	session          *gocql.Session
+	client           *bigtable.Client
+	ac               *bigtable.AdminClient
 	lastSchemaUpdate time.Time
 	mu               sync.Mutex
 	closed           bool
 }
 
-// Mutator a cassandra mutator connection
+// Mutator a bigtable mutator connection
 type Mutator struct {
 	tbl *schema.Table
 	sql rel.SqlStatement
@@ -125,18 +104,29 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 		return fmt.Errorf("Schema conf not found")
 	}
 
-	m.keyspace = m.conf.Settings.String("keyspace")
-	if len(m.keyspace) == 0 {
-		//return fmt.Errorf("No 'keyspace' for cassandra found in config %v", m.conf.Settings)
-		m.keyspace = m.db
+	m.instance = m.conf.Settings.String("instance")
+	if len(m.instance) == 0 {
+		return fmt.Errorf("No 'instance' for bigtable found in config %v", m.conf.Settings)
 	}
 
-	sess, err := createCassSession(m.conf, m.keyspace)
+	m.project = m.conf.Settings.String("project")
+	if len(m.project) == 0 {
+		return fmt.Errorf("No 'project' for bigtable found in config %v", m.conf.Settings)
+	}
+
+	client, err := getClient(m.project, m.instance)
 	if err != nil {
-		u.Errorf("Could not create cass conn %v", err)
+		u.Errorf("Could not create bigtable client %v", err)
 		return err
 	}
-	m.session = sess
+	m.client = client
+
+	ac, err := getAdminClient(m.project, m.instance)
+	if err != nil {
+		u.Errorf("Could not create bigtable adminclient %v", err)
+		return err
+	}
+	m.ac = ac
 
 	m.loadSchema()
 	return nil
@@ -144,33 +134,31 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 
 func (m *Source) loadSchema() error {
 
-	kmd, err := m.session.KeyspaceMetadata(m.keyspace)
+	ctx := context.Background()
+	tables, err := m.ac.Tables(ctx)
 	if err != nil {
-		u.Warnf("ks:%v  change protocol version if 2.1 or earlier %v", m.keyspace, err)
+		u.Errorf("Getting list of tables: %v", err)
 		return err
 	}
-	m.kmd = kmd
+	sort.Strings(tables)
+	for _, table := range tables {
+		ti, err := m.ac.TableInfo(ctx, table)
+		if err != nil {
+			u.Errorf("Getting table info: %v", err)
+			return err
+		}
+		sort.Strings(ti.Families)
+		u.Debugf("Found Table: %v", table, ti.Families)
+	}
+
 	m.lastSchemaUpdate = time.Now()
 	m.tables = make([]string, 0)
 
-	for _, cf := range kmd.Tables {
-		tbl := schema.NewTable(strings.ToLower(cf.Name))
-		//u.Infof("building tbl schema %v", cf.Name)
+	for _, table := range tables {
+		tbl := schema.NewTable(strings.ToLower(table))
+		//u.Infof("building tbl schema %v", table)
 		colNames := make([]string, 0)
-		/*
-			col &gocql.ColumnMetadata{Keyspace:"datauxtest", Table:"article", Name:"author", ComponentIndex:0, Kind:"partition_key",
-				Validator:"org.apache.cassandra.db.marshal.UTF8Type", Type:gocql.NativeType{proto:0x0, typ:13, custom:""},
-				ClusteringOrder:"", Order:false, Index:gocql.ColumnIndexMetadata{Name:"", Type:"", Options:map[string]interface {}(nil)}}
-			col &gocql.ColumnMetadata{Keyspace:"datauxtest", Table:"article", Name:"body", ComponentIndex:0, Kind:"regular",
-				Validator:"org.apache.cassandra.db.marshal.BytesType", Type:gocql.NativeType{proto:0x0, typ:3, custom:""},
-				ClusteringOrder:"", Order:false, Index:gocql.ColumnIndexMetadata{Name:"", Type:"", Options:map[string]interface {}(nil)}}
-			col &gocql.ColumnMetadata{Keyspace:"datauxtest", Table:"article", Name:"category", ComponentIndex:0, Kind:"regular",
-				Validator:"org.apache.cassandra.db.marshal.SetType(org.apache.cassandra.db.marshal.UTF8Type)",
-				Type:gocql.CollectionType{NativeType:gocql.NativeType{proto:0x0, typ:34, custom:""}, Key:gocql.TypeInfo(nil),
-				Elem:gocql.NativeType{proto:0x0, typ:13, custom:""}}, ClusteringOrder:"", Order:false,
-				Index:gocql.ColumnIndexMetadata{Name:"article_category_idx", Type:"COMPOSITES", Options:map[string]interface {}(nil)}}
 
-		*/
 		for _, col := range cf.Columns {
 			colName := strings.ToLower(col.Name)
 			colNames = append(colNames, colName)
