@@ -137,7 +137,7 @@ func (m *Source) loadSchema() error {
 	ctx := context.Background()
 	tables, err := m.ac.Tables(ctx)
 	if err != nil {
-		u.Errorf("Getting list of tables: %v", err)
+		u.Errorf("BigTable get list of tables err:%v", err)
 		return err
 	}
 	sort.Strings(tables)
@@ -156,86 +156,80 @@ func (m *Source) loadSchema() error {
 
 	for _, table := range tables {
 		tbl := schema.NewTable(strings.ToLower(table))
-		//u.Infof("building tbl schema %v", table)
+		u.Infof("building tbl schema %v", table)
 		colNames := make([]string, 0)
+		colFamilies := make(map[string]string)
 
-		for _, col := range cf.Columns {
-			colName := strings.ToLower(col.Name)
-			colNames = append(colNames, colName)
+		btt := client.Open(table)
 
-			//u.Debugf("%-20s %-12s %-20s %d %-12s", colName, col.Type.Type(), col.Kind, col.ComponentIndex, col.ClusteringOrder)
-			var f *schema.Field
-			switch col.Type.Type() {
-			case gocql.TypeBlob:
-				f = schema.NewFieldBase(colName, value.ByteSliceType, 2000, "blob")
-			case gocql.TypeVarchar:
-				f = schema.NewFieldBase(colName, value.StringType, 256, "string")
-			case gocql.TypeText:
-				f = schema.NewFieldBase(colName, value.StringType, 2000, "string")
-			case gocql.TypeInt, gocql.TypeTinyInt:
-				f = schema.NewFieldBase(colName, value.IntType, 32, "int")
-			case gocql.TypeBigInt:
-				f = schema.NewFieldBase(colName, value.IntType, 64, "long")
-			case gocql.TypeFloat, gocql.TypeDouble, gocql.TypeDecimal:
-				f = schema.NewFieldBase(colName, value.NumberType, 64, "float64")
-			case gocql.TypeBoolean:
-				f = schema.NewFieldBase(colName, value.BoolType, 1, "bool")
-			case gocql.TypeDate, gocql.TypeTimestamp:
-				f = schema.NewFieldBase(colName, value.TimeType, 64, "datetime")
-			case gocql.TypeSet:
-				switch nt := col.Type.(type) {
-				case gocql.CollectionType:
-					//u.Warnf("SET TYPE CASSANDRA Not handled very well?!  \n%v  \n%#v \n%#v", nt.Type(), nt, col)
-					switch nt.Elem.Type() {
-					case gocql.TypeText, gocql.TypeVarchar:
-						f = schema.NewFieldBase(colName, value.StringsType, 256, "[]string")
-					case gocql.TypeInt, gocql.TypeBigInt, gocql.TypeTinyInt:
-						f = schema.NewFieldBase(colName, value.SliceValueType, 256, "[]int")
-						f.NativeType = value.IntType
-					default:
-						u.Warnf("SET TYPE CASSANDRA Not handled very well?!  %v  \n%v", nt.Type(), nt.NativeType.Type())
-					}
+		var rr bigtable.RowRange
+		// if start, end := parsed["start"], parsed["end"]; end != "" {
+		// 	rr = bigtable.NewRange(start, end)
+		// } else if start != "" {
+		// 	rr = bigtable.InfiniteRange(start)
+		// }
+		// if prefix := parsed["prefix"]; prefix != "" {
+		// 	rr = bigtable.PrefixRange(prefix)
+		// }
+
+		var opts []bigtable.ReadOption
+		opts = append(opts, bigtable.LimitRows(100))
+
+		err := btt.ReadRows(ctx, rr, func(r bigtable.Row) bool {
+
+			u.Debugf("key: %v", r.Key())
+
+			var fams []string
+			for fam := range r {
+				fams = append(fams, fam)
+				if _, existing := colFamilies[fam]; !existing {
+					colFamilies[fam] = fam
 				}
-				/*
-					switch col.Type.(type) {
-					case gocql.TypeVarchar, gocql.TypeText:
-						f = schema.NewFieldBase(colName, value.StringsType, 256, "[]string")
-					case gocql.TypeInt, gocql.TypeBigInt, gocql.TypeTinyInt:
-						f = schema.NewFieldBase(colName, value.SliceValueType, 256, "[]int")
-						f.NativeType = value.IntType
-					default:
-						u.Warnf("SET TYPE CASSANDRA Not handled very well?!  %#v  \n%#v", col.Type, col)
-					}
-				*/
-
-			case gocql.TypeMap:
-
-				switch col.Type.Type() {
-				case gocql.TypeVarchar, gocql.TypeText:
-					f = schema.NewFieldBase(colName, value.MapStringType, 256, "map[string]string")
-					f.NativeType = value.MapStringType
-				case gocql.TypeInt, gocql.TypeBigInt, gocql.TypeTinyInt:
-					f = schema.NewFieldBase(colName, value.MapIntType, 256, "map[string]string")
-					f.NativeType = value.MapStringType
-				case gocql.TypeTimestamp, gocql.TypeTime, gocql.TypeDate:
-					f = schema.NewFieldBase(colName, value.MapTimeType, 256, "map[string]time")
-					f.NativeType = value.MapTimeType
-				}
-				u.Warnf("MAP TYPE CASSANDRA Not handled very well?!")
-			default:
-				u.Warnf("unknown column type %#v", col)
 			}
-			if f != nil {
-				// Lets save the Cass Column Metadata for later usage
-				f.AddContext("cass_column", col)
-				tbl.AddField(f)
-				//u.Debugf("col %+v    %#v", f, col)
+			sort.Strings(fams)
+			for _, fam := range fams {
+				ris := r[fam]
+				sort.Sort(byColumn(ris))
+				for _, ri := range ris {
+					ts := time.Unix(0, int64(ri.Timestamp)*1e3)
+					u.Debugf("%-20s  %-40s @ %v  %q", fam, ri.Column, ts, ri.Value)
+
+					colName := strings.ToLower(ri.Column)
+					colNames = append(colNames, colName)
+
+					//u.Debugf("%-20s %-12s %-20s %d %-12s", colName, col.Type.Type(), col.Kind, col.ComponentIndex, col.ClusteringOrder)
+					var f *schema.Field
+					switch value.ValueTypeFromStringAll(string(ri.Value)) {
+					case value.JsonType:
+						f = schema.NewFieldBase(colName, value.JsonType, 2000, "json")
+					case value.IntType:
+						f = schema.NewFieldBase(colName, value.IntType, 32, "int")
+					case value.NumberType:
+						f = schema.NewFieldBase(colName, value.NumberType, 64, "float64")
+					case value.BoolType:
+						f = schema.NewFieldBase(colName, value.BoolType, 1, "bool")
+					case value.TimeType:
+						f = schema.NewFieldBase(colName, value.TimeType, 64, "datetime")
+					case value.StringType:
+						f = schema.NewFieldBase(colName, value.StringType, 200, "varchar")
+					default:
+						u.Warnf("unknown column type %#v", string(ri.Value))
+						continue
+					}
+
+					tbl.AddField(f)
+				}
 			}
 
+			return true
+		}, opts...)
+		if err != nil {
+			// retry
+			return err
 		}
 
-		tbl.AddContext("cass_table", cf)
-		//u.Infof("%p  caching table %q  cols=%v", m.schema, tbl.Name, colNames)
+		//tbl.AddContext("bigtable_table", btt)
+		u.Infof("%p  caching table %q  cols=%v", m.schema, tbl.Name, colNames)
 		tbl.SetColumns(colNames)
 		m.tablemap[tbl.Name] = tbl
 		m.tables = append(m.tables, tbl.Name)
@@ -243,6 +237,12 @@ func (m *Source) loadSchema() error {
 	sort.Strings(m.tables)
 	return nil
 }
+
+type byColumn []bigtable.ReadItem
+
+func (b byColumn) Len() int           { return len(b) }
+func (b byColumn) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
+func (b byColumn) Less(i, j int) bool { return b[i].Column < b[j].Column }
 
 func (m *Source) Close() error {
 	u.Infof("Closing Cassandra Source %p", m)
@@ -292,5 +292,5 @@ func (m *Source) Open(tableName string) (schema.Conn, error) {
 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, tableName)
 	}
 
-	return NewSqlToCql(m, tbl), nil
+	return NewSqlToBT(m, tbl), nil
 }

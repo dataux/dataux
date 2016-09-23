@@ -4,22 +4,19 @@ package bigtable
 
 import (
 	"database/sql/driver"
-	"encoding/json"
 	"fmt"
 	"time"
 
+	"cloud.google.com/go/bigtable"
 	u "github.com/araddon/gou"
-	"github.com/gocql/gocql"
 	"golang.org/x/net/context"
 
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
-	"github.com/araddon/qlbridge/value"
 	"github.com/araddon/qlbridge/vm"
 )
 
@@ -32,6 +29,9 @@ var (
 	_ plan.SourcePlanner  = (*SqlToBT)(nil)
 	_ exec.ExecutorSource = (*SqlToBT)(nil)
 	_ schema.ConnMutation = (*SqlToBT)(nil)
+
+	Timeout   = 10 * time.Second
+	globalCtx = context.Background()
 )
 
 // SqlToBT Convert a Sql Query to a bigtable read/write rows
@@ -48,8 +48,6 @@ type SqlToBT struct {
 	stmt                 rel.SqlStatement
 	schema               *schema.SchemaSource
 	s                    *Source
-	q                    *gocql.Query
-	cf                   *gocql.TableMetadata
 	partition            *schema.Partition // current partition for this request
 	needsPolyFill        bool              // polyfill?
 	needsWherePolyFill   bool              // do we request that features be polyfilled?
@@ -71,12 +69,6 @@ func (m *SqlToBT) queryRewrite(original *rel.SqlSelect) error {
 
 	//u.Debugf("%p  %s query:%s", m, m.tbl.Name, m.sel)
 	m.original = original
-
-	cf, ok := m.tbl.Context["cass_table"].(*gocql.TableMetadata)
-	if !ok {
-		return fmt.Errorf("What, expected gocql.TableMetadata but got %T", m.tbl.Context["cass_table"])
-	}
-	m.cf = cf
 
 	req := original.Copy()
 	m.sel = req
@@ -244,7 +236,12 @@ func (m *SqlToBT) CreateMutator(pc interface{}) (schema.ConnMutator, error) {
 
 // Put Interface for mutation (insert, update)
 func (m *SqlToBT) Put(ctx context.Context, key schema.Key, val interface{}) (schema.Key, error) {
+	return nil, schema.ErrNotImplemented
+}
 
+/*
+// Put Interface for mutation (insert, update)
+func (m *SqlToBT) Put(ctx context.Context, key schema.Key, val interface{}) (schema.Key, error) {
 	if key == nil {
 		u.Warnf("didn't have key?  %v", val)
 		//return nil, fmt.Errorf("Must have key for updates in cassandra")
@@ -359,7 +356,7 @@ func (m *SqlToBT) Put(ctx context.Context, key schema.Key, val interface{}) (sch
 	newKey := datasource.NewKeyCol("id", "fixme")
 	return newKey, nil
 }
-
+*/
 func (m *SqlToBT) PutMulti(ctx context.Context, keys []schema.Key, src interface{}) ([]schema.Key, error) {
 	return nil, schema.ErrNotImplemented
 }
@@ -379,32 +376,21 @@ func (m *SqlToBT) DeleteExpression(p interface{}, where expr.Node) (int, error) 
 	if !ok {
 		return 0, plan.ErrNoPlan
 	}
-	dw := expr.NewDialectWriter('\'', '"')
-	where.WriteDialect(dw)
-	cql := fmt.Sprintf("DELETE FROM %s WHERE %s", pd.Stmt.Table, dw.String())
-	u.Warnf("about to run:  %s", cql)
-	err := m.s.session.Query(cql).Exec()
+
+	btt := m.s.client.Open(pd.Stmt.Table)
+
+	ctx, cancel := context.WithTimeout(globalCtx, Timeout)
+	defer cancel()
+
+	//key := nodeRowKey(gp, ref)
+
+	mut := bigtable.NewMutation()
+	mut.DeleteRow()
+	err := btt.Apply(ctx, "hello", mut)
 	if err != nil {
-		u.Errorf("could not delete: %v", err)
 		return 0, err
 	}
-	// Wow, we have serious problems here because cql/cassandra doesn't
-	// tell us how many were deleted.  hm
 	return 1, nil
-}
-
-func (m *SqlToBT) isCassKey(name string) bool {
-	for _, cc := range m.cf.PartitionKey {
-		if cc.Name == name {
-			return true
-		}
-	}
-	for _, cc := range m.cf.ClusteringColumns {
-		if cc.Name == name {
-			return true
-		}
-	}
-	return false
 }
 
 // walkWhereNode() We are re-writing the sql select statement and need
@@ -491,12 +477,6 @@ func (m *SqlToBT) walkFilterBinary(node *expr.BinaryNode) (expr.Node, error) {
 		// 1) child element of a row, ie json key inside column?  need to polyfill
 		return nil, nil
 	}
-	// if it is an identity lets make sure it is in parition or cluster key
-	if !m.isCassKey(lhIdentityName) {
-		m.needsPolyFill = true
-		u.Warnf("cannot use [%s] in WHERE due to not being part of key", node)
-		return nil, nil
-	}
 
 	lhval, lhok := vm.Eval(nil, node.Args[0])
 	rhval, rhok := vm.Eval(nil, node.Args[1])
@@ -566,12 +546,6 @@ func (m *SqlToBT) canOrder(in *expr.IdentityNode) bool {
 	_, exists := m.tbl.FieldMap[lhIdentityName]
 	if !exists {
 		// Doesn't exist in cassandra? possibly json path?
-		return false
-	}
-	// if it is an identity lets make sure it is in parition or cluster key
-	if !m.isCassKey(lhIdentityName) {
-		m.needsOrderByPolyFill = true
-		u.Warnf("cannot use [%s] in ORDER BY due to not being part of key", in)
 		return false
 	}
 
