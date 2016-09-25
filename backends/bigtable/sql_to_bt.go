@@ -4,6 +4,7 @@ package bigtable
 
 import (
 	"database/sql/driver"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -11,12 +12,14 @@ import (
 	u "github.com/araddon/gou"
 	"golang.org/x/net/context"
 
+	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
+	"github.com/araddon/qlbridge/value"
 	"github.com/araddon/qlbridge/vm"
 )
 
@@ -67,7 +70,7 @@ func NewSqlToBT(s *Source, t *schema.Table) *SqlToBT {
 
 func (m *SqlToBT) queryRewrite(original *rel.SqlSelect) error {
 
-	//u.Debugf("%p  %s query:%s", m, m.tbl.Name, m.sel)
+	u.Debugf("%p  %s query:%s", m, m.tbl.Name, m.sel)
 	m.original = original
 
 	req := original.Copy()
@@ -236,12 +239,7 @@ func (m *SqlToBT) CreateMutator(pc interface{}) (schema.ConnMutator, error) {
 
 // Put Interface for mutation (insert, update)
 func (m *SqlToBT) Put(ctx context.Context, key schema.Key, val interface{}) (schema.Key, error) {
-	return nil, schema.ErrNotImplemented
-}
 
-/*
-// Put Interface for mutation (insert, update)
-func (m *SqlToBT) Put(ctx context.Context, key schema.Key, val interface{}) (schema.Key, error) {
 	if key == nil {
 		u.Warnf("didn't have key?  %v", val)
 		//return nil, fmt.Errorf("Must have key for updates in cassandra")
@@ -252,16 +250,19 @@ func (m *SqlToBT) Put(ctx context.Context, key schema.Key, val interface{}) (sch
 		return nil, fmt.Errorf("Must have schema for updates in cassandra")
 	}
 
+	if m.tbl.Parent == "" {
+		return nil, fmt.Errorf("Must have parent for big-table put")
+	}
+
 	cols := m.tbl.Columns()
 	if m.stmt == nil {
 		return nil, fmt.Errorf("Must have stmts to infer columns ")
 	}
-	upsertCql := ""
+
 	switch q := m.stmt.(type) {
 	case *rel.SqlInsert:
 		cols = q.ColumnNames()
-		upsertCql = q.RewriteAsPrepareable(1, '?')
-		//u.Debugf("prepared:  \n%s", upsertCql)
+
 	default:
 		return nil, fmt.Errorf("%T not yet supported ", q)
 	}
@@ -347,16 +348,44 @@ func (m *SqlToBT) Put(ctx context.Context, key schema.Key, val interface{}) (sch
 		return nil, fmt.Errorf("Was not []driver.Value?  %T", val)
 	}
 
-	//u.Debugf("writing %s \n%v", upsertCql, curRow)
-	err := m.s.session.Query(upsertCql, curRow...).Exec()
-	if err != nil {
-		u.Errorf("could not insert: %v", err)
-		return nil, err
+	tbl := client.Open(m.tbl.Parent)
+
+	mut := Mutation(m.tbl.Name, row, cols)
+
+	keyVal := fmt.Sprintf("%v", key.Key())
+	if err := tbl.Apply(ctx, keyVal, mut); err != nil {
+		u.Errorf("Error Applying mutation: %v", err)
 	}
 	newKey := datasource.NewKeyCol("id", "fixme")
 	return newKey, nil
 }
-*/
+
+func Mutation(fam string, vals []driver.Value, cols []string) *bigtable.Mutation {
+	mut := bigtable.NewMutation()
+	//ts := bigtable.Now()
+	for i, val := range vals {
+		colName := cols[i]
+
+		var by []byte
+		switch vt := val.(type) {
+		case int, int64, float64, time.Time, *time.Time:
+			by = []byte(fmt.Sprintf("%v", vt))
+		case string:
+			by = []byte(vt)
+		case bool:
+			if vt {
+				by = []byte("true")
+			} else {
+				by = []byte("false")
+			}
+		default:
+			by, _ = json.Marshal(vt)
+		}
+		mut.Set(fam, colName, bigtable.ServerTime, by)
+	}
+	return mut
+}
+
 func (m *SqlToBT) PutMulti(ctx context.Context, keys []schema.Key, src interface{}) ([]schema.Key, error) {
 	return nil, schema.ErrNotImplemented
 }

@@ -3,7 +3,6 @@ package bigtable_test
 import (
 	"database/sql"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -11,16 +10,18 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/bigtable"
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/gocql/gocql"
 	"github.com/jmoiron/sqlx"
+	"golang.org/x/net/context"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/schema"
 
-	_ "github.com/dataux/dataux/backends/cassandra"
+	btbe "github.com/dataux/dataux/backends/bigtable"
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
 	"github.com/dataux/dataux/planner"
 	tu "github.com/dataux/dataux/testutil"
@@ -31,17 +32,16 @@ var (
 	loadTestDataOnce    sync.Once
 	now                 = time.Now()
 	testServicesRunning bool
-	cassHost            *string = flag.String("casshost", "localhost:9042", "Cassandra Host")
-	session             *gocql.Session
-	cassKeyspace        = "datauxtest"
+	btTable             = "datauxtest"
+	btInstance          = ""
+	gceProject          = os.Getenv("GCEPROJECT")
 	_                   = json.RawMessage(nil)
 )
 
 func init() {
-
-	cass := os.Getenv("CASSANDRA_HOST")
-	if len(cass) > 0 {
-		*cassHost = cass
+	u.SetupLogging("debug")
+	if gceProject == "" {
+		panic("Must have $GCEPROJECT env")
 	}
 	tu.Setup()
 }
@@ -114,104 +114,72 @@ func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
 
 func loadTestData(t *testing.T) {
 	loadTestDataOnce.Do(func() {
-		u.Debugf("loading cassandra test data")
-		preKeyspace := gocql.NewCluster(*cassHost)
-		// no keyspace
-		s1, err := preKeyspace.CreateSession()
-		assert.Tf(t, err == nil, "Must create cassandra session got err=%v", err)
-		cqlKeyspace := fmt.Sprintf(`
-			CREATE KEYSPACE IF NOT EXISTS %s WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };`, cassKeyspace)
-		err = s1.Query(cqlKeyspace).Exec()
-		assert.Tf(t, err == nil, "Must create cassandra keyspace got err=%v", err)
 
-		cluster := gocql.NewCluster(*cassHost)
-		cluster.Keyspace = cassKeyspace
-		// Error querying table schema: Undefined name key_aliases in selection clause
-		// this assumes cassandra 2.2.x ??
-		cluster.ProtoVersion = 4
-		cluster.CQLVersion = "3.1.0"
-		sess, err := cluster.CreateSession()
-		if err != nil && strings.Contains(err.Error(), "Invalid or unsupported protocol version: 4") {
-			// cass < 2.2 ie 2.1, 2.0
-			cluster.ProtoVersion = 2
-			cluster.CQLVersion = "3.0.0"
-			sess, err = cluster.CreateSession()
-		}
-		assert.Tf(t, err == nil, "Must create cassandra session got err=%v", err)
-
-		for _, table := range testTables {
-			err = sess.Query(table).Consistency(gocql.All).Exec()
-			time.Sleep(time.Millisecond * 30)
-			assert.Tf(t, err == nil, "failed to create dataux table: %v", err)
-		}
-		err = sess.Query("CREATE INDEX IF NOT EXISTS ON article (category);").Exec()
-		assert.T(t, err == nil)
-		session = sess
-
-		/*
-		   type Article struct {
-		   	Title    string
-		   	Author   string
-		   	Count    int
-		   	Count64  int64
-		   	Deleted  bool
-		   	Category datasource.StringArray
-		   	Created  time.Time
-		   	Updated  *time.Time
-		   	F        float64
-		   	Embedded struct {
-		   		Tag string
-		   		ICt int
-		   	}
-		   	Body *json.RawMessage
-		   }
-		   type User struct {
-		   	Id      string
-		   	Name    string
-		   	Deleted bool
-		   	Roles   datasource.StringArray
-		   	Created time.Time
-		   	Updated *time.Time
-		   }
-
-		*/
-
-		// Articles = append(Articles, &Article{"article1", "aaron", 22, 75, false, []string{"news", "sports"}, t1, &ut, 55.5, ev, &body})
-		for _, article := range tu.Articles {
-			err = sess.Query(`
-				INSERT INTO datauxtest.article 
-					(title, author, count, count64, deleted, category, created, updated, f, body)
-					VALUES (?, ? , ? , ? , ? , ? , ? , ? , ? , ?)
-			`, article.Values()...).Exec()
-			//u.Infof("insert: %v", article.Row())
-			assert.Tf(t, err == nil, "must put but got err: %v", err)
-		}
-		/*
-			// Now we are going to write the embeded?
-			for i := 0; i < -1; i++ {
-				n := time.Now()
-				ev := struct {
-					Tag string
-					ICt int
-				}{"tag", i}
-				body := json.RawMessage([]byte(fmt.Sprintf(`{"name":"more %v"}`, i)))
-				a := &tu.Article{fmt.Sprintf("article_%v", i), "auto", 22, 75, false, []string{"news", "sports"}, n, &n, 55.5, ev, &body}
-				key, err := client.Put(ctx, articleKey(a.Title), &Article{a})
-				//u.Infof("key: %v", key)
-				assert.Tf(t, key != nil, "%v", key)
-				assert.Tf(t, err == nil, "must put %v", err)
-				//u.Warnf("made article: %v", a.Title)
+		var btconf *schema.ConfigSource
+		for _, sc := range testmysql.Conf.Sources {
+			if sc.SourceType == "bigtable" {
+				btconf = sc
 			}
-		*/
-		for _, user := range tu.Users {
-			err = sess.Query(`
-				INSERT INTO datauxtest.user 
-					(id, name, deleted, roles, created, updated)
-					VALUES (?, ? , ? , ? , ? , ? )
-			`, user.Values()...).Exec()
-			//u.Infof("insert: %v", user.Row())
-			assert.Tf(t, err == nil, "must put but got err: %v", err)
 		}
+		if btconf == nil {
+			panic("must have bigtable conf")
+		}
+		//u.Debugf("loading bigtable test data %#v", btconf)
+
+		btInstance = btconf.Settings.String("instance")
+		ctx := context.Background()
+
+		ac, err := bigtable.NewAdminClient(ctx, gceProject, btInstance)
+		if err != nil {
+			panic(fmt.Sprintf("admin client required but got err: %v", err))
+		}
+		tables, err := ac.Tables(ctx)
+		if err != nil {
+			panic(fmt.Sprintf("Must be able to get tables %v", err))
+		}
+		foundTbl := false
+		for _, table := range tables {
+			if table == "datauxtest" {
+				foundTbl = true
+			}
+		}
+		if !foundTbl {
+			err = ac.CreateTable(ctx, "datauxtest")
+			if err != nil {
+				panic(fmt.Sprintf("Must be able to create test table %v", err))
+			}
+			for _, cf := range []string{"user", "article", "event"} {
+				err = ac.CreateColumnFamily(ctx, "datauxtest", cf)
+				if err != nil {
+					panic(fmt.Sprintf("Must be able to create test column-family %v", err))
+				}
+			}
+		}
+
+		client, err := bigtable.NewClient(ctx, gceProject, btInstance)
+		if err != nil {
+			panic(fmt.Sprintf("client required but got err: %v", err))
+		}
+
+		tbl := client.Open("datauxtest")
+
+		for _, article := range tu.Articles {
+
+			mut := btbe.Mutation("article", article.Values(), article.ColNames())
+
+			if err := tbl.Apply(ctx, article.Title, mut); err != nil {
+				u.Errorf("Error Applying mutation: %v", err)
+			}
+		}
+
+		for _, user := range tu.Users {
+			mut := btbe.Mutation("user", user.Values(), user.ColNames())
+
+			if err := tbl.Apply(ctx, user.Id, mut); err != nil {
+				u.Errorf("Error Applying mutation: %v", err)
+			}
+		}
+
 	})
 }
 
@@ -227,7 +195,7 @@ func TestShowTables(t *testing.T) {
 		Sql:         "show tables;",
 		ExpectRowCt: 3,
 		ValidateRowData: func() {
-			//u.Infof("%v", data)
+			//u.Infof("%+v", data)
 			assert.Tf(t, data.Table != "", "%v", data)
 			if data.Table == strings.ToLower("article") {
 				found = true
@@ -249,7 +217,7 @@ func TestBasic(t *testing.T) {
 	defer dbx.Close()
 	//u.Debugf("%v", testSpec.Sql)
 	rows, err := dbx.Queryx(fmt.Sprintf("select * from article"))
-	assert.Tf(t, err == nil, "%v", err)
+	assert.Equalf(t, err, nil, "%v", err)
 	defer rows.Close()
 }
 
@@ -268,7 +236,7 @@ func TestDescribeTable(t *testing.T) {
 	describedCt := 0
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         fmt.Sprintf("describe article;"),
-		ExpectRowCt: 11,
+		ExpectRowCt: 10,
 		ValidateRowData: func() {
 			//u.Infof("%s   %#v", data.Field, data)
 			assert.Tf(t, data.Field != "", "%v", data)
@@ -283,10 +251,10 @@ func TestDescribeTable(t *testing.T) {
 				assert.Tf(t, data.Type == "datetime", "data: %#v", data)
 				describedCt++
 			case "category":
-				assert.Tf(t, data.Type == "text", "data: %#v", data)
+				assert.Tf(t, data.Type == "json", "data: %#v", data)
 				describedCt++
 			case "body":
-				assert.Tf(t, data.Type == "text", "data: %#v", data)
+				assert.Tf(t, data.Type == "json", "data: %#v", data)
 				describedCt++
 			case "deleted":
 				assert.Tf(t, data.Type == "bool" || data.Type == "tinyint", "data: %#v", data)
@@ -295,7 +263,7 @@ func TestDescribeTable(t *testing.T) {
 		},
 		RowData: &data,
 	})
-	assert.Tf(t, describedCt == 6, "Should have found/described 6 but was %v", describedCt)
+	assert.Tf(t, describedCt == 5, "Should have found/described 5 but was %v", describedCt)
 }
 
 func TestSimpleRowSelect(t *testing.T) {
@@ -414,25 +382,6 @@ func TestSelectProjectionRewrite(t *testing.T) {
 func TestSelectOrderBy(t *testing.T) {
 	RunTestServer(t)
 
-	dbx, err := sqlx.Connect("mysql", DbConn)
-	assert.Tf(t, err == nil, "%v", err)
-	defer dbx.Close()
-
-	// This is an error BECAUSE cassandra won't allow order by on
-	// partition key that is not part of == or IN clause in where
-	//  - do i poly/fill?  with option?
-	//  - what about changing the partition keys to be more realistic?
-	//    - new artificial partition key?   ie hash(url) = assigns it to 1 of ?? 1000 partitions?
-	//       how would i declare that hash(url) syntax?  a materialized view?
-	rows, err := dbx.Queryx("select title, count64 AS ct FROM article ORDER BY title DESC LIMIT 1;")
-	assert.Tf(t, err == nil, "Should error! %v", err)
-	cols, err := rows.Columns()
-	assert.Tf(t, err == nil, "%v", err)
-	assert.Tf(t, len(cols) == 2, "has 2 cols")
-	assert.T(t, rows.Next() == false, "Should not have any rows")
-
-	return
-	// return
 	data := struct {
 		Title string
 		Ct    int

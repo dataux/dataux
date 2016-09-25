@@ -182,7 +182,7 @@ func loadTestData(t *testing.T) {
 				INSERT INTO datauxtest.article 
 					(title, author, count, count64, deleted, category, created, updated, f, body)
 					VALUES (?, ? , ? , ? , ? , ? , ? , ? , ? , ?)
-			`, article.Values()...).Exec()
+			`, article.ValueI()...).Exec()
 			//u.Infof("insert: %v", article.Row())
 			assert.Tf(t, err == nil, "must put but got err: %v", err)
 		}
@@ -208,7 +208,7 @@ func loadTestData(t *testing.T) {
 				INSERT INTO datauxtest.user 
 					(id, name, deleted, roles, created, updated)
 					VALUES (?, ? , ? , ? , ? , ? )
-			`, user.Values()...).Exec()
+			`, user.ValueI()...).Exec()
 			//u.Infof("insert: %v", user.Row())
 			assert.Tf(t, err == nil, "must put but got err: %v", err)
 		}
@@ -227,7 +227,7 @@ func TestShowTables(t *testing.T) {
 		Sql:         "show tables;",
 		ExpectRowCt: 3,
 		ValidateRowData: func() {
-			//u.Infof("%v", data)
+			//u.Infof("%+v", data)
 			assert.Tf(t, data.Table != "", "%v", data)
 			if data.Table == strings.ToLower("article") {
 				found = true

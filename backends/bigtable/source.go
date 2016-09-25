@@ -2,6 +2,7 @@ package bigtable
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -34,6 +35,8 @@ var (
 	client              *bigtable.Client
 	adminClient         *bigtable.AdminClient
 	instanceAdminClient *bigtable.InstanceAdminClient
+
+	gceProject = os.Getenv("GCEPROJECT")
 )
 
 func init() {
@@ -111,7 +114,11 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 
 	m.project = m.conf.Settings.String("project")
 	if len(m.project) == 0 {
-		return fmt.Errorf("No 'project' for bigtable found in config %v", m.conf.Settings)
+		if gceProject != "" {
+			m.project = gceProject
+		} else {
+			return fmt.Errorf("No 'project' for bigtable found in config %v", m.conf.Settings)
+		}
 	}
 
 	client, err := getClient(m.project, m.instance)
@@ -132,74 +139,103 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 	return nil
 }
 
+type bttable struct {
+	Name     string
+	Families []string
+}
+
 func (m *Source) loadSchema() error {
 
+	var tablesToLoad map[string]struct{}
+
+	if len(m.schema.Conf.TablesToLoad) > 0 {
+		tablesToLoad = make(map[string]struct{}, len(m.schema.Conf.TablesToLoad))
+		for _, tableToLoad := range m.schema.Conf.TablesToLoad {
+			tablesToLoad[tableToLoad] = struct{}{}
+		}
+	}
+
 	ctx := context.Background()
-	tables, err := m.ac.Tables(ctx)
+	tableNames, err := m.ac.Tables(ctx)
 	if err != nil {
 		u.Errorf("BigTable get list of tables err:%v", err)
 		return err
 	}
-	sort.Strings(tables)
-	for _, table := range tables {
+	sort.Strings(tableNames)
+	tables := make([]*bttable, 0, len(tableNames))
+	for _, table := range tableNames {
+
+		if len(tablesToLoad) > 0 {
+			if _, shouldLoad := tablesToLoad[table]; !shouldLoad {
+				continue
+			}
+		}
+
 		ti, err := m.ac.TableInfo(ctx, table)
 		if err != nil {
 			u.Errorf("Getting table info: %v", err)
 			return err
 		}
 		sort.Strings(ti.Families)
-		u.Debugf("Found Table: %v", table, ti.Families)
+		tables = append(tables, &bttable{table, ti.Families})
+		u.Debugf("Found Table: %v families:%v", table, ti.Families)
 	}
 
 	m.lastSchemaUpdate = time.Now()
 	m.tables = make([]string, 0)
+	//colFamilies := make(map[string]string)
 
 	for _, table := range tables {
-		tbl := schema.NewTable(strings.ToLower(table))
-		u.Infof("building tbl schema %v", table)
-		colNames := make([]string, 0)
-		colFamilies := make(map[string]string)
 
-		btt := client.Open(table)
+		btt := m.client.Open(table.Name)
 
-		var rr bigtable.RowRange
-		// if start, end := parsed["start"], parsed["end"]; end != "" {
-		// 	rr = bigtable.NewRange(start, end)
-		// } else if start != "" {
-		// 	rr = bigtable.InfiniteRange(start)
-		// }
-		// if prefix := parsed["prefix"]; prefix != "" {
-		// 	rr = bigtable.PrefixRange(prefix)
-		// }
+		for _, colFamily := range table.Families {
 
-		var opts []bigtable.ReadOption
-		opts = append(opts, bigtable.LimitRows(100))
+			// We are currently treating col-families as "table"
+			// we should allow control/customization of this
+			tbl := schema.NewTable(strings.ToLower(colFamily))
+			tbl.Parent = table.Name
+			//u.Infof("building tbl schema %v", colFamily)
+			colNames := make([]string, 0)
+			colMap := make(map[string]bool)
+			colFamilyPrefix := colFamily + ":"
 
-		err := btt.ReadRows(ctx, rr, func(r bigtable.Row) bool {
+			var rr bigtable.RowRange
+			//rr = bigtable.FamilyFilter(colFamily)
+			// if start, end := parsed["start"], parsed["end"]; end != "" {
+			// 	rr = bigtable.NewRange(start, end)
+			// } else if start != "" {
+			// 	rr = bigtable.InfiniteRange(start)
+			// }
+			// if prefix := parsed["prefix"]; prefix != "" {
+			// 	rr = bigtable.PrefixRange(prefix)
+			// }
 
-			u.Debugf("key: %v", r.Key())
+			var opts []bigtable.ReadOption
+			opts = append(opts, bigtable.LimitRows(20))
+			opts = append(opts, bigtable.RowFilter(bigtable.FamilyFilter(colFamily)))
+			opts = append(opts, bigtable.RowFilter(bigtable.LatestNFilter(1)))
 
-			var fams []string
-			for fam := range r {
-				fams = append(fams, fam)
-				if _, existing := colFamilies[fam]; !existing {
-					colFamilies[fam] = fam
-				}
-			}
-			sort.Strings(fams)
-			for _, fam := range fams {
-				ris := r[fam]
+			err := btt.ReadRows(ctx, rr, func(r bigtable.Row) bool {
+
+				ris := r[colFamily]
 				sort.Sort(byColumn(ris))
+				//u.Debugf("tbl:%s cf:%s  key: %v  cellct:%d", table.Name, colFamily, r.Key(), len(ris))
 				for _, ri := range ris {
-					ts := time.Unix(0, int64(ri.Timestamp)*1e3)
-					u.Debugf("%-20s  %-40s @ %v  %q", fam, ri.Column, ts, ri.Value)
+					//ts := time.Unix(0, int64(ri.Timestamp)*1e3)
+					//u.Debugf("%-20s  %-40s @ %v  %q", colFamily, ri.Column, ts, ri.Value)
 
 					colName := strings.ToLower(ri.Column)
+					colName = strings.Replace(colName, colFamilyPrefix, "", 1)
+					if _, exists := colMap[colName]; exists {
+						continue
+					}
+					colMap[colName] = true
 					colNames = append(colNames, colName)
 
-					//u.Debugf("%-20s %-12s %-20s %d %-12s", colName, col.Type.Type(), col.Kind, col.ComponentIndex, col.ClusteringOrder)
 					var f *schema.Field
-					switch value.ValueTypeFromStringAll(string(ri.Value)) {
+					vt := value.ValueTypeFromStringAll(string(ri.Value))
+					switch vt {
 					case value.JsonType:
 						f = schema.NewFieldBase(colName, value.JsonType, 2000, "json")
 					case value.IntType:
@@ -216,23 +252,23 @@ func (m *Source) loadSchema() error {
 						u.Warnf("unknown column type %#v", string(ri.Value))
 						continue
 					}
-
+					//u.Debugf("%s = %v vt:%s  %#v", colName, string(ri.Value), vt, f)
 					tbl.AddField(f)
 				}
+
+				return true
+			}, opts...)
+			if err != nil {
+				// retry
+				return err
 			}
 
-			return true
-		}, opts...)
-		if err != nil {
-			// retry
-			return err
+			//tbl.AddContext("bigtable_table", btt)
+			//u.Infof("%p  caching table %q  cols=%v", m.schema, tbl.Name, colNames)
+			tbl.SetColumns(colNames)
+			m.tablemap[tbl.Name] = tbl
+			m.tables = append(m.tables, tbl.Name)
 		}
-
-		//tbl.AddContext("bigtable_table", btt)
-		u.Infof("%p  caching table %q  cols=%v", m.schema, tbl.Name, colNames)
-		tbl.SetColumns(colNames)
-		m.tablemap[tbl.Name] = tbl
-		m.tables = append(m.tables, tbl.Name)
 	}
 	sort.Strings(m.tables)
 	return nil
@@ -245,7 +281,6 @@ func (b byColumn) Swap(i, j int)      { b[i], b[j] = b[j], b[i] }
 func (b byColumn) Less(i, j int) bool { return b[i].Column < b[j].Column }
 
 func (m *Source) Close() error {
-	u.Infof("Closing Cassandra Source %p", m)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -257,6 +292,7 @@ func (m *Source) DataSource() schema.Source { return m }
 func (m *Source) Tables() []string          { return m.tables }
 func (m *Source) Table(table string) (*schema.Table, error) {
 
+	//u.Debugf("Table(%q)", table)
 	if m.schema == nil {
 		u.Warnf("no schema in use?")
 		return nil, fmt.Errorf("no schema in use")
@@ -277,7 +313,7 @@ func (m *Source) Table(table string) (*schema.Table, error) {
 }
 
 func (m *Source) Open(tableName string) (schema.Conn, error) {
-	//u.Debugf("Open(%v)", tableName)
+	u.Debugf("Open(%v)", tableName)
 	if m.schema == nil {
 		u.Warnf("no schema?")
 		return nil, nil
