@@ -1,14 +1,15 @@
 package testmysql
 
 import (
+	"os"
 	"sync"
 	"testing"
 	"time"
 
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
+	"github.com/coreos/etcd/embed"
 	"github.com/lytics/grid/natsunit"
-	"github.com/lytics/sereno/embeddedetcd"
 
 	// Frontend's side-effect imports
 	_ "github.com/dataux/dataux/frontends/mysqlfe"
@@ -26,7 +27,6 @@ var (
 	testDBOnce     sync.Once
 	testDB         *client.DB
 	Conf           *models.Config
-	EtcdCluster    *embeddedetcd.EtcdCluster
 	ServerCtx      *models.ServerCtx
 	Schema         *schema.Schema
 )
@@ -70,7 +70,8 @@ schemas : [
       "localfiles", 
       "google_ds_test", 
       "cass", 
-      "bt"
+      "bt",
+      "kube"
     ]
   }
 ]
@@ -153,6 +154,11 @@ sources : [
   }
 
   {
+    name : kube
+    type : kubernetes
+  }
+
+  {
     name : bt
     type : bigtable
     tables_to_load : [ "datauxtest" , "article", "user", "event" ]
@@ -195,15 +201,39 @@ func NewTestServerForDb(t *testing.T, db string) {
 
 		assert.Tf(t, Conf != nil, "must load config without err: %v", Conf)
 
-		EtcdCluster = embeddedetcd.TestClusterOf1()
-		EtcdCluster.Launch()
-		etcdServers := EtcdCluster.HTTPMembers()[0].ClientURLs
+		// EtcdCluster = embeddedetcd.TestClusterOf1()
+		// EtcdCluster.Launch()
+		// etcdServers := EtcdCluster.HTTPMembers()[0].ClientURLs
 		//u.Infof("etcdServers: %#v", etcdServers)
-		Conf.Etcd = etcdServers
+		//Conf.Etcd = etcdServers
 
-		natsunit.StartEmbeddedNATS()
+		// etcd.embed package for some reason uses non localhost ip's
+		embed.DefaultInitialAdvertisePeerURLs = "http://127.0.0.1:2380"
+		embed.DefaultAdvertiseClientURLs = "http://127.0.0.1:2379"
 
-		planner.GridConf.EtcdServers = etcdServers
+		cfg := embed.NewConfig()
+		os.RemoveAll("test.etcd")
+		cfg.Dir = "test.etcd"
+		e, err := embed.StartEtcd(cfg)
+		if err != nil {
+			panic(err.Error())
+		}
+		if e == nil {
+			panic("must have etcd server")
+		}
+		//defer e.Close()
+
+		Conf.Etcd = []string{embed.DefaultAdvertiseClientURLs}
+		//Conf.Etcd = []string{"http://127.0.0.1:2379"}
+
+		_, err = natsunit.StartEmbeddedNATS()
+		if err != nil {
+			panic(err.Error)
+		} else {
+			u.Debugf("started embedded nats %v", natsunit.TestURL)
+		}
+
+		planner.GridConf.EtcdServers = Conf.Etcd
 
 		ServerCtx = models.NewServerCtx(Conf)
 		//u.Infof("init")
