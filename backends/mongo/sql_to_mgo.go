@@ -292,7 +292,7 @@ func (m *SqlToMgo) WalkGroupBy() error {
 			case *expr.IdentityNode, *expr.FuncNode:
 				esm := bson.M{}
 				_, err := m.WalkNode(col.Expr, &esm)
-				fld := strings.Replace(expr.FindIdentityField(col.Expr), ".", "", -1)
+				fld := strings.Replace(expr.FindFirstIdentity(col.Expr), ".", "", -1)
 				u.Infof("gb: %s  %s", fld, u.JsonHelper(esm).PrettyJson())
 				if err == nil {
 					if len(m.innergb) > 0 {
