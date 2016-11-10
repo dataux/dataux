@@ -7,7 +7,7 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
-	"github.com/lytics/grid/natsunit"
+	"github.com/lytics/grid/grid.v2/natsunit"
 	"github.com/lytics/sereno/embeddedetcd"
 
 	// Frontend's side-effect imports
