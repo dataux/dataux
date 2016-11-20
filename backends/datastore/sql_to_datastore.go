@@ -243,7 +243,7 @@ func (m *SqlToDatstore) Put(ctx context.Context, key schema.Key, val interface{}
 	curRow := make([]driver.Value, len(cols))
 
 	if key != nil {
-		dskey = datastore.NewKey(m.dsCtx, m.tbl.NameOriginal, fmt.Sprintf("%v", key.Key()), 0, nil)
+		dskey = datastore.NameKey(m.tbl.NameOriginal, fmt.Sprintf("%v", key.Key()), nil)
 	}
 
 	var sel *rel.SqlSelect
@@ -305,7 +305,7 @@ func (m *SqlToDatstore) Put(ctx context.Context, key schema.Key, val interface{}
 			}
 		}
 		// Create the key by position?  HACK
-		dskey = datastore.NewKey(m.dsCtx, m.tbl.NameOriginal, fmt.Sprintf("%v", row[0]), 0, nil)
+		dskey = datastore.NameKey(m.tbl.NameOriginal, fmt.Sprintf("%v", row[0]), nil)
 
 	case map[string]driver.Value:
 		for i, f := range m.tbl.Fields {
@@ -362,7 +362,7 @@ func (m *SqlToDatstore) PutMulti(ctx context.Context, keys []schema.Key, src int
 }
 
 func (m *SqlToDatstore) Delete(key driver.Value) (int, error) {
-	dskey := datastore.NewKey(m.dsCtx, m.tbl.NameOriginal, fmt.Sprintf("%v", key), 0, nil)
+	dskey := datastore.NameKey(m.tbl.NameOriginal, fmt.Sprintf("%v", key), nil)
 	u.Infof("dskey:  %s   table=%s", dskey, m.tbl.NameOriginal)
 	err := m.dsClient.Delete(m.dsCtx, dskey)
 	if err != nil {

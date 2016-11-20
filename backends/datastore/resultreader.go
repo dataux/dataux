@@ -6,6 +6,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	u "github.com/araddon/gou"
+	"google.golang.org/api/iterator"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
@@ -170,7 +171,7 @@ func (m *ResultReader) Run() error {
 		row := Row{}
 		key, err := iter.Next(&row)
 		if err != nil {
-			if err == datastore.Done {
+			if err == iterator.Done {
 				u.Infof("done? rowct=%v", len(m.Vals))
 				break
 			}
@@ -227,7 +228,7 @@ func pageRowsQuery(iter *datastore.Iterator) []Row {
 	for {
 		row := Row{}
 		if key, err := iter.Next(&row); err != nil {
-			if err == datastore.Done {
+			if err == iterator.Done {
 				break
 			}
 			u.Errorf("error: %v", err)

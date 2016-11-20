@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	u "github.com/araddon/gou"
-	"github.com/lytics/grid"
+	"github.com/lytics/grid/grid.v2"
 )
 
 var (

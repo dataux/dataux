@@ -15,6 +15,7 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2/jwt"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 
 	"github.com/araddon/qlbridge/datasource"
@@ -245,12 +246,12 @@ func (m *GoogleDSDataSource) loadTableNames() error {
 	tablesOriginal := make(map[string]string)
 	rows := pageQuery(m.dsClient.Run(m.dsCtx, datastore.NewQuery("__kind__")))
 	for _, row := range rows {
-		if !strings.HasPrefix(row.key.Name(), "__") {
-			tableLower := strings.ToLower(row.key.Name())
+		if !strings.HasPrefix(row.key.Name, "__") {
+			tableLower := strings.ToLower(row.key.Name)
 			//u.Debugf("found table %q  %#v", tableLower, row.key)
 			tablesLower = append(tablesLower, tableLower)
-			tablesOriginal[tableLower] = row.key.Name()
-			m.loadTableSchema(tableLower, row.key.Name())
+			tablesOriginal[tableLower] = row.key.Name
+			m.loadTableSchema(tableLower, row.key.Name)
 		}
 	}
 	m.tablesLower = tablesLower
@@ -371,7 +372,7 @@ func pageQuery(iter *datastore.Iterator) []schemaType {
 	for {
 		row := schemaType{}
 		if key, err := iter.Next(&row); err != nil {
-			if err == datastore.Done {
+			if err == iterator.Done {
 				break
 			}
 			u.Errorf("error: %v", err)

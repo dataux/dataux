@@ -9,7 +9,7 @@ import (
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
 	"github.com/coreos/etcd/embed"
-	"github.com/lytics/grid/natsunit"
+	"github.com/lytics/grid/grid.v2/natsunit"
 
 	// Frontend's side-effect imports
 	_ "github.com/dataux/dataux/frontends/mysqlfe"

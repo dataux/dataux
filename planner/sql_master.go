@@ -7,9 +7,9 @@ import (
 	"time"
 
 	u "github.com/araddon/gou"
-	"github.com/lytics/grid"
-	"github.com/lytics/grid/condition"
-	"github.com/lytics/grid/ring"
+	"github.com/lytics/grid/grid.v2"
+	"github.com/lytics/grid/grid.v2/condition"
+	"github.com/lytics/grid/grid.v2/ring"
 
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/plan"

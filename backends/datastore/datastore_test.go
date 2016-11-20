@@ -98,11 +98,11 @@ const (
 )
 
 func articleKey(title string) *datastore.Key {
-	return datastore.NewKey(ctx, ArticleKind, title, 0, nil)
+	return datastore.NameKey(ArticleKind, title, nil)
 }
 
 func userKey(id string) *datastore.Key {
-	return datastore.NewKey(ctx, UserKind, id, 0, nil)
+	return datastore.NameKey(UserKind, id, nil)
 }
 
 func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
