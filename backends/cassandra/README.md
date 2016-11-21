@@ -3,6 +3,11 @@
 
 
 ```
+# start docker container for testing
+
+docker run --name dataux-cass-test -d cassandra:2
+
+
 # log onto container to get a cqlsh
 docker run -it --rm --net container:lioenv_cass_1 cassandra:2 cqlsh
 
