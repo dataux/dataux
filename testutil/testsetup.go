@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"database/sql/driver"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -77,6 +78,11 @@ zarticle3,bjorn,55,true,2012-10-01 00:00:00 +0000 UTC,2016-01-01 00:00:00 +0000 
 listicle1,bjorn,7,true,2013-10-01 00:00:00 +0000 UTC,2016-01-01 00:00:00 +0000 UTC,21.5`
 )
 
+type StructRow interface {
+	Values() []driver.Value
+	ValueI() []interface{}
+	ColNames() []string
+}
 type Article struct {
 	Title    string
 	Author   string
@@ -100,9 +106,20 @@ func (a *Article) Header() string {
 func (a *Article) Row() string {
 	return fmt.Sprintf("%s,%s,%v,%v,%v,%v,%v", a.Title, a.Author, a.Count, a.Deleted, a.Created, a.Updated, a.F)
 }
-func (a *Article) Values() []interface{} {
+func (a *Article) ColNames() []string {
+	return []string{"title", "author", "count", "count64", "deleted", "category",
+		"created", "updated", "f", "body"}
+}
+func (a *Article) Values() []driver.Value {
+	return []driver.Value{
+		a.Title, a.Author, a.Count, a.Count64, a.Deleted, a.Category,
+		a.Created, a.Updated, a.F, a.Body,
+	}
+}
+func (a *Article) ValueI() []interface{} {
 	return []interface{}{
-		a.Title, a.Author, a.Count, a.Count64, a.Deleted, a.Category, a.Created, a.Updated, a.F, a.Body,
+		a.Title, a.Author, a.Count, a.Count64, a.Deleted, a.Category,
+		a.Created, a.Updated, a.F, a.Body,
 	}
 }
 func (a *Article) UrlMsg() url.Values {
@@ -132,7 +149,15 @@ func (u *User) Header() string {
 func (u *User) Row() string {
 	return fmt.Sprintf("%s,%s,%v,%v,%v", u.Id, u.Name, u.Deleted, u.Created, u.Updated)
 }
-func (u *User) Values() []interface{} {
+func (a *User) ColNames() []string {
+	return []string{"id", "name", "deleted", "roles", "created", "updated"}
+}
+func (u *User) Values() []driver.Value {
+	return []driver.Value{
+		u.Id, u.Name, u.Deleted, u.Roles, u.Created, u.Updated,
+	}
+}
+func (u *User) ValueI() []interface{} {
 	return []interface{}{
 		u.Id, u.Name, u.Deleted, u.Roles, u.Created, u.Updated,
 	}
@@ -199,7 +224,7 @@ func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
 		for rows.Next() {
 			if testSpec.RowData != nil {
 				err = rows.StructScan(testSpec.RowData)
-				//u.Infof("rowVals: %#v", testSpec.RowData)
+				//u.Infof("%#v rowVals: %#v", rows.Rows., testSpec.RowData)
 				assert.Tf(t, err == nil, "data:%+v   err=%v", testSpec.RowData, err)
 				rowCt++
 				if testSpec.ValidateRowData != nil {

@@ -26,7 +26,7 @@ var (
 
 	SchemaRefreshInterval = time.Duration(time.Minute * 5)
 
-	// Ensure our Google DataStore implements datasource.DataSource interface
+	// Ensure our Cassandra source implements schema.Source interface
 	_ schema.Source = (*Source)(nil)
 )
 

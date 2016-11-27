@@ -64,15 +64,26 @@ frontends [
 schemas : [
   {
     name : datauxtest
-    sources : [ "mgo_datauxtest", "es_test", "localfiles" , "google_ds_test", "cass"]
+    sources : [ 
+      "mgo_datauxtest", 
+      "es_test", 
+      "localfiles", 
+      "google_ds_test", 
+      "cass", 
+      "bt"
+    ]
   }
 ]
 
 # sources
 sources : [
+
   {
-    name : mgo_datauxtest
     type : mongo
+    name : mgo_datauxtest
+    # partitions describe how to break up 
+    # queries across nodes if multi-node db, this 
+    # is single node so just used for unit tests to simulate multi-node
     partitions : [
         {
             table : article
@@ -117,8 +128,7 @@ sources : [
     }
   }
 
-  # this section is for http://seanlahman.com/baseball-archive/statistics/
-  # csv files 
+  # csv-file "db" of data from http://seanlahman.com/baseball-archive/statistics/
   #  must have TESTINT=true integration test flag turned on
   {
     name     : baseball
@@ -131,15 +141,27 @@ sources : [
     }
   }
   
-  # this is the google-datastore database config
+  # google-datastore database config
   {
     name : google_ds_test
     type : google-datastore
-  },
+  }
+
   {
     name : mysql_test
     type : mysql
   }
+
+  {
+    name : bt
+    type : bigtable
+    tables_to_load : [ "datauxtest" , "article", "user", "event" ]
+    settings {
+      instance  "bigtable0"
+      # project will be loaded from ENV   $GCEPROJECT
+    }
+  }
+
 ]
 
 # List of nodes hosting data sources

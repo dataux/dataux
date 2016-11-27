@@ -1,14 +1,19 @@
-package cassandra
+package bigtable
 
 import (
 	"database/sql/driver"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
+	"cloud.google.com/go/bigtable"
+	"github.com/araddon/dateparse"
 	u "github.com/araddon/gou"
+	"golang.org/x/net/context"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
-	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/value"
 )
@@ -17,10 +22,6 @@ var (
 	// Ensure we implement TaskRunner
 	_ exec.TaskRunner = (*ResultReader)(nil)
 )
-
-func NewCassDialect() expr.DialectWriter {
-	return expr.NewDialectWriter('\'', '"')
-}
 
 // ResultReader implements result paging, reading
 type ResultReader struct {
@@ -32,7 +33,7 @@ type ResultReader struct {
 	proj          *rel.Projection
 	cols          []string
 	Total         int
-	Req           *SqlToCql
+	Req           *SqlToBT
 }
 
 // A wrapper, allowing us to implement sql/driver Next() interface
@@ -41,7 +42,7 @@ type ResultReaderNext struct {
 	*ResultReader
 }
 
-func NewResultReader(req *SqlToCql) *ResultReader {
+func NewResultReader(req *SqlToBT) *ResultReader {
 	m := &ResultReader{}
 	m.TaskBase = exec.NewTaskBase(req.Ctx)
 	m.Req = req
@@ -87,7 +88,7 @@ func (m *ResultReader) buildProjection() {
 	//u.Debugf("leaving Columns:  %v", len(m.proj.Columns))
 }
 
-// Runs the Cassandra Query
+// Runs the Google BigTable exec
 func (m *ResultReader) Run() error {
 
 	sigChan := m.SigChan()
@@ -98,11 +99,30 @@ func (m *ResultReader) Run() error {
 	}()
 	m.finalized = true
 	m.buildProjection()
+	sel := m.Req.sel
 
-	if m.Req.sel.CountStar() {
+	if sel.CountStar() {
 		// Count(*) Do we really want to do push-down here?
-		//  possibly default to not allowing this and allow a setting?
-		u.Warnf("Count(*) on Cassandra, your crazy!")
+		//  possibly default to not allowing this and allow via setting?
+		u.Warnf("Count(*) on BigTable, your crazy!")
+	}
+
+	colFamily := ""
+	if len(sel.From) > 1 {
+		froms := make([]string, 0, len(sel.From))
+		for _, f := range sel.From {
+			froms = append(froms, f.Name)
+		}
+		return fmt.Errorf("Only 1 source supported on BigTable queries got %v", froms)
+	}
+
+	colFamily = sel.From[0].Name
+	colFamilyPrefix := colFamily + ":"
+
+	tbl, err := m.Req.s.Table(colFamily)
+	if err != nil {
+		u.Warnf("could not find schema column %v", err)
+		return err
 	}
 
 	cols := m.Req.p.Proj.Columns
@@ -120,58 +140,106 @@ func (m *ResultReader) Run() error {
 		limit = m.Req.sel.Limit
 	}
 
-	sel := m.Req.sel
-
-	u.Debugf("%p cass limit: %d sel:%s", m.Req.sel, limit, sel)
+	u.Debugf("%p bt limit: %d sel:%s", m.Req.sel, limit, sel)
 	queryStart := time.Now()
 
-	cassWriter := NewCassDialect()
-	sel.WriteDialect(cassWriter)
-	cqlQuery := cassWriter.String()
-	cassQry := m.Req.s.session.Query(cqlQuery).PageSize(limit)
-	iter := cassQry.Iter()
+	ctx := context.Background()
+	btt := m.Req.s.client.Open(tbl.Parent)
+	var rr bigtable.RowRange
+	var opts []bigtable.ReadOption
+	//opts = append(opts, bigtable.LimitRows(20))
+	f := bigtable.ChainFilters(
+		bigtable.FamilyFilter(colFamily),
+		bigtable.LatestNFilter(1),
+	)
+	opts = append(opts, bigtable.RowFilter(f))
 
-	for {
-		row := make(map[string]interface{})
-		if !iter.MapScan(row) {
-			//u.Debugf("done with query")
-			break
-		}
+	err = btt.ReadRows(ctx, rr, func(r bigtable.Row) bool {
+		//printRow(r)
+		//row := make(map[string]interface{})
+
+		rcells := r[colFamily]
+		//sort.Sort(byColumn(rcells))
 
 		vals := make([]driver.Value, len(cols))
-		for k, v := range row {
+		for _, v := range rcells {
 			found := false
+			key := strings.Replace(v.Column, colFamilyPrefix, "", 1)
 			for i, col := range cols {
-				//u.Infof("prop.name=%s col.Name=%s", prop.Name, col.Name)
-				if col.Name == k {
-					vals[i] = v
+				//u.Infof("%s col.Name=%s", key, col.Name)
+				if col.Name == key {
+					switch col.Type {
+					case value.StringType:
+						vals[i] = string(v.Value)
+					case value.BoolType:
+						bv, err := strconv.ParseBool(string(v.Value))
+						if err == nil {
+							vals[i] = bv
+						} else {
+							vals[i] = false
+							u.Errorf("could not read bool %v  %v", string(v.Value), err)
+						}
+					case value.NumberType:
+						fv, err := strconv.ParseFloat(string(v.Value), 64)
+						if err == nil {
+							vals[i] = fv
+						} else {
+							vals[i] = float64(0)
+							//u.Errorf("could not read float %v  %v", string(v.Value), err)
+						}
+					case value.IntType:
+						iv, err := strconv.ParseInt(string(v.Value), 10, 64)
+						if err == nil {
+							vals[i] = iv
+						} else {
+							vals[i] = int64(0)
+							//u.Errorf("could not read int %v  %v", string(v.Value), err)
+						}
+					case value.TimeType:
+						dt, err := dateparse.ParseAny(string(v.Value))
+						if err == nil {
+							vals[i] = dt
+						} else {
+							vals[i] = time.Time{}
+							u.Errorf("could not read time %v  %v", string(v.Value), err)
+						}
+					case value.JsonType:
+						vals[i] = v.Value
+					default:
+						u.Warnf("wtf %+v", v)
+					}
+
 					//u.Debugf("%-2d col.name=%-10s prop.T %T\tprop.v%v", i, col.Name, v, v)
 					found = true
 					break
 				}
 			}
 			if !found {
-				u.Warnf("not found? %s=%v", k, v)
+				//u.Warnf("not found? key:%v col:%v  val:%s", key, v.Column, string(v.Value))
 			}
 		}
 
-		u.Debugf("new row ct: %v cols:%v vals:%v", m.Total, colNames, vals)
+		//u.Debugf("%s new row ct: %v cols:%v vals:%v", r.Key(), m.Total, colNames, vals)
 		//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
 		msg := datasource.NewSqlDriverMessageMap(uint64(m.Total), vals, colNames)
 		m.Total++
 		//u.Debugf("In gds source iter %#v", vals)
 		select {
 		case <-sigChan:
-			return nil
+			return false
 		case outCh <- msg:
 			// continue
 		}
 		//u.Debugf("vals:  %v", row.Vals)
+
+		return true
+	}, opts...)
+	if err != nil {
+		u.Errorf("Reading rows: %v", err)
+	} else {
+
 	}
-	err := iter.Close()
-	//if err != nil {
-	//u.Errorf("could not close iter %T err:%v", err, err)
-	//}
-	u.Infof("finished query, took: %v for %v rows err:%v", time.Now().Sub(queryStart), m.Total, err)
+
+	u.Infof("finished query, took: %v for %v rows", time.Now().Sub(queryStart), m.Total)
 	return nil
 }
