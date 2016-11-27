@@ -280,7 +280,7 @@ func (m *SqlActor) Running() dfa.Letter {
 	for {
 		select {
 		case <-m.exit:
-			u.Warnf("%s exit?   what caused this?", m)
+			u.Debugf("%s exit?   what caused this?", m)
 			return Exit
 		case <-ticker.C:
 			u.Debugf("%p alive  %s", m, m.ID())
@@ -297,7 +297,7 @@ func (m *SqlActor) Running() dfa.Letter {
 			}
 			//u.Warnf("%s about to do ticker store", m)
 		case <-finished:
-			u.Warnf("%s sqlactor ending due to everybody finished", m)
+			u.Debugf("%s sqlactor ending due to everybody finished", m)
 			return EverybodyFinished
 		case <-masterDone:
 			// In this scenario, we have not finished our dag, either client
