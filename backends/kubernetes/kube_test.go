@@ -33,8 +33,8 @@ var (
 )
 
 func init() {
-	//u.SetupLogging("debug")
-	//u.SetColorOutput()
+	u.SetupLogging("debug")
+	u.SetColorOutput()
 	u.DiscardStandardLogger()
 	flag.Parse()
 	tu.Setup()
@@ -84,7 +84,7 @@ func loadTestData(t *testing.T) {
 }
 
 func TestShowTables(t *testing.T) {
-	// By running testserver, we will load schema/config
+
 	RunTestServer(t)
 
 	data := struct {
@@ -93,22 +93,21 @@ func TestShowTables(t *testing.T) {
 	found := false
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "show tables;",
-		ExpectRowCt: 3,
+		ExpectRowCt: len(endpoints),
 		ValidateRowData: func() {
 			u.Infof("%+v", data)
 			assert.Tf(t, data.Table != "", "%v", data)
-			if data.Table == strings.ToLower("article") {
+			if data.Table == strings.ToLower("pods") {
 				found = true
 			}
 		},
 		RowData: &data,
 	})
-	assert.Tf(t, found, "Must have found article")
+	assert.Tf(t, found, "Must have found pods")
 }
 
 func TestBasic(t *testing.T) {
 
-	// By running testserver, we will load schema/config
 	RunTestServer(t)
 
 	// This is a connection to RunTestServer, which starts on port 13307
@@ -118,7 +117,12 @@ func TestBasic(t *testing.T) {
 	//u.Debugf("%v", testSpec.Sql)
 	rows, err := dbx.Queryx(fmt.Sprintf("select * from pods"))
 	assert.Equalf(t, err, nil, "%v", err)
+	cols, _ := rows.Columns()
+	assert.Tf(t, len(cols) > 5, "Should have columns %v", cols)
 	defer rows.Close()
+
+	_, err = dbx.Queryx(fmt.Sprintf("select kind, invalidcolumn from pods"))
+	assert.NotEqual(t, err, nil, "Should have an error because invalid column")
 }
 
 func TestDescribeTable(t *testing.T) {
@@ -169,36 +173,36 @@ func TestDescribeTable(t *testing.T) {
 func TestSimpleRowSelect(t *testing.T) {
 	loadTestData(t)
 	data := struct {
-		Title   string
-		Count   int
-		Deleted bool
-		Author  string
-		// Category []string  // Crap, downside of sqlx/mysql is no complex types
+		Kind              string
+		Name              string
+		Generation        int64
+		CreationTimestamp time.Time
 	}{}
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         "select title, count, deleted, author from article WHERE author = 'aaron' LIMIT 1",
+		Sql:         "select kind, name, generation, creationtimestamp from pods LIMIT 1",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			//u.Infof("%v", data)
-			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
-			assert.Tf(t, data.Title == "article1", "%v", data)
+			u.Infof("%v", data)
+			assert.Tf(t, data.CreationTimestamp.IsZero() == false, "Should have timestamp? %v", data)
+			assert.Tf(t, data.Kind == "pod", "expected pod got %v", data)
 		},
 		RowData: &data,
 	})
-	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         "select title, count,deleted from article WHERE count = 22;",
-		ExpectRowCt: 1,
-		ValidateRowData: func() {
-			assert.Tf(t, data.Title == "article1", "%v", data)
-		},
-		RowData: &data,
-	})
-	validateQuerySpec(t, tu.QuerySpec{
-		Sql:             "select title, count, deleted from article LIMIT 10;",
-		ExpectRowCt:     4,
-		ValidateRowData: func() {},
-		RowData:         &data,
-	})
+	return
+	// validateQuerySpec(t, tu.QuerySpec{
+	// 	Sql:         "select title, count,deleted from article WHERE count = 22;",
+	// 	ExpectRowCt: 1,
+	// 	ValidateRowData: func() {
+	// 		assert.Tf(t, data.Title == "article1", "%v", data)
+	// 	},
+	// 	RowData: &data,
+	// })
+	// validateQuerySpec(t, tu.QuerySpec{
+	// 	Sql:             "select title, count, deleted from article LIMIT 10;",
+	// 	ExpectRowCt:     4,
+	// 	ValidateRowData: func() {},
+	// 	RowData:         &data,
+	// })
 }
 
 func TestSelectLimit(t *testing.T) {

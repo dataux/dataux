@@ -33,9 +33,9 @@ var (
 	_ schema.ConnMutation = (*SqlToDatstore)(nil)
 )
 
-// Sql To Google Datastore Maps a Sql request into an equivalent
-//    google data store query
-// - a dialect translator
+// SqlToDatstore transforms a Sql AST statement into a Google Datastore request
+// - a dialect translator (sql -> datastore query languages)
+// - matches Task interface to operate in qlbridge exec interfaces
 type SqlToDatstore struct {
 	*exec.TaskBase
 	resp           *ResultReader
@@ -45,8 +45,8 @@ type SqlToDatstore struct {
 	stmt           rel.SqlStatement
 	schema         *schema.SchemaSource
 	dsCtx          context.Context
-	dsClient       *datastore.Client
-	dsq            *datastore.Query
+	dsClient       *datastore.Client // Stateful client for usage in request
+	dsq            *datastore.Query  // The ds query interpreted from sql
 	hasMultiValue  bool              // Multi-Value vs Single-Value aggs
 	hasSingleValue bool              // single value agg
 	partition      *schema.Partition // current partition for this request
@@ -63,7 +63,7 @@ func NewSqlToDatstore(table *schema.Table, cl *datastore.Client, ctx context.Con
 		dsCtx:    ctx,
 		dsClient: cl,
 	}
-	u.Infof("create sqltodatasource %p", m)
+	u.Debugf("create sqltodatasource %p", m)
 	return m
 }
 

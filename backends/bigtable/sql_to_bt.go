@@ -240,18 +240,20 @@ func (m *SqlToBT) CreateMutator(pc interface{}) (schema.ConnMutator, error) {
 // Put Interface for mutation (insert, update)
 func (m *SqlToBT) Put(ctx context.Context, key schema.Key, val interface{}) (schema.Key, error) {
 
-	if key == nil {
-		u.Warnf("didn't have key?  %v", val)
-		//return nil, fmt.Errorf("Must have key for updates in cassandra")
-	}
-
 	if m.schema == nil {
 		u.Warnf("must have schema")
-		return nil, fmt.Errorf("Must have schema for updates in cassandra")
+		return nil, fmt.Errorf("Must have schema for updates in bigtable")
 	}
 
 	if m.tbl.Parent == "" {
 		return nil, fmt.Errorf("Must have parent for big-table put")
+	}
+
+	if key == nil {
+		u.Warnf("didn't have key?  %v", val)
+		// If we don't have a key we MUST choose one from columns via
+		// the schema ie the "primary key"
+		//return nil, fmt.Errorf("Must have key for updates in bigtable")
 	}
 
 	cols := m.tbl.Columns()
@@ -262,7 +264,6 @@ func (m *SqlToBT) Put(ctx context.Context, key schema.Key, val interface{}) (sch
 	switch q := m.stmt.(type) {
 	case *rel.SqlInsert:
 		cols = q.ColumnNames()
-
 	default:
 		return nil, fmt.Errorf("%T not yet supported ", q)
 	}
@@ -390,14 +391,14 @@ func (m *SqlToBT) PutMulti(ctx context.Context, keys []schema.Key, src interface
 	return nil, schema.ErrNotImplemented
 }
 
-// Delete delete by row
+// Delete delete by row key
 func (m *SqlToBT) Delete(key driver.Value) (int, error) {
-	u.Warnf("hm, in delete?  %v", key)
+	u.Warnf("not implemented delete?  %v", key)
 	return 0, schema.ErrNotImplemented
 }
 
 // DeleteExpression - delete by expression (where clause)
-//  - For where columns contained in Partition Keys we can push to cassandra
+//  - For where columns contained in Partition Keys we can push to bigtable
 //  - for others we might have to do a select -> delete
 func (m *SqlToBT) DeleteExpression(p interface{}, where expr.Node) (int, error) {
 	//u.Warnf("hm, in delete?  %v   %T", where, p)
@@ -423,14 +424,12 @@ func (m *SqlToBT) DeleteExpression(p interface{}, where expr.Node) (int, error) 
 }
 
 // walkWhereNode() We are re-writing the sql select statement and need
-//   to walk the ast and see if we can push down this where clause
-//   completely or partially.
+//   to walk the ast and see if we can partially/completely translate
+//   the logical filtesr into big-table filters or prefix scans
 //
-//  Limititations of Where in Cassandra
-//  - no functions/expressions straight simple operators
-//  - operators  [=, >=, <=, !=, IN ]
-//  - MUST follow rules of partition keys ie all partition keys to the "left"
-//    of each filter field must also be in filter
+//  Limititations of Where in bigtable
+//  - there are filters which are more expensive than prefix operators
+//  - TODO:  implement filters
 //
 func (m *SqlToBT) walkWhereNode(cur expr.Node) (expr.Node, error) {
 	//u.Debugf("walkWhereNode: %s", cur)
@@ -507,6 +506,7 @@ func (m *SqlToBT) walkFilterBinary(node *expr.BinaryNode) (expr.Node, error) {
 		return nil, nil
 	}
 
+	u.Debugf("\nlh: %#v\nrh: %#v", node.Args[0], node.Args[1])
 	lhval, lhok := vm.Eval(nil, node.Args[0])
 	rhval, rhok := vm.Eval(nil, node.Args[1])
 	if !lhok || !rhok {
@@ -544,7 +544,7 @@ func (m *SqlToBT) walkFilterBinary(node *expr.BinaryNode) (expr.Node, error) {
 		}
 		return node, nil
 	case lex.TokenIN:
-		// https://lostechies.com/ryansvihla/2014/09/22/cassandra-query-patterns-not-using-the-in-query-for-multiple-partitions/
+		//
 	case lex.TokenLike:
 		// hmmmmmmm
 		// what about byte prefix ?

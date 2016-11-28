@@ -205,10 +205,11 @@ func resultWrite(m *MySqlResultWriter) exec.MessageHandler {
 
 	return func(_ *plan.Context, msg schema.Message) bool {
 
+		//u.Debugf("in resultWrite:  %#v", msg)
 		if msg == nil {
 			return false
 		}
-		//u.Debugf("in resultWrite:  %#v", msg)
+
 		if !m.wroteHeaders {
 			m.WriteHeaders()
 		}
@@ -300,6 +301,8 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 8, mysql.MYSQL_TYPE_DATETIME))
 		case value.ByteSliceType:
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_BLOB))
+		case value.JsonType:
+			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 256, mysql.MYSQL_TYPE_JSON))
 		default:
 			u.Debugf("Field type not known explicitly mapped type=%v so use json %#v", col.Type.String(), col)
 			m.Rs.Fields = append(m.Rs.Fields, mysql.NewField(as, s.Name, s.Name, 32, mysql.MYSQL_TYPE_BLOB))

@@ -1,5 +1,5 @@
 // package kubernetes implements a data source (backend) to allow
-// dataux to kubernetes rest api's
+// dataux to use sql against kubernetes rest/grpc api's
 package kubernetes
 
 import (
@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"time"
 
-	"cloud.google.com/go/bigtable"
 	u "github.com/araddon/gou"
 	"golang.org/x/net/context"
+	"k8s.io/client-go/1.4/kubernetes"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	// Default page limit
+	// Default page size limit
 	DefaultLimit = 5000
 
 	// Ensure we implment appropriate interfaces
@@ -37,12 +37,13 @@ var (
 	globalCtx = context.Background()
 )
 
-// SqlToKube Convert a Sql Query to a bigtable read/write rows
-// - responsible for pushing down as much logic to bigtable as possible
+// SqlToKube Convert a Sql Query to a kubernetes api call
+// - responsible for pushing down as much logic to kube api's as possible
 // - dialect translator
 type SqlToKube struct {
 	*exec.TaskBase
 	resp                 *ResultReader
+	k                    *kubernetes.Clientset
 	tbl                  *schema.Table
 	p                    *plan.Source
 	sel                  *rel.SqlSelect
@@ -58,14 +59,24 @@ type SqlToKube struct {
 	needsOrderByPolyFill bool
 }
 
-// NewSqlToKube create a SQL ast -> BigTable Rows/Filters/Mutations converter
-func NewSqlToKube(s *Source, t *schema.Table) *SqlToKube {
+// NewSqlToKube create a SQL ast -> Kubernetes Translater
+func NewSqlToKube(s *Source, t *schema.Table) (*SqlToKube, error) {
 	m := &SqlToKube{
 		tbl:    t,
 		schema: t.SchemaSource,
 		s:      s,
 	}
-	return m
+
+	//c * kubernetes.Clientset
+	// creates the kube grpc client
+	clientset, err := kubernetes.NewForConfig(s.kconfig)
+	if err != nil {
+		u.Errorf("could not connect to kubernetes %v", err)
+		return nil, err
+	}
+	m.k = clientset
+
+	return m, nil
 }
 
 func (m *SqlToKube) queryRewrite(original *rel.SqlSelect) error {
@@ -75,6 +86,8 @@ func (m *SqlToKube) queryRewrite(original *rel.SqlSelect) error {
 
 	req := original.Copy()
 	m.sel = req
+
+	// Kube doesn't yet have paging so this is ignored
 	limit := req.Limit
 	if limit == 0 {
 		limit = DefaultLimit
@@ -128,18 +141,18 @@ func (m *SqlToKube) queryRewrite(original *rel.SqlSelect) error {
 // WalkSourceSelect An interface implemented by this connection allowing the planner
 // to push down as much logic into this source as possible
 func (m *SqlToKube) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.Task, error) {
-	//u.Debugf("VisitSourceSelect(): %s", p.Stmt)
+	u.Debugf("VisitSourceSelect(): %s", p.Stmt)
 	m.p = p
 	return nil, nil
 }
 
 // WalkExecSource an interface of executor that allows this source to
 // create its own execution Task so that it can push down as much as it can
-// to bigtable.
+// to kubernetes api.
 func (m *SqlToKube) WalkExecSource(p *plan.Source) (exec.Task, error) {
 
 	//u.Debugf("%p WalkExecSource():  %T nil?%v %#v", m, p, p == nil, p)
-	//u.Debugf("%p WalkExecSource()  %s", m, p.Stmt)
+	u.Debugf("%p WalkExecSource()  %s", m, p.Stmt)
 
 	if p.Stmt == nil {
 		return nil, fmt.Errorf("Plan did not include Sql Statement?")
@@ -196,6 +209,7 @@ func (m *SqlToKube) WalkExecSource(p *plan.Source) (exec.Task, error) {
 		wt := exec.NewWhere(m.Ctx, wp)
 		reader.Add(wt)
 		m.needsPolyFill = true
+		u.Debugf("added where clause")
 	}
 
 	// do we need poly fill Having?
@@ -218,7 +232,7 @@ func (m *SqlToKube) WalkExecSource(p *plan.Source) (exec.Task, error) {
 			// because group-by's, order-by's, where poly-fills mean
 			// cass limits aren't valid from original statement
 			m.sel.Limit = 0
-			reader.Req.sel.Limit = 0
+			reader.req.sel.Limit = 0
 			u.Warnf("%p setting limit up!!!!!! %v", m.sel, m.sel.Limit)
 		}
 	}
@@ -240,24 +254,20 @@ func (m *SqlToKube) CreateMutator(pc interface{}) (schema.ConnMutator, error) {
 // Put Interface for mutation (insert, update)
 func (m *SqlToKube) Put(ctx context.Context, key schema.Key, val interface{}) (schema.Key, error) {
 
-	if key == nil {
-		u.Warnf("didn't have key?  %v", val)
-		//return nil, fmt.Errorf("Must have key for updates in cassandra")
-	}
-
 	if m.schema == nil {
 		u.Warnf("must have schema")
-		return nil, fmt.Errorf("Must have schema for updates in cassandra")
+		return nil, fmt.Errorf("Must have schema for updates in kubernetes")
 	}
-
-	if m.tbl.Parent == "" {
-		return nil, fmt.Errorf("Must have parent for big-table put")
-	}
-
-	cols := m.tbl.Columns()
 	if m.stmt == nil {
 		return nil, fmt.Errorf("Must have stmts to infer columns ")
 	}
+
+	if key == nil {
+		u.Warnf("didn't have key?  %v", val)
+		//return nil, fmt.Errorf("Must have key for updates in kubernetes")
+	}
+
+	cols := m.tbl.Columns()
 
 	switch q := m.stmt.(type) {
 	case *rel.SqlInsert:
@@ -352,32 +362,6 @@ func (m *SqlToKube) Put(ctx context.Context, key schema.Key, val interface{}) (s
 	return newKey, nil
 }
 
-func Mutation(fam string, vals []driver.Value, cols []string) *bigtable.Mutation {
-	mut := bigtable.NewMutation()
-	//ts := bigtable.Now()
-	for i, val := range vals {
-		colName := cols[i]
-
-		var by []byte
-		switch vt := val.(type) {
-		case int, int64, float64, time.Time, *time.Time:
-			by = []byte(fmt.Sprintf("%v", vt))
-		case string:
-			by = []byte(vt)
-		case bool:
-			if vt {
-				by = []byte("true")
-			} else {
-				by = []byte("false")
-			}
-		default:
-			by, _ = json.Marshal(vt)
-		}
-		mut.Set(fam, colName, bigtable.ServerTime, by)
-	}
-	return mut
-}
-
 func (m *SqlToKube) PutMulti(ctx context.Context, keys []schema.Key, src interface{}) ([]schema.Key, error) {
 	return nil, schema.ErrNotImplemented
 }
@@ -392,30 +376,16 @@ func (m *SqlToKube) Delete(key driver.Value) (int, error) {
 //  - For where columns contained in Partition Keys we can push to cassandra
 //  - for others we might have to do a select -> delete
 func (m *SqlToKube) DeleteExpression(p interface{}, where expr.Node) (int, error) {
-	//u.Warnf("hm, in delete?  %v   %T", where, p)
-	// pd, ok := p.(*plan.Delete)
-	// if !ok {
-	// 	return 0, plan.ErrNoPlan
-	// }
-
 	return 0, schema.ErrNotImplemented
-
-	// if err != nil {
-	// 	return 0, err
-	// }
-	return 1, nil
 }
 
 // walkWhereNode() We are re-writing the sql select statement and need
 //   to walk the ast and see if we can push down this where clause
 //   completely or partially.
 //
-//  Limititations of Where in Cassandra
+//  Limititations of Where in Kubernetes, see selectors
 //  - no functions/expressions straight simple operators
 //  - operators  [=, >=, <=, !=, IN ]
-//  - MUST follow rules of partition keys ie all partition keys to the "left"
-//    of each filter field must also be in filter
-//
 func (m *SqlToKube) walkWhereNode(cur expr.Node) (expr.Node, error) {
 	//u.Debugf("walkWhereNode: %s", cur)
 	switch n := cur.(type) {
