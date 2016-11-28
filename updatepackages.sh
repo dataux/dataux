@@ -62,7 +62,7 @@ cd $GOPATH/src/github.com/sony/sonyflake && git checkout master && git pull
 cd $GOPATH/src/github.com/sony/sonyflake && git checkout master && git pull
 cd $GOPATH/src/github.com/sony/sonyflake && git checkout master && git pull
 # this one if updated breaks older versions of etcd
-#cd $GOPATH/src/github.com/ugorji/go && git checkout master && git pull
+cd $GOPATH/src/github.com/ugorji/go && git checkout master && git pull
 
 #cd $GOPATH/src/github.com/uxiang90/probing && git checkout master && git pull
 

@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"database/sql/driver"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/api/iterator"
 	"k8s.io/client-go/1.4/pkg/api"
+	"k8s.io/client-go/1.4/pkg/api/unversioned"
 	v1 "k8s.io/client-go/1.4/pkg/api/v1"
 )
 
@@ -77,6 +79,16 @@ func (it *ObjectIterator) fetch(pageSize int, pageToken string) (string, error) 
 }
 
 func podValues(p *v1.Pod) []driver.Value {
+
+	vals := []driver.Value{
+		"pod", // kind
+	}
+	vals = append(vals, metadata(&p.ObjectMeta)...)
+	vals = append(vals, podStatus(&p.Status)...)
+	vals = append(vals, podSpec(&p.Spec)...)
+	return vals
+}
+func metadata(p *v1.ObjectMeta) []driver.Value {
 	/*
 		// http://kubernetes.io/docs/api-reference/v1/definitions/#_v1_objectmeta
 		tbl.AddField(schema.NewFieldBase("name", value.StringType, 256, "string"))
@@ -91,13 +103,9 @@ func podValues(p *v1.Pod) []driver.Value {
 		tbl.AddField(schema.NewFieldBase("labels", value.JsonType, 256, "object"))
 		colNames = append(colNames, []string{"name", "generateName", "namespace", "selfLink",
 			"uid", "selfLink", "generation", "creationTimestamp", "deletionTimestamp", "labels"}...)
+
 	*/
-	dt := time.Time{}
-	if p.DeletionTimestamp != nil {
-		dt = p.DeletionTimestamp.Time
-	}
 	return []driver.Value{
-		"pod", // kind
 		p.Name,
 		p.GenerateName,
 		p.Namespace,
@@ -106,7 +114,92 @@ func podValues(p *v1.Pod) []driver.Value {
 		p.ResourceVersion,
 		p.Generation,
 		p.CreationTimestamp.Time,
-		dt,
+		tv(p.DeletionTimestamp),
 		p.Labels,
 	}
+}
+func podStatus(p *v1.PodStatus) []driver.Value {
+	/*
+		// http://kubernetes.io/docs/api-reference/v1/definitions/#_v1_podstatus
+		tbl.AddField(schema.NewFieldBase("phase", value.StringType, 256, "string"))
+		tbl.AddField(schema.NewFieldBase("conditions", value.JsonType, 256, "json array"))
+		tbl.AddField(schema.NewFieldBase("message", value.StringType, 256, "string"))
+		tbl.AddField(schema.NewFieldBase("reason", value.StringType, 256, "string"))
+		tbl.AddField(schema.NewFieldBase("hostip", value.StringType, 32, "string"))
+		tbl.AddField(schema.NewFieldBase("podip", value.StringType, 32, "string"))
+		tbl.AddField(schema.NewFieldBase("starttime", value.TimeType, 64, "datetime"))
+		tbl.AddField(schema.NewFieldBase("containerstatuses", value.JsonType, 256, "json array"))
+		colNames = append(colNames, []string{"phase", "conditions", "message", "reason",
+			"hostip", "podip", "starttime", "containerstatuses"}...)
+	*/
+	return []driver.Value{
+		string(p.Phase),
+		p.Conditions,
+		p.Message,
+		p.Reason,
+		p.HostIP,
+		p.PodIP,
+		tv(p.StartTime),
+		p.ContainerStatuses,
+	}
+}
+func podSpec(p *v1.PodSpec) []driver.Value {
+	/*
+		// http://kubernetes.io/docs/api-reference/v1/definitions/#_v1_podspec
+		tbl.AddField(schema.NewFieldBase("volumes", value.JsonType, 256, "json array"))
+		tbl.AddField(schema.NewFieldBase("containers", value.JsonType, 256, "json array"))
+		tbl.AddField(schema.NewFieldBase("restartpolicy", value.StringType, 256, "string"))
+		tbl.AddField(schema.NewFieldBase("terminationgraceperiodseconds", value.IntType, 64, "long"))
+		tbl.AddField(schema.NewFieldBase("activedeadlineseconds", value.IntType, 64, "long"))
+		tbl.AddField(schema.NewFieldBase("dnspolicy", value.StringType, 256, "string"))
+		tbl.AddField(schema.NewFieldBase("nodeselector", value.JsonType, 256, "json object"))
+		tbl.AddField(schema.NewFieldBase("serviceaccountname", value.StringType, 256, "string"))
+		//tbl.AddField(schema.NewFieldBase("serviceaccount", value.StringType, 256, "string"))
+		tbl.AddField(schema.NewFieldBase("nodename", value.StringType, 32, "string"))
+		tbl.AddField(schema.NewFieldBase("hostnetwork", value.BoolType, 1, "boolean"))
+		tbl.AddField(schema.NewFieldBase("hostpid", value.BoolType, 1, "boolean"))
+		tbl.AddField(schema.NewFieldBase("hostipc", value.BoolType, 1, "boolean"))
+		tbl.AddField(schema.NewFieldBase("securitycontext", value.JsonType, 256, "json object"))
+		tbl.AddField(schema.NewFieldBase("imagepullsecrets", value.JsonType, 256, "json array"))
+		tbl.AddField(schema.NewFieldBase("hostname", value.StringType, 32, "string"))
+		tbl.AddField(schema.NewFieldBase("subdomain", value.StringType, 32, "string"))
+		colNames = append(colNames, []string{"volumes", "containers", "restartpolicy", "terminationgraceperiodseconds",
+			"activedeadlineseconds", "dnspolicy", "nodeselector", "serviceaccountname",
+			 "nodename", "hostnetwork", "hostpid", "hostipc",
+			"securitycontext", "imagepullsecrets", "hostname", "subdomain"}...)
+	*/
+	return []driver.Value{
+		p.Volumes,
+		p.Containers,
+		p.RestartPolicy,
+		nni(p.TerminationGracePeriodSeconds),
+		nni(p.ActiveDeadlineSeconds),
+		string(p.DNSPolicy),
+		p.NodeSelector,
+		p.ServiceAccountName,
+		p.NodeName,
+		p.HostNetwork,
+		p.HostPID,
+		p.HostIPC,
+		p.SecurityContext,
+		p.ImagePullSecrets,
+		p.Hostname,
+		p.Subdomain,
+	}
+}
+func nni(v *int64) int64 {
+	if v == nil {
+		return 0
+	}
+	return *v
+}
+func tv(v *unversioned.Time) *time.Time {
+	if v == nil {
+		return nil
+	}
+	return &v.Time
+}
+func jv(v interface{}) json.RawMessage {
+	by, _ := json.Marshal(v)
+	return json.RawMessage(by)
 }

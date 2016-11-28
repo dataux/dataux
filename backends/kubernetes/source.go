@@ -98,6 +98,52 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 	return m.loadSchema()
 }
 
+func (m *Source) DataSource() schema.Source { return m }
+func (m *Source) Tables() []string          { return m.tables }
+func (m *Source) Table(table string) (*schema.Table, error) {
+
+	u.Debugf("Table(%q)", table)
+	if m.schema == nil {
+		u.Warnf("no schema in use?")
+		return nil, fmt.Errorf("no schema in use")
+	}
+
+	table = strings.ToLower(table)
+	tbl := m.tablemap[table]
+	if tbl != nil {
+		return tbl, nil
+	}
+
+	return nil, schema.ErrNotFound
+}
+
+func (m *Source) Close() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.closed = true
+	return nil
+}
+
+func (m *Source) Open(tableName string) (schema.Conn, error) {
+	u.Debugf("Open(%q)", tableName)
+	if m.schema == nil {
+		u.Warnf("no schema for %q", tableName)
+		return nil, nil
+	}
+	tableName = strings.ToLower(tableName)
+	tbl, err := m.schema.Table(tableName)
+	if err != nil {
+		return nil, err
+	}
+	if tbl == nil {
+		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, tableName)
+		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, tableName)
+	}
+
+	return NewSqlToKube(m, tbl)
+}
+
 func (m *Source) loadSchema() error {
 
 	var tablesToLoad map[string]struct{}
@@ -149,33 +195,42 @@ func (m *Source) describePods(c *kubernetes.Clientset) error {
 	tbl.AddField(schema.NewFieldBase("kind", value.StringType, 24, "string"))
 	colNames = append(colNames, "kind")
 	colNames = m.describeMetaData(tbl, colNames)
-	/*
-		var f *schema.Field
-		switch val := p.Value.(type) {
-		case *datastore.Key:
-			f = schema.NewFieldBase(p.Name, value.StringType, 24, "Key")
-		case string:
-			f = schema.NewFieldBase(colName, value.StringType, 256, "string")
-		case int:
-			f = schema.NewFieldBase(colName, value.IntType, 32, "int")
-		case int64:
-			f = schema.NewFieldBase(colName, value.IntType, 64, "long")
-		case float64:
-			f = schema.NewFieldBase(colName, value.NumberType, 64, "float64")
-		case bool:
-			f = schema.NewFieldBase(colName, value.BoolType, 1, "bool")
-		case time.Time:
-			f = schema.NewFieldBase(colName, value.TimeType, 32, "datetime")
-		case []uint8:
-			f = schema.NewFieldBase(colName, value.ByteSliceType, 256, "[]byte")
-		default:
-			u.Warnf("google datastore unknown type %T  %#v", val, p)
-		}
-		if f != nil {
-			tbl.AddField(f)
-			colNames = append(colNames, colName)
-		}
-	*/
+
+	// http://kubernetes.io/docs/api-reference/v1/definitions/#_v1_podstatus
+	tbl.AddField(schema.NewFieldBase("phase", value.StringType, 256, "string"))
+	tbl.AddField(schema.NewFieldBase("conditions", value.JsonType, 256, "json array"))
+	tbl.AddField(schema.NewFieldBase("message", value.StringType, 256, "string"))
+	tbl.AddField(schema.NewFieldBase("reason", value.StringType, 256, "string"))
+	tbl.AddField(schema.NewFieldBase("hostip", value.StringType, 32, "string"))
+	tbl.AddField(schema.NewFieldBase("podip", value.StringType, 32, "string"))
+	tbl.AddField(schema.NewFieldBase("starttime", value.TimeType, 64, "datetime"))
+	tbl.AddField(schema.NewFieldBase("containerstatuses", value.JsonType, 256, "json array"))
+	colNames = append(colNames, []string{"phase", "conditions", "message", "reason",
+		"hostip", "podip", "starttime", "containerstatuses"}...)
+
+	// http://kubernetes.io/docs/api-reference/v1/definitions/#_v1_podspec
+	tbl.AddField(schema.NewFieldBase("volumes", value.JsonType, 256, "json array"))
+	tbl.AddField(schema.NewFieldBase("containers", value.JsonType, 256, "json array"))
+	tbl.AddField(schema.NewFieldBase("restartpolicy", value.StringType, 256, "string"))
+	tbl.AddField(schema.NewFieldBase("terminationgraceperiodseconds", value.IntType, 64, "long"))
+	tbl.AddField(schema.NewFieldBase("activedeadlineseconds", value.IntType, 64, "long"))
+	tbl.AddField(schema.NewFieldBase("dnspolicy", value.StringType, 256, "string"))
+	tbl.AddField(schema.NewFieldBase("nodeselector", value.JsonType, 256, "json object"))
+	tbl.AddField(schema.NewFieldBase("serviceaccountname", value.StringType, 256, "string"))
+	// This appears deprecated
+	//tbl.AddField(schema.NewFieldBase("serviceaccount", value.StringType, 256, "string"))
+	tbl.AddField(schema.NewFieldBase("nodename", value.StringType, 32, "string"))
+	tbl.AddField(schema.NewFieldBase("hostnetwork", value.BoolType, 1, "boolean"))
+	tbl.AddField(schema.NewFieldBase("hostpid", value.BoolType, 1, "boolean"))
+	tbl.AddField(schema.NewFieldBase("hostipc", value.BoolType, 1, "boolean"))
+	tbl.AddField(schema.NewFieldBase("securitycontext", value.JsonType, 256, "json object"))
+	tbl.AddField(schema.NewFieldBase("imagepullsecrets", value.JsonType, 256, "json array"))
+	tbl.AddField(schema.NewFieldBase("hostname", value.StringType, 32, "string"))
+	tbl.AddField(schema.NewFieldBase("subdomain", value.StringType, 32, "string"))
+	colNames = append(colNames, []string{"volumes", "containers", "restartpolicy", "terminationgraceperiodseconds",
+		"activedeadlineseconds", "dnspolicy", "nodeselector", "serviceaccountname",
+		"nodename", "hostnetwork", "hostpid", "hostipc",
+		"securitycontext", "imagepullsecrets", "hostname", "subdomain"}...)
 
 	//tbl.AddContext("kube_table", btt)
 	u.Infof("%p  caching table p=%p %q  cols=%v", m.schema, tbl, tbl.Name, colNames)
@@ -197,54 +252,8 @@ func (m *Source) describeMetaData(tbl *schema.Table, colNames []string) []string
 	tbl.AddField(schema.NewFieldBase("generation", value.IntType, 64, "long"))
 	tbl.AddField(schema.NewFieldBase("creationtimestamp", value.TimeType, 32, "datetime"))
 	tbl.AddField(schema.NewFieldBase("deletiontimestamp", value.TimeType, 32, "datetime"))
-	tbl.AddField(schema.NewFieldBase("labels", value.ByteSliceType, 256, "object"))
+	tbl.AddField(schema.NewFieldBase("labels", value.JsonType, 256, "object"))
 	colNames = append(colNames, []string{"name", "generatename", "namespace", "selflink",
 		"uid", "resourceversion", "generation", "creationtimestamp", "deletiontimestamp", "labels"}...)
 	return colNames
-}
-
-func (m *Source) DataSource() schema.Source { return m }
-func (m *Source) Tables() []string          { return m.tables }
-func (m *Source) Table(table string) (*schema.Table, error) {
-
-	u.Debugf("Table(%q)", table)
-	if m.schema == nil {
-		u.Warnf("no schema in use?")
-		return nil, fmt.Errorf("no schema in use")
-	}
-
-	table = strings.ToLower(table)
-	tbl := m.tablemap[table]
-	if tbl != nil {
-		return tbl, nil
-	}
-
-	return nil, schema.ErrNotFound
-}
-
-func (m *Source) Close() error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.closed = true
-	return nil
-}
-
-func (m *Source) Open(tableName string) (schema.Conn, error) {
-	u.Debugf("Open(%q)", tableName)
-	if m.schema == nil {
-		u.Warnf("no schema for %q", tableName)
-		return nil, nil
-	}
-	tableName = strings.ToLower(tableName)
-	tbl, err := m.schema.Table(tableName)
-	if err != nil {
-		return nil, err
-	}
-	if tbl == nil {
-		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, tableName)
-		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, tableName)
-	}
-
-	return NewSqlToKube(m, tbl)
 }

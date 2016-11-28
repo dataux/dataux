@@ -7,7 +7,8 @@ Provides SQL Access to Kuberntes Rest API's
 * http://kubernetes.io/docs/user-guide/accessing-the-cluster/
 * https://github.com/kubernetes/contrib/tree/master/ingress/controllers/nginx
 
-
+**Types & Schema**
+* http://kubernetes.io/docs/api-reference/v1/definitions/
 
 
 Testing & Dev
