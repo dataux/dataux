@@ -2,9 +2,11 @@ package client
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
-	"github.com/dataux/dataux/vendored/mixer/mysql"
 	"math"
+
+	"github.com/dataux/dataux/vendored/mixer/mysql"
 )
 
 type Stmt struct {
@@ -121,6 +123,9 @@ func (s *Stmt) write(args ...interface{}) error {
 			paramValues[i] = append(mysql.PutLengthEncodedInt(uint64(len(v))), v...)
 		case []byte:
 			paramTypes[i<<1] = mysql.MYSQL_TYPE_STRING
+			paramValues[i] = append(mysql.PutLengthEncodedInt(uint64(len(v))), v...)
+		case json.RawMessage:
+			paramTypes[i<<1] = mysql.MYSQL_TYPE_JSON
 			paramValues[i] = append(mysql.PutLengthEncodedInt(uint64(len(v))), v...)
 		default:
 			return fmt.Errorf("invalid argument type %T", args[i])

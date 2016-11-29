@@ -6,6 +6,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	u "github.com/araddon/gou"
+	"google.golang.org/api/iterator"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
@@ -18,7 +19,8 @@ var (
 	_ exec.TaskRunner = (*ResultReader)(nil)
 )
 
-// Google Datastore ResultReader implements result paging, reading
+// ResultReader for Google Datastore implements result paging, reading
+// from datastore types into generic sql types
 // - driver.Rows
 type ResultReader struct {
 	*exec.TaskBase
@@ -33,7 +35,7 @@ type ResultReader struct {
 	Req           *SqlToDatstore
 }
 
-// A wrapper, allowing us to implement sql/driver Next() interface
+// ResultReaderNext A wrapper, allowing us to implement sql/driver Next() interface
 //   which is different than qlbridge/datasource Next()
 type ResultReaderNext struct {
 	*ResultReader
@@ -85,11 +87,10 @@ func (m *ResultReader) buildProjection() {
 	//u.Debugf("leaving Columns:  %v", len(m.proj.Columns))
 }
 
-// Runs the Google Datastore properties into
+// Run takes sql query which has been translated into a
+// google datastore the Google Datastore properties into
 //    [][]interface{}   which is compabitble with sql/driver values
 // as well as making a projection, ie column selection
-//
-// func (m *ResultReader) Finalize() error {
 func (m *ResultReader) Run() error {
 
 	sigChan := m.SigChan()
@@ -98,7 +99,7 @@ func (m *ResultReader) Run() error {
 	defer func() {
 		close(outCh) // closing output channels is the signal to stop
 		//m.TaskBase.Close()
-		u.Debugf("nice, finalize ResultReader out: %p  row ct %v", outCh, len(m.Vals))
+		u.Debugf("finalize ResultReader out: %p  row ct %v", outCh, len(m.Vals))
 	}()
 	m.finalized = true
 	m.buildProjection()
@@ -170,7 +171,7 @@ func (m *ResultReader) Run() error {
 		row := Row{}
 		key, err := iter.Next(&row)
 		if err != nil {
-			if err == datastore.Done {
+			if err == iterator.Done {
 				u.Infof("done? rowct=%v", len(m.Vals))
 				break
 			}
@@ -227,7 +228,7 @@ func pageRowsQuery(iter *datastore.Iterator) []Row {
 	for {
 		row := Row{}
 		if key, err := iter.Next(&row); err != nil {
-			if err == datastore.Done {
+			if err == iterator.Done {
 				break
 			}
 			u.Errorf("error: %v", err)

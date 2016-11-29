@@ -1,14 +1,17 @@
 package testmysql
 
 import (
+	"net/url"
+	"os"
 	"sync"
 	"testing"
 	"time"
 
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
+	"github.com/coreos/etcd/embed"
+	"github.com/coreos/pkg/capnslog"
 	"github.com/lytics/grid/grid.v2/natsunit"
-	"github.com/lytics/sereno/embeddedetcd"
 
 	// Frontend's side-effect imports
 	_ "github.com/dataux/dataux/frontends/mysqlfe"
@@ -26,7 +29,6 @@ var (
 	testDBOnce     sync.Once
 	testDB         *client.DB
 	Conf           *models.Config
-	EtcdCluster    *embeddedetcd.EtcdCluster
 	ServerCtx      *models.ServerCtx
 	Schema         *schema.Schema
 )
@@ -70,7 +72,8 @@ schemas : [
       "localfiles", 
       "google_ds_test", 
       "cass", 
-      "bt"
+      "bt",
+      "kube"
     ]
   }
 ]
@@ -153,6 +156,11 @@ sources : [
   }
 
   {
+    name : kube
+    type : kubernetes
+  }
+
+  {
     name : bt
     type : bigtable
     tables_to_load : [ "datauxtest" , "article", "user", "event" ]
@@ -190,20 +198,54 @@ nodes : [
 
 `
 
+func EtcdConfig() *embed.Config {
+
+	// Cleanup
+	os.RemoveAll("test.etcd")
+	os.RemoveAll(".test.etcd")
+	os.RemoveAll("/tmp/test.etcd")
+
+	embed.DefaultInitialAdvertisePeerURLs = "http://127.0.0.1:22380"
+	embed.DefaultAdvertiseClientURLs = "http://127.0.0.1:22379"
+
+	cfg := embed.NewConfig()
+
+	lpurl, _ := url.Parse("http://localhost:22380")
+	lcurl, _ := url.Parse("http://localhost:22379")
+	cfg.LPUrls = []url.URL{*lpurl}
+	cfg.LCUrls = []url.URL{*lcurl}
+
+	cfg.Dir = "/tmp/test.etcd"
+
+	return cfg
+}
 func NewTestServerForDb(t *testing.T, db string) {
 	f := func() {
 
 		assert.Tf(t, Conf != nil, "must load config without err: %v", Conf)
 
-		EtcdCluster = embeddedetcd.TestClusterOf1()
-		EtcdCluster.Launch()
-		etcdServers := EtcdCluster.HTTPMembers()[0].ClientURLs
-		//u.Infof("etcdServers: %#v", etcdServers)
-		Conf.Etcd = etcdServers
+		capnslog.SetGlobalLogLevel(capnslog.CRITICAL)
 
-		natsunit.StartEmbeddedNATS()
+		e, err := embed.StartEtcd(EtcdConfig())
+		if err != nil {
+			panic(err.Error())
+		}
+		if e == nil {
+			panic("must have etcd server")
+		}
+		// can't defer close as this function returns immediately
+		//defer e.Close()
 
-		planner.GridConf.EtcdServers = etcdServers
+		Conf.Etcd = []string{embed.DefaultAdvertiseClientURLs}
+
+		_, err = natsunit.StartEmbeddedNATS()
+		if err != nil {
+			panic(err.Error())
+		} else {
+			u.Debugf("started embedded nats %v", natsunit.TestURL)
+		}
+
+		planner.GridConf.EtcdServers = Conf.Etcd
 
 		ServerCtx = models.NewServerCtx(Conf)
 		//u.Infof("init")
@@ -213,6 +255,13 @@ func NewTestServerForDb(t *testing.T, db string) {
 		go func() {
 			ServerCtx.PlanGrid.Run(quit)
 		}()
+
+		for {
+			time.Sleep(time.Millisecond * 20)
+			if ServerCtx.PlanGrid.Grid.Nats() != nil {
+				break
+			}
+		}
 
 		Schema, _ = ServerCtx.Schema(db)
 		u.Infof("starting %q schema in test", db)

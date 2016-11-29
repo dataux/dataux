@@ -165,7 +165,6 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 
 	u.Debugf("%d %p handleQuery: %v", m.connId, m, sql)
 	if !m.svr.Config.SupressRecover {
-		//u.Debugf("running recovery? ")
 		defer func() {
 			if e := recover(); e != nil {
 				u.Errorf("recover? %v", e)
@@ -180,26 +179,22 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		if err != nil {
 			return err
 		}
-		//u.Warnf("no schema so use info schema? %#v", s)
 		m.schema = s.InfoSchema
 	}
 
-	// Ensure it parses, right now we can't handle multiple statement (ie with semi-colons separating)
-	// sql = strings.TrimRight(sql, ";")
 	ctx := plan.NewContext(sql)
 	ctx.DisableRecover = m.svr.Config.SupressRecover
 	ctx.Session = m.sess
 	ctx.Schema = m.schema
 	ctx.Funcs = fr
 	if ctx.Schema == nil {
-		u.Warnf("no schema: ")
-	} else {
-		//u.Debugf("ctx has schema? %#v", ctx.Schema)
+		u.Warnf("no schema found in handler, this should not happen ")
 	}
+	//u.Debugf("handler job svr: %p  svr.Grid: %p", m.svr, m.svr.PlanGrid.Grid)
 	job, err := BuildMySqlJob(m.svr, ctx)
 
 	if err != nil {
-		u.Debugf("error? nilstmt?%v  err=%v", ctx.Stmt == nil, err)
+		//u.Debugf("error? nilstmt?%v  err=%v", ctx.Stmt == nil, err)
 		if ctx.Stmt != nil {
 			switch ctx.Stmt.Keyword() {
 			case lex.TokenRollback, lex.TokenCommit:

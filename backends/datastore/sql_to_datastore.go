@@ -33,9 +33,9 @@ var (
 	_ schema.ConnMutation = (*SqlToDatstore)(nil)
 )
 
-// Sql To Google Datastore Maps a Sql request into an equivalent
-//    google data store query
-// - a dialect translator
+// SqlToDatstore transforms a Sql AST statement into a Google Datastore request
+// - a dialect translator (sql -> datastore query languages)
+// - matches Task interface to operate in qlbridge exec interfaces
 type SqlToDatstore struct {
 	*exec.TaskBase
 	resp           *ResultReader
@@ -45,8 +45,8 @@ type SqlToDatstore struct {
 	stmt           rel.SqlStatement
 	schema         *schema.SchemaSource
 	dsCtx          context.Context
-	dsClient       *datastore.Client
-	dsq            *datastore.Query
+	dsClient       *datastore.Client // Stateful client for usage in request
+	dsq            *datastore.Query  // The ds query interpreted from sql
 	hasMultiValue  bool              // Multi-Value vs Single-Value aggs
 	hasSingleValue bool              // single value agg
 	partition      *schema.Partition // current partition for this request
@@ -63,7 +63,7 @@ func NewSqlToDatstore(table *schema.Table, cl *datastore.Client, ctx context.Con
 		dsCtx:    ctx,
 		dsClient: cl,
 	}
-	u.Infof("create sqltodatasource %p", m)
+	u.Debugf("create sqltodatasource %p", m)
 	return m
 }
 
@@ -243,7 +243,7 @@ func (m *SqlToDatstore) Put(ctx context.Context, key schema.Key, val interface{}
 	curRow := make([]driver.Value, len(cols))
 
 	if key != nil {
-		dskey = datastore.NewKey(m.dsCtx, m.tbl.NameOriginal, fmt.Sprintf("%v", key.Key()), 0, nil)
+		dskey = datastore.NameKey(m.tbl.NameOriginal, fmt.Sprintf("%v", key.Key()), nil)
 	}
 
 	var sel *rel.SqlSelect
@@ -305,7 +305,7 @@ func (m *SqlToDatstore) Put(ctx context.Context, key schema.Key, val interface{}
 			}
 		}
 		// Create the key by position?  HACK
-		dskey = datastore.NewKey(m.dsCtx, m.tbl.NameOriginal, fmt.Sprintf("%v", row[0]), 0, nil)
+		dskey = datastore.NameKey(m.tbl.NameOriginal, fmt.Sprintf("%v", row[0]), nil)
 
 	case map[string]driver.Value:
 		for i, f := range m.tbl.Fields {
@@ -362,7 +362,7 @@ func (m *SqlToDatstore) PutMulti(ctx context.Context, keys []schema.Key, src int
 }
 
 func (m *SqlToDatstore) Delete(key driver.Value) (int, error) {
-	dskey := datastore.NewKey(m.dsCtx, m.tbl.NameOriginal, fmt.Sprintf("%v", key), 0, nil)
+	dskey := datastore.NameKey(m.tbl.NameOriginal, fmt.Sprintf("%v", key), nil)
 	u.Infof("dskey:  %s   table=%s", dskey, m.tbl.NameOriginal)
 	err := m.dsClient.Delete(m.dsCtx, dskey)
 	if err != nil {

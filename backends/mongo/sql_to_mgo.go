@@ -25,16 +25,16 @@ var (
 
 	_ = json.Marshal
 
-	// Implement Datasource interface that allows Mongo
-	//  to fully implement a full select statement
+	// Implement plan.SourcePlanner interface that tells the exec runtime
+	// that Mongo can fully implement a full select statement plan (WHERE, PROJECT etc)
 	_ plan.SourcePlanner  = (*SqlToMgo)(nil)
 	_ exec.ExecutorSource = (*SqlToMgo)(nil)
 )
 
 // SqlToMgo Rewrite a Sql AST statement to a Mongo request
 //  - Walk the AST and see what can be pushed down and what can't
-//  - try to poly-fill the missing pieces.
-//
+//  - try to poly-fill the missing pieces
+//  - stateful single use request
 type SqlToMgo struct {
 	*exec.TaskBase
 	resp           *ResultReader
@@ -55,6 +55,7 @@ type SqlToMgo struct {
 	needsPolyFill  bool // do we request that features be polyfilled?
 }
 
+// NewSqlToMgo create sql to mongo converter
 func NewSqlToMgo(table *schema.Table, sess *mgo.Session) *SqlToMgo {
 	sm := &SqlToMgo{
 		tbl:    table,
@@ -104,7 +105,7 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 
 	if req.Where != nil {
 		m.filter = bson.M{}
-		_, err = m.WalkNode(req.Where.Expr, &m.filter)
+		_, err = m.walkNode(req.Where.Expr, &m.filter)
 		if err != nil {
 			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.String(), err)
 			return nil, err
@@ -112,14 +113,14 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 	}
 
 	// Evaluate the Select columns make sure we can pass them down or polyfill
-	err = m.WalkSelectList()
+	err = m.walkSelectList()
 	if err != nil {
 		u.Warnf("Could Not evaluate Columns/Aggs %s %v", req.Columns.String(), err)
 		return nil, err
 	}
 
 	if len(req.GroupBy) > 0 {
-		err = m.WalkGroupBy()
+		err = m.walkGroupBy()
 		if err != nil {
 			u.Warnf("Could Not evaluate GroupBys %s %v", req.GroupBy.String(), err)
 			return nil, err
@@ -231,7 +232,7 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 //
 //    SELECT <select_list> FROM ... WHERE
 //
-func (m *SqlToMgo) WalkSelectList() error {
+func (m *SqlToMgo) walkSelectList() error {
 
 	m.aggs = bson.M{}
 	for i := len(m.sel.Columns) - 1; i >= 0; i-- {
@@ -249,7 +250,7 @@ func (m *SqlToMgo) WalkSelectList() error {
 			// 	return m.walkUnary(curNode)
 			case *expr.FuncNode:
 				// All Func Nodes are Aggregates?
-				esm, err := m.WalkAggs(curNode)
+				esm, err := m.walkAggs(curNode)
 				if err == nil && len(esm) > 0 {
 					m.aggs[col.As] = esm
 				} else if err != nil {
@@ -283,7 +284,7 @@ func (m *SqlToMgo) WalkSelectList() error {
 //
 //    db.article.aggregate([{"$group":{_id: "$author", count: {"$sum":1}}}]);
 //
-func (m *SqlToMgo) WalkGroupBy() error {
+func (m *SqlToMgo) walkGroupBy() error {
 
 	for i, col := range m.sel.GroupBy {
 		if col.Expr != nil {
@@ -291,7 +292,7 @@ func (m *SqlToMgo) WalkGroupBy() error {
 			switch col.Expr.(type) {
 			case *expr.IdentityNode, *expr.FuncNode:
 				esm := bson.M{}
-				_, err := m.WalkNode(col.Expr, &esm)
+				_, err := m.walkNode(col.Expr, &esm)
 				fld := strings.Replace(expr.FindFirstIdentity(col.Expr), ".", "", -1)
 				u.Infof("gb: %s  %s", fld, u.JsonHelper(esm).PrettyJson())
 				if err == nil {
@@ -316,10 +317,10 @@ func (m *SqlToMgo) WalkGroupBy() error {
 	return nil
 }
 
-// WalkAggs() aggregate expressions when used ast part of <select_list>
+// aggregate expressions when used ast part of <select_list>
 //  - For Aggregates (functions) it builds appropriate underlying mongo aggregation/map-reduce
 //  - For Projections (non-functions) it does nothing, that will be done later during projection
-func (m *SqlToMgo) WalkAggs(cur expr.Node) (q bson.M, _ error) {
+func (m *SqlToMgo) walkAggs(cur expr.Node) (q bson.M, _ error) {
 	switch curNode := cur.(type) {
 	// case *expr.NumberNode:
 	// 	return nil, value.NewNumberValue(curNode.Float64), nil
@@ -353,7 +354,7 @@ func (m *SqlToMgo) WalkAggs(cur expr.Node) (q bson.M, _ error) {
 //
 // - if can't express logic we need to allow qlbridge to poly-fill
 //
-func (m *SqlToMgo) WalkNode(cur expr.Node, q *bson.M) (value.Value, error) {
+func (m *SqlToMgo) walkNode(cur expr.Node, q *bson.M) (value.Value, error) {
 	//u.Debugf("WalkNode: %#v", cur)
 	switch curNode := cur.(type) {
 	case *expr.NumberNode, *expr.StringNode:
@@ -468,8 +469,8 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 	case lex.TokenLogicAnd:
 		// this doesn't yet implement x AND y AND z
 		lhq, rhq := bson.M{}, bson.M{}
-		_, err := m.WalkNode(node.Args[0], &lhq)
-		_, err2 := m.WalkNode(node.Args[1], &rhq)
+		_, err := m.walkNode(node.Args[0], &lhq)
+		_, err2 := m.walkNode(node.Args[1], &rhq)
 		if err != nil || err2 != nil {
 			u.Errorf("could not get children nodes? %v %v %v", err, err2, node)
 			return nil, fmt.Errorf("could not evaluate: %v", node.String())
@@ -478,8 +479,8 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 	case lex.TokenLogicOr:
 		// this doesn't yet implement x AND y AND z
 		lhq, rhq := bson.M{}, bson.M{}
-		_, err := m.WalkNode(node.Args[0], &lhq)
-		_, err2 := m.WalkNode(node.Args[1], &rhq)
+		_, err := m.walkNode(node.Args[0], &lhq)
+		_, err2 := m.walkNode(node.Args[1], &rhq)
 		if err != nil || err2 != nil {
 			u.Errorf("could not get children nodes? %v %v %v", err, err2, node)
 			return nil, fmt.Errorf("could not evaluate: %v", node.String())

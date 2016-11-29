@@ -14,6 +14,7 @@ import (
 
 	u "github.com/araddon/gou"
 
+	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/dataux/dataux/models"
 	"github.com/dataux/dataux/vendored/mixer/client"
@@ -142,8 +143,11 @@ func (c *Conn) Run() {
 
 func ignoreableErr(err error) bool {
 	sqlErr, isMysqlError := err.(*mysql.SqlError)
+	_, isParseErr := err.(*rel.ParseError)
 	es := strings.ToLower(err.Error())
 	switch {
+	case isParseErr:
+		return true
 	case isMysqlError && sqlErr.Code == mysql.ER_WARN_DEPRECATED_SYNTAX:
 		return true
 	case strings.Contains(es, "deprecated"):

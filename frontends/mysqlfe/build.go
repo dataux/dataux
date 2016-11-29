@@ -19,24 +19,25 @@ var (
 	_ exec.Executor = (*MySqlJob)(nil)
 )
 
-// Mysql job that wraps the dataux distributed planner with a dialect specific one
+// MySqlJob job that wraps the dataux distributed planner with a dialect specific one
 type MySqlJob struct {
 	*planner.ExecutorGrid
 }
 
-// Create a MySql job that wraps underlying distributed planner, and qlbridge generic implementation
+// BuildMySqlJob Create a MySql job that wraps underlying distributed planner, and qlbridge generic implementation
 //   allowing per-method (VisitShow etc) to be replaced by a dialect specific handler.
 // - mysql `SHOW CREATE TABLE name` for example is dialect specific so needs to be replaced
 // - also wraps a distributed planner from dataux
 func BuildMySqlJob(svr *models.ServerCtx, ctx *plan.Context) (*MySqlJob, error) {
+
+	// Ensure it parses, right now we can't handle multiple statement (ie with semi-colons separating)
+	// sql = strings.TrimRight(sql, ";")
 	jobPlanner := plan.NewPlanner(ctx)
 	baseJob := exec.NewExecutor(ctx, jobPlanner)
 
 	job := &planner.ExecutorGrid{JobExecutor: baseJob}
-	//baseJob.Executor = job  // ??
 	job.Executor = job
 	job.GridServer = svr.PlanGrid
-	//u.Infof("executor: %T    sub.executor: %T", job, job.Executor)
 	job.Ctx = ctx
 	task, err := exec.BuildSqlJobPlanned(job.Planner, job.Executor, ctx)
 	if err != nil {

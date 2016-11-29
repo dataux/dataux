@@ -183,7 +183,8 @@ const (
 )
 
 const (
-	MYSQL_TYPE_NEWDECIMAL  byte = iota + 0xf6 // 246
+	MYSQL_TYPE_JSON        byte = iota + 0xf5 // 245
+	MYSQL_TYPE_NEWDECIMAL                     // 246
 	MYSQL_TYPE_ENUM                           // 247
 	MYSQL_TYPE_SET                            // 248
 	MYSQL_TYPE_TINY_BLOB                      // 249
@@ -231,6 +232,8 @@ func TypeString(typ byte) string {
 		return "MYSQL_TYPE_VARCHAR"
 	case MYSQL_TYPE_BIT:
 		return "MYSQL_TYPE_BIT"
+	case MYSQL_TYPE_JSON:
+		return "MYSQL_TYPE_JSON"
 	case MYSQL_TYPE_NEWDECIMAL:
 		return "MYSQL_TYPE_NEWDECIMAL"
 	case MYSQL_TYPE_ENUM:

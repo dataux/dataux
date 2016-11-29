@@ -15,6 +15,7 @@ import (
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2/jwt"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 
 	"github.com/araddon/qlbridge/datasource"
@@ -24,7 +25,7 @@ import (
 )
 
 const (
-	DataSourceLabel = "google-datastore"
+	SourceLabel = "google-datastore"
 )
 
 var (
@@ -33,18 +34,18 @@ var (
 
 	ErrNoSchema = fmt.Errorf("No schema or configuration exists")
 
-	// Ensure our Google DataStore implements datasource.DataSource interface
-	_ schema.Source = (*GoogleDSDataSource)(nil)
+	// Ensure our Google Datastore implements schema.Source interface
+	_ schema.Source = (*Source)(nil)
 )
 
 func init() {
-	// We need to register our DataSource provider here
-	datasource.Register(DataSourceLabel, &GoogleDSDataSource{})
+	// We need to register our Source into Datastource provider here
+	datasource.Register(SourceLabel, &Source{})
 }
 
-// Google Datastore Data Source, is a singleton, non-threadsafe connection
-//  to a backend mongo server
-type GoogleDSDataSource struct {
+// Source Google Datastore Data Source, is a singleton, non-threadsafe source
+//  to a create connections/clients to datastore
+type Source struct {
 	db             string
 	namespace      string
 	databases      []string
@@ -65,10 +66,10 @@ type GoogleDSDataSource struct {
 type DatastoreMutator struct {
 	tbl *schema.Table
 	sql rel.SqlStatement
-	ds  *GoogleDSDataSource
+	ds  *Source
 }
 
-func (m *GoogleDSDataSource) Setup(ss *schema.SchemaSource) error {
+func (m *Source) Setup(ss *schema.SchemaSource) error {
 
 	if m.schema != nil {
 		return nil
@@ -102,7 +103,7 @@ func (m *GoogleDSDataSource) Setup(ss *schema.SchemaSource) error {
 	return m.loadSchema()
 }
 
-func (m *GoogleDSDataSource) loadSchema() error {
+func (m *Source) loadSchema() error {
 
 	// Load a list of projects?  Namespaces?
 	// if err := m.loadNamespaces(); err != nil {
@@ -117,8 +118,8 @@ func (m *GoogleDSDataSource) loadSchema() error {
 	return nil
 }
 
-func (m *GoogleDSDataSource) Close() error {
-	u.Infof("Closing GoogleDSDataSource %p", m)
+func (m *Source) Close() error {
+	u.Debugf("Closing Source %p", m)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -126,15 +127,15 @@ func (m *GoogleDSDataSource) Close() error {
 	return nil
 }
 
-func (m *GoogleDSDataSource) connect() error {
+func (m *Source) connect() error {
 
-	//u.Infof("connecting GoogleDSDataSource: host='%s'  conf=%#v", host, m.schema.Conf)
+	//u.Debugf("connecting Source: host='%s'  conf=%#v", host, m.schema.Conf)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	jsonKey, err := ioutil.ReadFile(m.jwtFile)
 	if err != nil {
-		u.Errorf("Could not open Google Auth Token JWT file %v", err)
+		u.Warnf("Could not open Google Auth Token JWT file %v", err)
 		return err
 	}
 
@@ -143,18 +144,15 @@ func (m *GoogleDSDataSource) connect() error {
 		datastore.ScopeDatastore,
 	)
 	if err != nil {
-		u.Errorf("could not use google datastore JWT token: %v", err)
+		u.Warnf("could not use google datastore JWT token: %v", err)
 		return err
 	}
 	m.authConfig = conf
 
 	ctx := context.Background()
-
-	//client, err := datastore.NewClient(ctx, "project-id", option.WithTokenSource(conf.TokenSource(ctx)))
 	client, err := datastore.NewClient(ctx, m.cloudProjectId, option.WithTokenSource(conf.TokenSource(ctx)))
-	//client, err := datastore.NewClient(ctx, m.cloudProjectId, google.WithTokenSource(conf.TokenSource(ctx)))
 	if err != nil {
-		u.Errorf("could not create google datastore client: project:%s jwt:%s  err=%v", m.cloudProjectId, m.jwtFile, err)
+		u.Warnf("could not create google datastore client: project:%s jwt:%s  err=%v", m.cloudProjectId, m.jwtFile, err)
 		return err
 	}
 	m.dsClient = client
@@ -162,14 +160,14 @@ func (m *GoogleDSDataSource) connect() error {
 	return nil
 }
 
-func (m *GoogleDSDataSource) DataSource() schema.Source {
+func (m *Source) DataSource() schema.Source {
 	return m
 }
-func (m *GoogleDSDataSource) Tables() []string {
+func (m *Source) Tables() []string {
 	return m.tablesLower
 }
 
-func (m *GoogleDSDataSource) Open(tableName string) (schema.Conn, error) {
+func (m *Source) Open(tableName string) (schema.Conn, error) {
 	u.Debugf("Open(%v)", tableName)
 	if m.schema == nil {
 		u.Warnf("no schema?")
@@ -189,7 +187,7 @@ func (m *GoogleDSDataSource) Open(tableName string) (schema.Conn, error) {
 	return gdsSource, nil
 }
 
-func (m *GoogleDSDataSource) selectQuery(stmt *rel.SqlSelect) (*ResultReader, error) {
+func (m *Source) selectQuery(stmt *rel.SqlSelect) (*ResultReader, error) {
 
 	//u.Debugf("get sourceTask for %v", stmt)
 	tblName := strings.ToLower(stmt.From[0].Name)
@@ -213,12 +211,12 @@ func (m *GoogleDSDataSource) selectQuery(stmt *rel.SqlSelect) (*ResultReader, er
 	return resp, nil
 }
 
-func (m *GoogleDSDataSource) Table(table string) (*schema.Table, error) {
+func (m *Source) Table(table string) (*schema.Table, error) {
 	//u.Debugf("get table for %s", table)
 	return m.loadTableSchema(table, "")
 }
 
-func (m *GoogleDSDataSource) loadDatabases() error {
+func (m *Source) loadDatabases() error {
 
 	dbs := make([]string, 0)
 	sort.Strings(dbs)
@@ -239,18 +237,18 @@ func (m *GoogleDSDataSource) loadDatabases() error {
 }
 
 // Load only table/collection names, not full schema
-func (m *GoogleDSDataSource) loadTableNames() error {
+func (m *Source) loadTableNames() error {
 
 	tablesLower := make([]string, 0)
 	tablesOriginal := make(map[string]string)
 	rows := pageQuery(m.dsClient.Run(m.dsCtx, datastore.NewQuery("__kind__")))
 	for _, row := range rows {
-		if !strings.HasPrefix(row.key.Name(), "__") {
-			tableLower := strings.ToLower(row.key.Name())
+		if !strings.HasPrefix(row.key.Name, "__") {
+			tableLower := strings.ToLower(row.key.Name)
 			//u.Debugf("found table %q  %#v", tableLower, row.key)
 			tablesLower = append(tablesLower, tableLower)
-			tablesOriginal[tableLower] = row.key.Name()
-			m.loadTableSchema(tableLower, row.key.Name())
+			tablesOriginal[tableLower] = row.key.Name
+			m.loadTableSchema(tableLower, row.key.Name)
 		}
 	}
 	m.tablesLower = tablesLower
@@ -258,7 +256,7 @@ func (m *GoogleDSDataSource) loadTableNames() error {
 	return nil
 }
 
-func (m *GoogleDSDataSource) loadTableSchema(tableLower, tableOriginal string) (*schema.Table, error) {
+func (m *Source) loadTableSchema(tableLower, tableOriginal string) (*schema.Table, error) {
 
 	if tableOriginal == "" {
 		name, ok := m.tablesOriginal[tableLower]
@@ -371,7 +369,7 @@ func pageQuery(iter *datastore.Iterator) []schemaType {
 	for {
 		row := schemaType{}
 		if key, err := iter.Next(&row); err != nil {
-			if err == datastore.Done {
+			if err == iterator.Done {
 				break
 			}
 			u.Errorf("error: %v", err)

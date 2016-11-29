@@ -115,19 +115,15 @@ func (m *ResultReader) Run() error {
 
 	//u.Debugf("sqltomgo:%p  resultreader:%p colnames? %v", m.sql, m, colNames)
 
-	m.Vals = make([][]driver.Value, 0)
-
 	if sql.CountStar() {
-		// Count *
-		//u.Debugf("count * colnames? %v", colNames)
-		//u.Debugf("ctx projection? %#v", m.Ctx.Projection.Proj)
+		// select count(*)
 		vals := make([]driver.Value, 1)
 		ct, err := m.query.Count()
 		if err != nil {
-			u.Errorf("could not get count: %v", err)
+			u.Errorf("could not get count(*) from mongo: %v", err)
 			return err
 		}
-		// Wtf, sometime i want to strangle mysql
+		// we are going to write the count as a string?  whatevers mysql.
 		vals[0] = fmt.Sprintf("%d", ct)
 		m.Vals = append(m.Vals, vals)
 		//u.Debugf("was a select count(*) query %d", ct)
@@ -147,6 +143,7 @@ func (m *ResultReader) Run() error {
 	}
 
 	//n := time.Now()
+	m.Vals = make([][]driver.Value, 0)
 	iter := m.query.Iter()
 	for {
 		var bm bson.M
