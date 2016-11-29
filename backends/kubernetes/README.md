@@ -59,9 +59,12 @@ minikube delete --v=10 --show-libmachine-logs --alsologtostderr
 
 
 mysql -h127.0.0.1 -P4000 -Dkube -e "describe pods;"
+mysql -h127.0.0.1 -P4000 -Dkube -e "describe nodes;"
+mysql -h127.0.0.1 -P4000 -Dkube -e "describe services;"
 
 mysql -h127.0.0.1 -P4000 -Dkube -e "select name, creationtimestamp, hostip, podip, hostname from pods;"
 
+mysql -h127.0.0.1 -P4000 -Dkube -e "select * from nodes;"
 
 
 

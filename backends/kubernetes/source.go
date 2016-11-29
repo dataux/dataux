@@ -126,7 +126,7 @@ func (m *Source) Close() error {
 }
 
 func (m *Source) Open(tableName string) (schema.Conn, error) {
-	u.Debugf("Open(%q)", tableName)
+	//u.Debugf("Open(%q)", tableName)
 	if m.schema == nil {
 		u.Warnf("no schema for %q", tableName)
 		return nil, nil
@@ -171,7 +171,113 @@ func (m *Source) loadSchema() error {
 		return err
 	}
 
+	if err := m.describeNodes(clientset); err != nil {
+		return err
+	}
+
+	if err := m.describeServices(clientset); err != nil {
+		return err
+	}
+
 	sort.Strings(m.tables)
+	return nil
+}
+
+func (m *Source) describeServices(c *kubernetes.Clientset) error {
+
+	services, err := c.Core().Services("").List(api.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("Could not get kubernetes services %v", err)
+	}
+	u.Debugf("describe services: %q", services.Kind)
+	u.Infof("There are %d services in the cluster", len(services.Items))
+	for _, svc := range services.Items {
+		svcJson, _ := json.MarshalIndent(svc, "", "  ")
+		if true == true {
+			u.Debugf("\n%s", string(svcJson))
+		}
+	}
+
+	// http://kubernetes.io/docs/api-reference/v1/definitions/#_v1_service
+	tbl := schema.NewTable("services")
+	colNames := make([]string, 0, 40)
+	tbl.AddField(schema.NewFieldBase("kind", value.StringType, 24, "string"))
+	colNames = append(colNames, "kind")
+	colNames = m.describeMetaData(tbl, colNames)
+
+	// http://kubernetes.io/docs/api-reference/v1/definitions/#_v1_servicestatus
+	tbl.AddField(schema.NewFieldBase("loadbalancer", value.JsonType, 256, "json object"))
+	colNames = append(colNames, []string{"loadbalancer"}...)
+
+	// http://kubernetes.io/docs/api-reference/v1/definitions/#_v1_servicespec
+	tbl.AddField(schema.NewFieldBase("ports", value.JsonType, 256, "json array"))
+	tbl.AddField(schema.NewFieldBase("selector", value.JsonType, 256, "json object"))
+	tbl.AddField(schema.NewFieldBase("clusterip", value.StringType, 256, "string"))
+	tbl.AddField(schema.NewFieldBase("type", value.StringType, 32, "string"))
+	tbl.AddField(schema.NewFieldBase("externalips", value.JsonType, 32, "json array"))
+	tbl.AddField(schema.NewFieldBase("deprecatedpublicips", value.JsonType, 32, "json array"))
+	tbl.AddField(schema.NewFieldBase("sessionaffinity", value.StringType, 256, "string"))
+	tbl.AddField(schema.NewFieldBase("loadbalancerip", value.StringType, 256, "string"))
+	tbl.AddField(schema.NewFieldBase("loadbalancersourceranges", value.JsonType, 32, "json array"))
+	tbl.AddField(schema.NewFieldBase("externalname", value.StringType, 256, "string"))
+	colNames = append(colNames, []string{"ports", "selector", "clusterip", "type",
+		"externalips", "deprecatedpublicips", "sessionaffinity", "loadbalancerip",
+		"loadbalancersourceranges", "externalname"}...)
+
+	u.Infof("%p  caching table p=%p %q  cols=%v", m.schema, tbl, tbl.Name, colNames)
+	tbl.SetColumns(colNames)
+	m.tablemap[tbl.Name] = tbl
+	m.tables = append(m.tables, tbl.Name)
+	return nil
+}
+
+func (m *Source) describeNodes(c *kubernetes.Clientset) error {
+
+	nodes, err := c.Core().Nodes().List(api.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("Could not get kubernetes nodes %v", err)
+	}
+	u.Debugf("describe nodes: %q", nodes.Kind)
+	u.Infof("There are %d nodes in the cluster", len(nodes.Items))
+	for _, node := range nodes.Items {
+		nodeJson, _ := json.MarshalIndent(node, "", "  ")
+		if true == true {
+			u.Debugf("\n%s", string(nodeJson))
+		}
+	}
+
+	tbl := schema.NewTable("nodes")
+	colNames := make([]string, 0, 40)
+	tbl.AddField(schema.NewFieldBase("kind", value.StringType, 24, "string"))
+	colNames = append(colNames, "kind")
+	colNames = m.describeMetaData(tbl, colNames)
+
+	// http://kubernetes.io/docs/api-reference/v1/definitions/#_v1_nodestatus
+	tbl.AddField(schema.NewFieldBase("capacity", value.JsonType, 256, "json object"))
+	tbl.AddField(schema.NewFieldBase("allocatable", value.JsonType, 256, "json object"))
+	tbl.AddField(schema.NewFieldBase("phase", value.StringType, 256, "string"))
+	tbl.AddField(schema.NewFieldBase("conditions", value.JsonType, 256, "json array"))
+	tbl.AddField(schema.NewFieldBase("addresses", value.JsonType, 256, "json array"))
+	tbl.AddField(schema.NewFieldBase("daemonendpoints", value.JsonType, 256, "json object"))
+	tbl.AddField(schema.NewFieldBase("nodeinfo", value.JsonType, 256, "json object"))
+	tbl.AddField(schema.NewFieldBase("images", value.JsonType, 256, "json array"))
+	tbl.AddField(schema.NewFieldBase("volumesinuse", value.JsonType, 256, "json array"))
+	tbl.AddField(schema.NewFieldBase("volumesattached", value.JsonType, 256, "json array"))
+	colNames = append(colNames, []string{"capacity", "allocatable", "phase", "conditions",
+		"addresses", "daemonendpoints", "nodeinfo", "images", "volumesinuse", "volumesattached"}...)
+
+	// http://kubernetes.io/docs/api-reference/v1/definitions/#_v1_nodespec
+	tbl.AddField(schema.NewFieldBase("podcidr", value.StringType, 256, "string"))
+	tbl.AddField(schema.NewFieldBase("externalid", value.StringType, 32, "string"))
+	tbl.AddField(schema.NewFieldBase("providerid", value.StringType, 32, "string"))
+	tbl.AddField(schema.NewFieldBase("unschedulable", value.BoolType, 1, "boolean"))
+
+	colNames = append(colNames, []string{"podcidr", "externalid", "providerid", "unschedulable"}...)
+
+	u.Infof("%p  caching table p=%p %q  cols=%v", m.schema, tbl, tbl.Name, colNames)
+	tbl.SetColumns(colNames)
+	m.tablemap[tbl.Name] = tbl
+	m.tables = append(m.tables, tbl.Name)
 	return nil
 }
 
