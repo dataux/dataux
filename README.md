@@ -1,10 +1,14 @@
 
-##  Sql Query Proxy to Elasticsearch, Mongo, etc.
+##  Sql Query Proxy to Elasticsearch, Mongo, Kuberntes, BigTable, etc.
 
-Mysql compatible federqred query engine to Elasticsearch, Mongo, 
-Google Datastore, Cassandra, File-based backend sources, including join.
-This proxy and query engine hosts a mysql protocol listener, 
-which then rewrites sql queries to native (elasticsearch, mongo, cassandra).
+Unify disparate data sources, files into a single Virtual or Federated
+view of your data. 
+
+
+Mysql compatible federated query engine to Elasticsearch, Mongo, 
+Google Datastore, Cassandra, Google BigTable, Kuberntes, File-based backend sources, including join.
+This query engine hosts a mysql protocol listener, 
+which then rewrites sql queries to native (elasticsearch, mongo, cassandra, kuberntes-rest-api, bigtable).
 It works by implementing a full relational algebra layer 
 to run sql queries and poly-fill missing features
 from underlying sources.  So, a backend key-value storage such as cassandra
@@ -21,7 +25,7 @@ easy to add custom data sources.
 * *Hackable Functions* Add custom go functions to extend the sql language.
 * *Joins* Get join functionality between heterogeneous sources.
 * *Frontends* currently only MySql protocol is supported but RethinkDB (for real-time api) is planned, and are pluggable.
-* *Backends*  Elasticsearch, Google-Datastore, Mongo currently implemented.  Csv, Json files, and custom formats (protobuf) are in progress.
+* *Backends*  Elasticsearch, Google-Datastore, Mongo, Cassandra, BigTable, Kubernetes currently implemented.  Csv, Json files, and custom formats (protobuf) are in progress.
 
 ## Status
 * NOT Production ready.  Currently supporting a few non-critical use-cases (ad-hoc queries, support tool) in production.
