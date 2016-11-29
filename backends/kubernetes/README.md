@@ -4,14 +4,13 @@ Kubernetes Data Source
 
 Provides SQL Access to Kuberntes Rest API's
 
+![mysql_kube](https://cloud.githubusercontent.com/assets/7269/20697265/96e13c10-b5ac-11e6-944b-c588c6e7570e.png)
+
 * http://kubernetes.io/docs/user-guide/accessing-the-cluster/
 * https://github.com/kubernetes/contrib/tree/master/ingress/controllers/nginx
 
 **Types & Schema**
 * http://kubernetes.io/docs/api-reference/v1/definitions/
-
-
-![mysql_kube](https://cloud.githubusercontent.com/assets/7269/20697160/bc4a5474-b5ab-11e6-9364-69e82cc75e0d.png)
 
 
 Testing & Dev
@@ -23,7 +22,6 @@ or a google container engine cluster.   Then we need to decide
 
 1.  via kubectl proxy (easiest)
 2.  via api
-3.  ??
 
 
 **Setting up Minikube**
