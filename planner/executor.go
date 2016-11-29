@@ -136,7 +136,7 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 		} else if gs.Grid == nil {
 			u.Warnf("Grid doens't exist? ")
 		} else if gs.Grid.Nats() == nil {
-			u.Warnf("Grid.Nats() doesnt exist")
+			u.Warnf("Grid.Nats() doesnt exist  grid: %p", gs.Grid)
 		}
 
 		flow := NewFlow(taskUint)

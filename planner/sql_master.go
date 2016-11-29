@@ -61,7 +61,7 @@ func (m *sqlMasterTask) heartbeat(rp ring.Ring) {
 	for {
 		select {
 		case <-m.done:
-			u.Warnf("m.done???")
+			//u.Warnf("m.done???")
 			return
 		case <-ticker.C:
 			u.Debugf("alive")

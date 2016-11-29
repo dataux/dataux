@@ -1,6 +1,7 @@
 package testmysql
 
 import (
+	"net/url"
 	"os"
 	"sync"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	u "github.com/araddon/gou"
 	"github.com/bmizerany/assert"
 	"github.com/coreos/etcd/embed"
+	"github.com/coreos/pkg/capnslog"
 	"github.com/lytics/grid/grid.v2/natsunit"
 
 	// Frontend's side-effect imports
@@ -196,39 +198,49 @@ nodes : [
 
 `
 
+func EtcdConfig() *embed.Config {
+
+	// Cleanup
+	os.RemoveAll("test.etcd")
+	os.RemoveAll(".test.etcd")
+	os.RemoveAll("/tmp/test.etcd")
+
+	embed.DefaultInitialAdvertisePeerURLs = "http://127.0.0.1:22380"
+	embed.DefaultAdvertiseClientURLs = "http://127.0.0.1:22379"
+
+	cfg := embed.NewConfig()
+
+	lpurl, _ := url.Parse("http://localhost:22380")
+	lcurl, _ := url.Parse("http://localhost:22379")
+	cfg.LPUrls = []url.URL{*lpurl}
+	cfg.LCUrls = []url.URL{*lcurl}
+
+	cfg.Dir = "/tmp/test.etcd"
+
+	return cfg
+}
 func NewTestServerForDb(t *testing.T, db string) {
 	f := func() {
 
 		assert.Tf(t, Conf != nil, "must load config without err: %v", Conf)
 
-		// EtcdCluster = embeddedetcd.TestClusterOf1()
-		// EtcdCluster.Launch()
-		// etcdServers := EtcdCluster.HTTPMembers()[0].ClientURLs
-		//u.Infof("etcdServers: %#v", etcdServers)
-		//Conf.Etcd = etcdServers
+		capnslog.SetGlobalLogLevel(capnslog.CRITICAL)
 
-		// etcd.embed package for some reason uses non localhost ip's
-		embed.DefaultInitialAdvertisePeerURLs = "http://127.0.0.1:2380"
-		embed.DefaultAdvertiseClientURLs = "http://127.0.0.1:2379"
-
-		cfg := embed.NewConfig()
-		os.RemoveAll("test.etcd")
-		cfg.Dir = "test.etcd"
-		e, err := embed.StartEtcd(cfg)
+		e, err := embed.StartEtcd(EtcdConfig())
 		if err != nil {
 			panic(err.Error())
 		}
 		if e == nil {
 			panic("must have etcd server")
 		}
+		// can't defer close as this function returns immediately
 		//defer e.Close()
 
 		Conf.Etcd = []string{embed.DefaultAdvertiseClientURLs}
-		//Conf.Etcd = []string{"http://127.0.0.1:2379"}
 
 		_, err = natsunit.StartEmbeddedNATS()
 		if err != nil {
-			panic(err.Error)
+			panic(err.Error())
 		} else {
 			u.Debugf("started embedded nats %v", natsunit.TestURL)
 		}
@@ -243,6 +255,13 @@ func NewTestServerForDb(t *testing.T, db string) {
 		go func() {
 			ServerCtx.PlanGrid.Run(quit)
 		}()
+
+		for {
+			time.Sleep(time.Millisecond * 20)
+			if ServerCtx.PlanGrid.Grid.Nats() != nil {
+				break
+			}
+		}
 
 		Schema, _ = ServerCtx.Schema(db)
 		u.Infof("starting %q schema in test", db)
