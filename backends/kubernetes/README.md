@@ -1,5 +1,5 @@
 
-Kubernetes Data source
+Kubernetes Data Source
 --------------------------------------
 
 Provides SQL Access to Kuberntes Rest API's
@@ -9,6 +9,9 @@ Provides SQL Access to Kuberntes Rest API's
 
 **Types & Schema**
 * http://kubernetes.io/docs/api-reference/v1/definitions/
+
+
+![mysql_kube](https://cloud.githubusercontent.com/assets/7269/20697160/bc4a5474-b5ab-11e6-9364-69e82cc75e0d.png)
 
 
 Testing & Dev
@@ -48,5 +51,20 @@ kubectl get pods --all-namespaces
 kubectl cluster-info
 
 minikube delete --v=10 --show-libmachine-logs --alsologtostderr
+
+```
+
+
+**SQL examples**
+
+```sh
+
+
+mysql -h127.0.0.1 -P4000 -Dkube -e "describe pods;"
+
+mysql -h127.0.0.1 -P4000 -Dkube -e "select name, creationtimestamp, hostip, podip, hostname from pods;"
+
+
+
 
 ```
