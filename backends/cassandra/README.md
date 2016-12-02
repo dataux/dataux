@@ -1,6 +1,39 @@
 
 
 
+Cassandra Data source
+--------------------------------------
+
+Provides SQL Access to Cassandra
+
+![dataux_cass](https://cloud.githubusercontent.com/assets/7269/20815364/68ffd2c0-b7d2-11e6-8fed-adc71802df9e.png)
+
+
+Cassandra CQL | SQL Query  
+----- | -------
+Tables                  | `show tables;`
+Column Families         | `describe mytable;`  
+`WHERE`                 | `select count(*) from table WHERE exists(a);`  Some of these are pushed down to cassandra if avaialble.
+filter:   terms         | `select * from table WHERE year IN (2015,2014,2013);`
+filter: gte, range      | `select * from table WHERE year BETWEEN 2012 AND 2014`
+aggs min, max, avg, sum | `select min(year), max(year), avg(year), sum(year) from table WHERE exists(a);`   These are poly-filled in the distributed query engine.
+
+
+
+## Example Usage
+
+```sh
+go get -u github.com/dataux/dataux
+cd $GOPATH/src/github.com/dataux/dataux
+go build
+./dataux --config=backends/cassandra/cassandra.conf
+
+
+
+```
+
+## Hacking
+some notes and random info for hacking
 
 ```
 # start docker container for testing

@@ -30,6 +30,17 @@ easy to add custom data sources.
 ## Status
 * NOT Production ready.  Currently supporting a few non-critical use-cases (ad-hoc queries, support tool) in production.
 
+
+## Backends
+
+* [Kubernetes](https://github.com/dataux/dataux/tree/master/backends/kubernetes) An example of REST api backend.
+* [Big Table](https://github.com/dataux/dataux/tree/master/backends/bigtable) SQL against big-table.
+* [Elasticsearch](https://github.com/dataux/dataux/tree/master/backends/elasticseearch) Simplify access to Elasticsearch.
+* [Mongo](https://github.com/dataux/dataux/tree/master/backends/mongo) Translate SQL into mongo.
+* [Google Cloud Storage / (csv, json files)](https://github.com/dataux/dataux/tree/master/backends/files) An example of REST api backends (list of files), as well as the file contents themselves are tables.
+* [Cassandra](https://github.com/dataux/dataux/tree/master/backends/cassandra) SQL against cassandra.  Adds sql features that are missing.
+
+
 ## Try it Out
 This example imports a couple hours worth of historical data
 from  https://www.githubarchive.org/ into a local
