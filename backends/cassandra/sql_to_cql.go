@@ -205,18 +205,18 @@ func (m *SqlToCql) WalkExecSource(p *plan.Source) (exec.Task, error) {
 
 	// do we need poly fill Having?
 	if m.sel.Having != nil {
-		u.Infof("needs HAVING polyfill")
+		u.Debugf("needs HAVING polyfill")
 	}
 
 	if m.needsOrderByPolyFill {
-		u.Infof("adding order by poly fill")
+		u.Debugf("adding order by poly fill")
 		op := plan.NewOrder(m.sel)
 		ot := exec.NewOrder(m.Ctx, op)
 		reader.Add(ot)
 		m.needsPolyFill = true
 	}
 
-	u.Infof("%p  needsPolyFill?%v  limit:%d ", m.sel, m.needsPolyFill, m.sel.Limit)
+	u.Debugf("%p  needsPolyFill?%v  limit:%d ", m.sel, m.needsPolyFill, m.sel.Limit)
 	if m.needsPolyFill {
 		if m.sel.Limit > 0 {
 			// Since we are poly-filling we need to over-read
@@ -224,7 +224,7 @@ func (m *SqlToCql) WalkExecSource(p *plan.Source) (exec.Task, error) {
 			// cass limits aren't valid from original statement
 			m.sel.Limit = 0
 			reader.Req.sel.Limit = 0
-			u.Warnf("%p setting limit up!!!!!! %v", m.sel, m.sel.Limit)
+			u.Debugf("%p setting limit up!!!!!! %v", m.sel, m.sel.Limit)
 		}
 	}
 
@@ -246,7 +246,7 @@ func (m *SqlToCql) CreateMutator(pc interface{}) (schema.ConnMutator, error) {
 func (m *SqlToCql) Put(ctx context.Context, key schema.Key, val interface{}) (schema.Key, error) {
 
 	if key == nil {
-		u.Warnf("didn't have key?  %v", val)
+		u.Infof("didn't have key?  %v", val)
 		//return nil, fmt.Errorf("Must have key for updates in cassandra")
 	}
 
@@ -366,7 +366,7 @@ func (m *SqlToCql) PutMulti(ctx context.Context, keys []schema.Key, src interfac
 
 // Delete delete by row
 func (m *SqlToCql) Delete(key driver.Value) (int, error) {
-	u.Warnf("hm, in delete?  %v", key)
+	u.Debugf("hm, in delete?  %v", key)
 	return 0, schema.ErrNotImplemented
 }
 
@@ -382,7 +382,7 @@ func (m *SqlToCql) DeleteExpression(p interface{}, where expr.Node) (int, error)
 	dw := expr.NewDialectWriter('\'', '"')
 	where.WriteDialect(dw)
 	cql := fmt.Sprintf("DELETE FROM %s WHERE %s", pd.Stmt.Table, dw.String())
-	u.Warnf("about to run:  %s", cql)
+	u.Debugf("about to run:  %s", cql)
 	err := m.s.session.Query(cql).Exec()
 	if err != nil {
 		u.Errorf("could not delete: %v", err)
@@ -494,7 +494,7 @@ func (m *SqlToCql) walkFilterBinary(node *expr.BinaryNode) (expr.Node, error) {
 	// if it is an identity lets make sure it is in parition or cluster key
 	if !m.isCassKey(lhIdentityName) {
 		m.needsPolyFill = true
-		u.Warnf("cannot use [%s] in WHERE due to not being part of key", node)
+		u.Debugf("cannot push down [%s] into cassandra WHERE due to not being part of key", node)
 		return nil, nil
 	}
 
