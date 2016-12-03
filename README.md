@@ -1,5 +1,5 @@
 
-##  Sql Query Proxy to Elasticsearch, Mongo, Kuberntes, BigTable, etc.
+##  Sql Query Proxy to Elasticsearch, Mongo, Kubernetes, BigTable, etc.
 
 Unify disparate data sources, files into a single Virtual or Federated
 view of your data. 
@@ -174,7 +174,7 @@ Inspiration/Other works
 --------------------------
 * https://github.com/linkedin/databus, 
 * [ql.io](http://www.ebaytechblog.com/2011/11/30/announcing-ql-io/), [yql](https://developer.yahoo.com/yql/)
-* [dockersql](https://github.com/crosbymichael/dockersql), [q -python](http://harelba.github.io/q/), [textql](https://github.com/dinedal/textql), [GitQL](https://github.com/cloudson/gitql)
+* [dockersql](https://github.com/crosbymichael/dockersql), [q -python](http://harelba.github.io/q/), [textql](https://github.com/dinedal/textql),[GitQL/GitQL](https://github.com/gitql/gitql), [GitQL](https://github.com/cloudson/gitql)
 
 
 > In Internet architectures, data systems are typically categorized
