@@ -2,7 +2,7 @@
 Kubernetes Data Source
 --------------------------------------
 
-Provides SQL Access to Kuberntes Rest API's
+Provides SQL Access to Kubernetes Rest API's
 
 ![mysql_kube](https://cloud.githubusercontent.com/assets/7269/20697265/96e13c10-b5ac-11e6-944b-c588c6e7570e.png)
 
@@ -12,7 +12,32 @@ Provides SQL Access to Kuberntes Rest API's
 **Types & Schema**
 * http://kubernetes.io/docs/api-reference/v1/definitions/
 
+**Try It Out**
 
+* **Assumes minikube is running locally**
+* Install dataux https://github.com/dataux/dataux/releases
+* Install dataux via docker
+
+
+```sh
+
+minikube start
+
+# install dataux  https://github.com/dataux/dataux/releases
+# checkout/clone github.com/dataux/dataux  to get a config file
+cd github.com/dataux/dataux
+
+# run 
+./dataux --config=backends/kubernetes/kubernetes.conf
+
+
+# from another terminal
+
+mysql -h 127.0.0.1 -P 4000 -Dkube
+
+
+
+```
 Testing & Dev
 -------------------------------------
 
