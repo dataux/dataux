@@ -8,7 +8,9 @@ import (
 	"os"
 	"runtime"
 
-	// Backend Side-Effect imports
+	// Backend Side-Effect imports, ie load the providers into registry but
+	// config will determine if they get used.
+	// if you are building custom daemon, you can cherry pick sources you care about
 	_ "github.com/dataux/dataux/backends/bigtable"
 	_ "github.com/dataux/dataux/backends/cassandra"
 	_ "github.com/dataux/dataux/backends/datastore"
@@ -33,7 +35,7 @@ var (
 
 func init() {
 	flag.StringVar(&configFile, "config", "dataux.conf", "dataux proxy config file")
-	flag.StringVar(&logLevel, "loglevel", "debug", "logging [ debug,info,warn,error ]")
+	flag.StringVar(&logLevel, "loglevel", "info", "logging [ debug,info,warn,error ]")
 	flag.StringVar(&pprofPort, "pprof", ":18008", "pprof and metrics port")
 	flag.IntVar(&workerCt, "workerct", 3, "Number of worker nodes")
 	flag.Parse()
@@ -41,16 +43,21 @@ func init() {
 func main() {
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
-
-	if len(configFile) == 0 {
-		u.Errorf("must use a config file")
-		return
-	}
 	u.SetupLogging(logLevel)
 	u.SetColorIfTerminal()
 
-	proxy.LoadConfig(configFile)
+	// First try to look for dataux.conf or provided conf file
+	// if that fails then use the empty default which means api's
+	// etc can be used to dynamically define schema etc
+	_, err := proxy.LoadConfig(configFile)
+	if err != nil {
+		_, err = proxy.LoadConfigString(DefaultConfig)
+		if err != nil {
+			os.Exit(1)
+		}
+	}
 
+	// go profiling
 	if pprofPort != "" {
 		conn, err := net.Listen("tcp", pprofPort)
 		if err != nil {
@@ -67,3 +74,14 @@ func main() {
 
 	proxy.RunDaemon(true, workerCt)
 }
+
+var DefaultConfig = `
+
+frontends : [
+  {
+    type    : mysql
+    address : "0.0.0.0:4000"
+  }
+]
+
+`

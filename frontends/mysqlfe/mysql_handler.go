@@ -21,7 +21,7 @@ import (
 )
 
 func init() {
-	// Load our Frontend Listener's
+	// Register our Mysql Frontend Listener
 	models.ListenerRegister(mysqlproxy.ListenerType, &MySqlConnCreator{})
 }
 
@@ -49,11 +49,11 @@ type MySqlConnCreator struct {
 	l    models.Listener
 }
 
+// Init is part of frontend interface to accept config and global server context at start
 func (m *MySqlConnCreator) Init(conf *models.ListenerConfig, svr *models.ServerCtx) error {
-	//u.Debugf("mysql conn creator")
 	l, err := mysqlproxy.ListenerInit(conf, svr.Config, m)
 	if err != nil {
-		u.Errorf("could not get mysql listener: %v", err)
+		u.Errorf("could not init mysql listener: %v", err)
 		return err
 	}
 	m.l = l
@@ -87,8 +87,11 @@ func (m *MySqlConnCreator) Close() error {
 	return nil
 }
 
-// MySql connection creator
-// - per connection, ie session specific
+func (m *MySqlConnCreator) String() string {
+	return fmt.Sprintf("Mysql Frontend address:%v", m.conf.Addr)
+}
+
+// MySql per connection, ie session specific
 type mySqlHandler struct {
 	svr    *models.ServerCtx
 	sess   expr.ContextReadWriter // session info
@@ -106,7 +109,7 @@ func (m *mySqlHandler) Close() error {
 	return nil
 }
 
-// Implement the Handle interface for frontends
+// Handle Implement the Handle interface for frontends that processes requests
 func (m *mySqlHandler) Handle(writer models.ResultWriter, req *models.Request) error {
 	return m.chooseCommand(writer, req)
 }

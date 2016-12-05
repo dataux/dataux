@@ -24,19 +24,31 @@ var asciiIntro = `
 
 `
 
+// Global Access to Config
 var Conf *models.Config
 
 // LoadConfig from @configFile (read from disk?)
 // also available is a
-func LoadConfig(configFile string) *models.Config {
+func LoadConfig(configFile string) (*models.Config, error) {
 	// get config from file and exit if error
-	conf, err := models.LoadConfigFromFile(configFile)
+	var err error
+	Conf, err = models.LoadConfigFromFile(configFile)
 	if err != nil {
-		u.Errorf("Could not load config: %v", err)
-		os.Exit(1)
+		return nil, err
 	}
-	Conf = conf
-	return conf
+	return Conf, nil
+}
+
+// LoadConfigString from @config data confl format
+func LoadConfigString(config string) (*models.Config, error) {
+	// get config from file and exit if error
+	var err error
+	Conf, err = models.LoadConfig(config)
+	if err != nil {
+		u.Errorf("Could not load config from config string: %v", err)
+		return nil, err
+	}
+	return Conf, nil
 }
 func banner() string {
 	return strings.Replace(asciiIntro, "*", "`", -1)
@@ -78,26 +90,34 @@ func RunDaemon(listener bool, workerCt int) {
 
 	}()
 
+	// Gratuitous Loading Banner
 	fmt.Println(banner())
 
-	if workerCt == 0 && Conf.WorkerCt > 0 {
-		workerCt = Conf.WorkerCt
-	}
-	if workerCt > 0 {
-		go planner.RunWorkerNodes(quit, workerCt, svrCtx.Reg)
+	if Conf.DistributedMode() {
+		if workerCt == 0 && Conf.WorkerCt > 0 {
+			workerCt = Conf.WorkerCt
+		}
+		if workerCt > 0 {
+			go planner.RunWorkerNodes(quit, workerCt, svrCtx.Reg)
+		}
 	}
 
-	if listener {
+	// If this is a front end listener servers (optional) then we will
+	// AND its a distributed mode then we need to prepare the master planner
+	if listener && Conf.DistributedMode() {
 		go func() {
 			// PlanGrid is the master that coordinates
 			// with etcd, nats, etc, submit tasks to worker nodes
 			// Only needed on listener nodes
 			svrCtx.PlanGrid.Run(quit)
 		}()
-		// Listeners are the tcp-inbound connections
-		svr.RunListeners()
 	}
 
+	// If listener, run tcp listeners
+	if listener {
+		// Blocking
+		svr.RunListeners()
+	}
 }
 
 // Server is the main DataUX server, the running process and responsible for:
@@ -149,7 +169,7 @@ func (m *Server) RunListeners() {
 	}
 
 	for _, listener := range m.listeners {
-		//u.Debugf("starting listener: %T", listener)
+		u.Infof("starting listener: %s", listener)
 		go func(l models.Listener) {
 			defer func() {
 				if r := recover(); r != nil {

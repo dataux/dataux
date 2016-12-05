@@ -12,6 +12,8 @@ import (
 	"github.com/araddon/qlbridge/datasource"
 )
 
+// RunWorkerNodes starts requested number of worker nodes, each of
+// which can run a task unit of work in distributed mode
 func RunWorkerNodes(quit chan bool, nodeCt int, r *datasource.Registry) {
 
 	loggingOnce.Do(setupLogging)
@@ -30,7 +32,7 @@ func RunWorkerNodes(quit chan bool, nodeCt int, r *datasource.Registry) {
 	time.Sleep(time.Millisecond * 80)
 }
 
-// TaskServer accepts and performs
+// TaskServer accepts and performs tasks
 type TaskServer struct {
 	Conf       *Conf
 	reg        *datasource.Registry

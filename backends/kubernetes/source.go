@@ -102,7 +102,7 @@ func (m *Source) DataSource() schema.Source { return m }
 func (m *Source) Tables() []string          { return m.tables }
 func (m *Source) Table(table string) (*schema.Table, error) {
 
-	u.Debugf("Table(%q)", table)
+	//u.Debugf("Table(%q)", table)
 	if m.schema == nil {
 		u.Warnf("no schema in use?")
 		return nil, fmt.Errorf("no schema in use")
