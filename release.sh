@@ -63,6 +63,9 @@ curl -Lo dataux https://github.com/dataux/dataux/releases/download/$TAG/dataux_m
   echo "Building mac dataux"
   env GOOS=darwin GOARCH=amd64 go build
 
+  # need to move to the staic build for docker
+  # GOOS=linux go build -a --ldflags '-extldflags "-static"' -tags netgo -installsuffix netgo .
+
   echo "Now uploading $TAG mac version"
   github-release upload \
     --tag $TAG \

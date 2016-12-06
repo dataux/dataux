@@ -44,6 +44,8 @@ mysql -h127.0.0.1 -P4000 -Dkube -e "select name, creationtimestamp, hostip, podi
 mysql -h127.0.0.1 -P4000 -Dkube -e "select * from nodes;"
 
 
+select count(name), hostip from pods GROUP BY hostip;
+
 
 ```
 
