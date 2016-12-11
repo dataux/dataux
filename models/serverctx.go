@@ -44,6 +44,16 @@ func (m *ServerCtx) Init() error {
 
 	m.Reg.Init()
 
+	for _, s := range m.Reg.Schemas() {
+		if _, exists := m.schemas[s]; !exists {
+			// new from init
+			sch, _ := m.Reg.Schema(s)
+			if sch != nil {
+				m.schemas[s] = sch
+			}
+		}
+	}
+
 	// Copy over the nats, etcd info from config to
 	// Planner grid
 	planner.GridConf.NatsServers = m.Config.Nats
