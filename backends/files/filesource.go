@@ -102,6 +102,8 @@ func NewFileSource() schema.Source {
 	return &m
 }
 
+func (m *FileSource) Init() {}
+
 // Setup the filesource with schema info
 func (m *FileSource) Setup(ss *schema.SchemaSource) error {
 	m.ss = ss

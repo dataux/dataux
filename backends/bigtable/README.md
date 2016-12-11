@@ -2,13 +2,13 @@
 Google BigTable Data source
 --------------------------------------
 
-Provides SQL Access to Google BigTable
+Provides SQL Layer on top of [Google BigTable](https://cloud.google.com/bigtable/) storage.
 
 ![Dataux BigTable](https://cloud.githubusercontent.com/assets/7269/20776318/a5711ad4-b714-11e6-96bf-408506158cbf.png)
 
-* https://cloud.google.com/bigtable/docs/go/cbt-reference
-* https://cloud.google.com/bigtable/docs/emulator
-* https://github.com/spotify/docker-bigtable
+**Links**
+* BigTable CLI utility https://cloud.google.com/bigtable/docs/go/cbt-reference
+* BigTable emulator for local testing/usage https://cloud.google.com/bigtable/docs/emulator
 
 SQL -> BigTable
 ----------------------------------

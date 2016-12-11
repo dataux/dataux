@@ -180,6 +180,7 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	if m.schema == nil {
 		s, err := m.svr.InfoSchema()
 		if err != nil {
+			u.Warnf("no infoschema? %v", err)
 			return err
 		}
 		m.schema = s.InfoSchema

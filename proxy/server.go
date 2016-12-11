@@ -73,21 +73,21 @@ func RunDaemon(listener bool, workerCt int) {
 		return
 	}
 
-	sc := make(chan os.Signal, 1)
 	quit := make(chan bool)
-	signal.Notify(sc,
-		syscall.SIGHUP,
-		syscall.SIGINT,
-		syscall.SIGTERM,
-		syscall.SIGQUIT)
 
 	go func() {
+		sc := make(chan os.Signal, 1)
+		signal.Notify(sc,
+			syscall.SIGHUP,
+			syscall.SIGINT,
+			syscall.SIGTERM,
+			syscall.SIGQUIT)
+
 		sig := <-sc
 		close(quit) // This should signal worker nodes, master node to quit
 		u.Infof("Got signal [%d] to exit.", sig)
 		time.Sleep(time.Millisecond * 50)
 		svr.Shutdown(Reason{Reason: "signal", Message: fmt.Sprintf("%v", sig)})
-
 	}()
 
 	// Gratuitous Loading Banner
@@ -102,19 +102,19 @@ func RunDaemon(listener bool, workerCt int) {
 		}
 	}
 
-	// If this is a front end listener servers (optional) then we will
-	// AND its a distributed mode then we need to prepare the master planner
-	if listener && Conf.DistributedMode() {
-		go func() {
-			// PlanGrid is the master that coordinates
-			// with etcd, nats, etc, submit tasks to worker nodes
-			// Only needed on listener nodes
-			svrCtx.PlanGrid.Run(quit)
-		}()
-	}
-
 	// If listener, run tcp listeners
 	if listener {
+
+		// If distributed mode then we need to prepare the master planner
+		if Conf.DistributedMode() {
+			go func() {
+				// PlanGrid is the master that coordinates
+				// with etcd, nats, etc, submit tasks to worker nodes
+				// Only needed on listener nodes
+				svrCtx.PlanGrid.Run(quit)
+			}()
+		}
+
 		// Blocking
 		svr.RunListeners()
 	}

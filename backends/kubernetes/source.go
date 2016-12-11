@@ -33,6 +33,9 @@ var (
 
 	// Ensure our Kubernetes source implements schema.Source interface
 	_ schema.Source = (*Source)(nil)
+
+	// tracing
+	trace = false
 )
 
 func init() {
@@ -46,7 +49,6 @@ func init() {
 // - provides schema info about the apis
 type Source struct {
 	db               string
-	cluster          string
 	tables           []string // Lower cased
 	tablemap         map[string]*schema.Table
 	conf             *schema.ConfigSource
@@ -64,6 +66,39 @@ type Mutator struct {
 	ds  *Source
 }
 
+func (m *Source) Init() {
+
+	u.Debugf("kube init()")
+
+	if m.schema != nil {
+		return
+	}
+
+	u.Warnf("kube Init()  No Schema!!!!!!")
+	ss := schema.NewSchemaSource("kubernetes", DataSourceLabel)
+
+	ss.Conf = &schema.ConfigSource{Name: "kubernetes"}
+
+	u.Debug("init 2")
+	reg := datasource.DataSourcesRegistry()
+	sch := schema.NewSchema("kubernetes")
+	u.Debug("init 2.5")
+	reg.SchemaAdd(sch)
+	u.Debug("init 3")
+	//sch.AddSourceSchema(ss)
+	u.Debug("init 4")
+
+	ss.DS = m
+	reg.SourceSchemaAdd(sch.Name, ss)
+	u.Debug("init 5")
+	sch.RefreshSchema()
+	u.Debug("init 6")
+
+	// if err := m.Setup(ss); err != nil {
+	// 	u.Warnf("could not sniff kube config %v", err)
+	// }
+}
+
 // Setup accepts the schema source config
 func (m *Source) Setup(ss *schema.SchemaSource) error {
 
@@ -73,22 +108,29 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 	if m.schema != nil {
 		return nil
 	}
+	u.Infof("kube Setup()")
 
 	m.schema = ss
 	m.conf = ss.Conf
 	m.db = strings.ToLower(ss.Name)
 	m.tablemap = make(map[string]*schema.Table)
 
+	kubeConf := ""
+	if len(ss.Conf.Settings) > 0 {
+		kubeConf = ss.Conf.Settings.String("kube_conf")
+	}
+	if kubeConf == "" {
+		kubeConf = os.Getenv("HOME") + "/.kube/config"
+	}
+
 	//u.Debugf("Kube Source Init:  %#v", m.schema.Conf)
 	if m.schema.Conf == nil {
 		return fmt.Errorf("Schema conf not found for kubernetes")
 	}
 
-	m.cluster = m.conf.Settings.String("cluster")
-
 	// uses the current context in kubeconfig
 	// TODO:   allow this to be specified
-	config, err := clientcmd.BuildConfigFromFlags("", os.Getenv("HOME")+"/.kube/config")
+	config, err := clientcmd.BuildConfigFromFlags("", kubeConf)
 	if err != nil {
 		u.Errorf("could not read kube config %v", err)
 		return err
@@ -193,7 +235,7 @@ func (m *Source) describeServices(c *kubernetes.Clientset) error {
 	u.Infof("There are %d services in the cluster", len(services.Items))
 	for _, svc := range services.Items {
 		svcJson, _ := json.MarshalIndent(svc, "", "  ")
-		if true == true {
+		if trace == true {
 			u.Debugf("\n%s", string(svcJson))
 		}
 	}
@@ -241,7 +283,7 @@ func (m *Source) describeNodes(c *kubernetes.Clientset) error {
 	u.Infof("There are %d nodes in the cluster", len(nodes.Items))
 	for _, node := range nodes.Items {
 		nodeJson, _ := json.MarshalIndent(node, "", "  ")
-		if true == true {
+		if trace == true {
 			u.Debugf("\n%s", string(nodeJson))
 		}
 	}

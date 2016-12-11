@@ -49,6 +49,7 @@ func NewMongoDataSource() schema.Source {
 	return &MongoDataSource{tablesNotFound: make(map[string]string)}
 }
 
+func (m *MongoDataSource) Init() {}
 func (m *MongoDataSource) Setup(ss *schema.SchemaSource) error {
 
 	if m.srcschema != nil {

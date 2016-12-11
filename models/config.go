@@ -2,6 +2,7 @@ package models
 
 import (
 	"io/ioutil"
+	"os"
 
 	"github.com/araddon/qlbridge/schema"
 	"github.com/lytics/confl"
@@ -14,7 +15,7 @@ func LoadConfigFromFile(filename string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err = confl.Decode(string(confBytes), &c); err != nil {
+	if _, err = confl.Decode(os.ExpandEnv(string(confBytes)), &c); err != nil {
 		return nil, err
 	}
 	return &c, nil
@@ -24,7 +25,7 @@ func LoadConfigFromFile(filename string) (*Config, error) {
 //  from file or passed in
 func LoadConfig(conf string) (*Config, error) {
 	var c Config
-	if _, err := confl.Decode(conf, &c); err != nil {
+	if _, err := confl.Decode(os.ExpandEnv(conf), &c); err != nil {
 		return nil, err
 	}
 	return &c, nil

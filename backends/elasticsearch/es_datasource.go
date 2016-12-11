@@ -34,6 +34,8 @@ type ElasticsearchDataSource struct {
 	tablemap  map[string]*schema.Table
 }
 
+func (m *ElasticsearchDataSource) Init() {}
+
 func (m *ElasticsearchDataSource) Setup(ss *schema.SchemaSource) error {
 
 	if m.srcschema != nil {
