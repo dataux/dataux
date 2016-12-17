@@ -106,6 +106,8 @@ type Mutator struct {
 	ds  *Source
 }
 
+func (m *Source) Init() {}
+
 func (m *Source) Setup(ss *schema.SchemaSource) error {
 
 	m.mu.Lock()

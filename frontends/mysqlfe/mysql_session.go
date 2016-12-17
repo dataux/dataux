@@ -1,11 +1,14 @@
 package mysqlfe
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/value"
+
+	"github.com/dataux/dataux/version"
 )
 
 // http://dev.mysql.com/doc/refman/5.6/en/server-system-variables.html
@@ -74,7 +77,7 @@ func NewMySqlGlobalVars() *datasource.ContextSimple {
 	ctx.Data["@@system_time_zone"] = value.NewStringValue("UTC")
 	ctx.Data["@@time_zone"] = value.NewStringValue("SYSTEM")
 	ctx.Data["@@tx_isolation"] = value.NewStringValue("REPEATABLE-READ")
-	ctx.Data["@@version_comment"] = value.NewStringValue("DataUX (MIT), Release .13")
+	ctx.Data["@@version_comment"] = value.NewStringValue(fmt.Sprintf("DataUX (MIT), Release .%s", version.Version))
 	ctx.Data["@@character_set_server"] = value.NewStringValue("utf8")
 	return ctx
 }

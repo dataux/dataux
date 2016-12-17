@@ -42,6 +42,18 @@ func (m *ServerCtx) Init() error {
 		return err
 	}
 
+	m.Reg.Init()
+
+	for _, s := range m.Reg.Schemas() {
+		if _, exists := m.schemas[s]; !exists {
+			// new from init
+			sch, _ := m.Reg.Schema(s)
+			if sch != nil {
+				m.schemas[s] = sch
+			}
+		}
+	}
+
 	// Copy over the nats, etcd info from config to
 	// Planner grid
 	planner.GridConf.NatsServers = m.Config.Nats
@@ -102,6 +114,8 @@ func (m *ServerCtx) Table(schemaName, tableName string) (*schema.Table, error) {
 func (m *ServerCtx) loadConfig() error {
 
 	m.schemas = make(map[string]*schema.Schema)
+
+	u.Debugf("server load config schema ct=%d", len(m.schemas))
 
 	for _, schemaConf := range m.Config.Schemas {
 

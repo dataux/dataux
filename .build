@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# https://github.com/golang/go/issues/13470
+# https://github.com/GoogleCloudPlatform/google-cloud-go/issues/229
+# https://github.com/tamird/cockroach/commit/9c93044ce7d3283e78f5941b8b9bcd836f80a7ef
+# +LDFLAGS += -extldflags "-static-libgcc -static-libstdc++"
+# GOOS=linux go build -a --ldflags '-extldflags "-static"' -tags netgo -installsuffix netgo .
+
+# wtf, this should fix above? but didn't?
+# GOOS=linux go build -a --ldflags '-extldflags "-static-libgcc -static-libstdc++"' -tags netgo -installsuffix netgo .
+
+GOOS=linux GOARCH=amd64 go build
+
