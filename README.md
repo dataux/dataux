@@ -1,21 +1,30 @@
 
 ##  Sql Query Proxy to Elasticsearch, Mongo, Kubernetes, BigTable, etc.
 
-Unify disparate data sources, files into a single Virtual or Federated
-view of your data. 
+Unify disparate data sources and files into a single Federated
+view of your data and query with SQL.
 
 
 Mysql compatible federated query engine to Elasticsearch, Mongo, 
-Google Datastore, Cassandra, Google BigTable, Kuberntes, File-based backend sources, including join.
+Google Datastore, Cassandra, Google BigTable, Kubernetes, file-based sources.
 This query engine hosts a mysql protocol listener, 
-which then rewrites sql queries to native (elasticsearch, mongo, cassandra, kuberntes-rest-api, bigtable).
-It works by implementing a full relational algebra layer 
+which rewrites sql queries to native (elasticsearch, mongo, cassandra, kuberntes-rest-api, bigtable).
+It works by implementing a full relational algebra distributed execution engine
 to run sql queries and poly-fill missing features
 from underlying sources.  So, a backend key-value storage such as cassandra
 can now have complete `WHERE` clause support as well as aggregate functions etc.
 
 Most similar to [prestodb](http://prestodb.io/) but in Golang, and focused on
-easy to add custom data sources.
+easy to add custom data sources as well as REST api sources.
+
+## Backend Sources
+
+* [Kubernetes](https://github.com/dataux/dataux/tree/master/backends/kubernetes) An example of REST api backend.
+* [Big Table](https://github.com/dataux/dataux/tree/master/backends/bigtable) SQL against big-table.
+* [Elasticsearch](https://github.com/dataux/dataux/tree/master/backends/elasticsearch) Simplify access to Elasticsearch.
+* [Mongo](https://github.com/dataux/dataux/tree/master/backends/mongo) Translate SQL into mongo.
+* [Google Cloud Storage / (csv, json files)](https://github.com/dataux/dataux/tree/master/backends/files) An example of REST api backends (list of files), as well as the file contents themselves are tables.
+* [Cassandra](https://github.com/dataux/dataux/tree/master/backends/cassandra) SQL against cassandra.  Adds sql features that are missing.
 
 
 ## Features
@@ -30,15 +39,6 @@ easy to add custom data sources.
 ## Status
 * NOT Production ready.  Currently supporting a few non-critical use-cases (ad-hoc queries, support tool) in production.
 
-
-## Backends
-
-* [Kubernetes](https://github.com/dataux/dataux/tree/master/backends/kubernetes) An example of REST api backend.
-* [Big Table](https://github.com/dataux/dataux/tree/master/backends/bigtable) SQL against big-table.
-* [Elasticsearch](https://github.com/dataux/dataux/tree/master/backends/elasticsearch) Simplify access to Elasticsearch.
-* [Mongo](https://github.com/dataux/dataux/tree/master/backends/mongo) Translate SQL into mongo.
-* [Google Cloud Storage / (csv, json files)](https://github.com/dataux/dataux/tree/master/backends/files) An example of REST api backends (list of files), as well as the file contents themselves are tables.
-* [Cassandra](https://github.com/dataux/dataux/tree/master/backends/cassandra) SQL against cassandra.  Adds sql features that are missing.
 
 
 ## Try it Out
