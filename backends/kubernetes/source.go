@@ -108,7 +108,7 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 	if m.schema != nil {
 		return nil
 	}
-	u.Infof("kube Setup()")
+	u.Infof("kube Setup() vx1")
 
 	m.schema = ss
 	m.conf = ss.Conf
@@ -132,8 +132,14 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 	// TODO:   allow this to be specified
 	config, err := clientcmd.BuildConfigFromFlags("", kubeConf)
 	if err != nil {
-		u.Errorf("could not read kube config %v", err)
-		return err
+		// creates the in-cluster config
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			u.Errorf("could not read kube config %v", err)
+			return err
+		} else {
+			u.Infof("Loading kube config from InCluster info")
+		}
 	}
 	m.kconfig = config
 

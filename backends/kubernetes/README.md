@@ -8,26 +8,38 @@ Provides SQL Access to Kubernetes Rest API's vi the DataUX Mysql Proxy Service.
 
 **Try It Out**
 
-* **Assumes minikube is running locally**
-* Install dataux https://github.com/dataux/dataux/releases
+**Assumes minikube is running locally**
 
 
-```sh
+```
 
-minikube start
-
-# install dataux  https://github.com/dataux/dataux/releases
-# checkout/clone github.com/dataux/dataux  to get a config file
-cd github.com/dataux/dataux
-
-# run 
-./dataux --config=backends/kubernetes/kubernetes.conf
+# start dataux service & deployment inside your kube cluster
+kubectl create -f https://raw.githubusercontent.com/dataux/dataux/master/backends/kubernetes/conf/dataux.yaml
 
 
-# from another terminal
+# connect with mysql client
+mysql -h $(minikube service --url --format="{{.IP}}" dataux) -P 30036
 
-mysql -h 127.0.0.1 -P 4000 -Dkube
+```
+```sql
 
+show databases;
+
+use kubernetes;
+
+show tables;
+
+describe pods;
+
+select name, creationtimestamp, hostip, podip, hostname from pods;
+
+select name, creationtimestamp, hostip, podip, hostname from pods WHERE name LIKE "dataux%";
+
+select * from nodes;
+
+select count(*) from nodes;
+
+select count(name), hostip from pods GROUP BY hostip;
 ```
 
 **SQL examples**
@@ -46,6 +58,29 @@ mysql -h127.0.0.1 -P4000 -Dkube -e "select * from nodes;"
 
 select count(name), hostip from pods GROUP BY hostip;
 
+
+```
+
+
+**Start via Download**
+
+Install dataux https://github.com/dataux/dataux/releases
+
+```sh
+
+minikube start
+
+# install dataux  https://github.com/dataux/dataux/releases
+# checkout/clone github.com/dataux/dataux  to get a config file
+cd github.com/dataux/dataux
+
+# run 
+./dataux --config=backends/kubernetes/kubernetes.conf
+
+
+# from another terminal
+
+mysql -h 127.0.0.1 -P 4000 -Dkube
 
 ```
 
@@ -90,6 +125,9 @@ kubectl get pods --all-namespaces
 
 kubectl cluster-info
 
+
+kubectl run dataux --image=gcr.io/dataux-io/dataux:v0.0.1 --port=4000
+kubectl expose deployment dataux --type=NodePort
 
 minikube delete --v=10 --show-libmachine-logs --alsologtostderr
 

@@ -8,6 +8,6 @@
 
 # wtf, this should fix above? but didn't?
 # GOOS=linux go build -a --ldflags '-extldflags "-static-libgcc -static-libstdc++"' -tags netgo -installsuffix netgo .
-
+go clean
 GOOS=linux GOARCH=amd64 go build
 

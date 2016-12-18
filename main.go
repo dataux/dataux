@@ -30,12 +30,12 @@ var (
 	configFile string
 	pprofPort  string
 	workerCt   int
-	logLevel   = "info"
+	logLevel   = "debug"
 )
 
 func init() {
 	flag.StringVar(&configFile, "config", "dataux.conf", "dataux proxy config file")
-	flag.StringVar(&logLevel, "loglevel", "info", "logging [ debug,info,warn,error ]")
+	flag.StringVar(&logLevel, "loglevel", "debug", "logging [ debug,info,warn,error ]")
 	flag.StringVar(&pprofPort, "pprof", ":18008", "pprof and metrics port")
 	flag.IntVar(&workerCt, "workerct", 3, "Number of worker nodes")
 	flag.Parse()

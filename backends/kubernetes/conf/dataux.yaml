@@ -1,3 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dataux
+  labels:
+    app: dataux
+spec:
+  type: NodePort
+  ports:
+  - port: 4000
+    targetPort: 4000
+    nodePort: 30036
+  selector:
+    app: dataux
+---
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -12,5 +27,8 @@ spec:
       containers:
       - name: dataux
         image: "gcr.io/dataux-io/dataux:v0.0.1"
+        # un-comment this for testing, it will force pull latest image
+        imagePullPolicy: Always
+        command: ["/dataux", "--loglevel=debug"]
         ports:
         - containerPort: 4000
