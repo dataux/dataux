@@ -1,0 +1,16 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: dataux
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: dataux
+    spec:
+      containers:
+      - name: dataux
+        image: "gcr.io/dataux-io/dataux:v0.0.1"
+        ports:
+        - containerPort: 4000
