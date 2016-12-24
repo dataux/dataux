@@ -19,14 +19,20 @@ var _ = u.EMPTY
 var fr = expr.NewFuncRegistry()
 
 func init() {
-	fr.Add("typewriter", MysqlTypeWriter)
+	fr.Add("typewriter", &MysqlTypeWriter{})
 }
 
 // MysqlTypeWriter Convert a qlbridge value type to a mysql type
-//
-func MysqlTypeWriter(ctx expr.EvalContext, val value.Value) (value.StringValue, bool) {
+type MysqlTypeWriter struct{}
+
+func (m *MysqlTypeWriter) Eval(ctx expr.EvalContext, args []value.Value) (value.Value, bool) {
+
+	if len(args) == 0 {
+		return value.NewStringValue(""), false
+	}
+
 	out := ""
-	switch sv := val.(type) {
+	switch sv := args[0].(type) {
 	case value.StringValue:
 		switch vt := value.ValueFromString(sv.Val()); vt {
 		case value.NilType:
@@ -76,6 +82,10 @@ func MysqlTypeWriter(ctx expr.EvalContext, val value.Value) (value.StringValue, 
 	}
 	return value.NewStringValue(out), true
 }
+func (m *MysqlTypeWriter) Validate(n *expr.FuncNode) (expr.EvaluatorFunc, error) {
+	return m.Eval, nil
+}
+func (m *MysqlTypeWriter) Type() value.ValueType { return value.StringType }
 
 func typeToMysql(f *schema.Field) string {
 	// char(60)
