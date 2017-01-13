@@ -55,10 +55,6 @@ func ValuesToRowData(values []driver.Value, fields []*Field) (RowData, error) {
 	var err error
 	//var isNull, isUnsigned bool
 	if len(values) != len(fields) {
-		for _, fld := range fields {
-			u.Debugf("field:  %v %s", fld.FieldName, fld.Name)
-		}
-		//panic("wtf")
 		u.LogTracef(u.ERROR, "Number of values doesn't match number of fields:  fields:%v vals:%v   \n%#v", len(fields), len(values), values)
 		//return nil, fmt.Errorf("Number of values doesn't match number of fields:  fields:%v vals:%v", len(fields), len(values))
 	}
