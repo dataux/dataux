@@ -72,6 +72,19 @@ func RunTestServer(t *testing.T) {
 	}
 }
 
+func RunBenchServer(b *testing.B) {
+	if !testServicesRunning {
+		testServicesRunning = true
+		planner.GridConf.JobMaker = jobMaker
+		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
+		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
+		//createTestData(t)
+		testmysql.StartServer()
+		quit := make(chan bool)
+		planner.RunWorkerNodes(quit, 2, testmysql.ServerCtx.Reg)
+	}
+}
+
 func createLocalStore() (cloudstorage.Store, error) {
 
 	cloudstorage.LogConstructor = func(prefix string) logging.Logger {
@@ -101,8 +114,12 @@ func clearStore(t *testing.T, store cloudstorage.Store) {
 	// }
 }
 
-func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
-	RunTestServer(t)
+func validateQuerySpec(t testing.TB, testSpec tu.QuerySpec) {
+
+	switch tt := t.(type) {
+	case *testing.T:
+		RunTestServer(tt)
+	}
 	tu.ValidateQuerySpec(t, testSpec)
 }
 
@@ -235,6 +252,32 @@ func TestSimpleRowSelect(t *testing.T) {
 			//u.Infof("%v", data)
 			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
 			assert.Tf(t, data.Title == "article1", "%v", data)
+		},
+		RowData: &data,
+	})
+}
+
+// go test -bench="BenchFile" --run="BenchFile"
+//
+// go test -bench="BenchFile" --run="BenchFile" -cpuprofile cpu.out
+// go tool pprof files.test cpu.out
+func BenchmarkBenchFile(b *testing.B) {
+
+	RunBenchServer(b)
+	b.StartTimer()
+	data := struct {
+		Playerid string
+		Yearid   string
+		Teamid   string
+	}{}
+	validateQuerySpec(b, tu.QuerySpec{
+		Sql:         `select playerid, yearid, teamid from appearances WHERE playerid = "barnero01" AND yearid = "1871";`,
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			u.Infof("%v", data)
+			if data.Playerid != "barnero01" {
+				b.Fail()
+			}
 		},
 		RowData: &data,
 	})

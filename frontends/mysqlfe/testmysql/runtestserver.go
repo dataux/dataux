@@ -1,6 +1,7 @@
 package testmysql
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"sync"
@@ -8,7 +9,6 @@ import (
 	"time"
 
 	u "github.com/araddon/gou"
-	"github.com/bmizerany/assert"
 	"github.com/coreos/etcd/embed"
 	"github.com/coreos/pkg/capnslog"
 	"github.com/lytics/grid/grid.v2/natsunit"
@@ -220,9 +220,17 @@ func EtcdConfig() *embed.Config {
 	return cfg
 }
 func NewTestServerForDb(t *testing.T, db string) {
+	startServer(db)
+}
+func StartServer() {
+	startServer("datauxtest")
+}
+func startServer(db string) {
 	f := func() {
 
-		assert.Tf(t, Conf != nil, "must load config without err: %v", Conf)
+		if Conf == nil {
+			panic("Must have Conf")
+		}
 
 		capnslog.SetGlobalLogLevel(capnslog.CRITICAL)
 
@@ -248,9 +256,7 @@ func NewTestServerForDb(t *testing.T, db string) {
 		planner.GridConf.EtcdServers = Conf.Etcd
 
 		ServerCtx = models.NewServerCtx(Conf)
-		//u.Infof("init")
 		ServerCtx.Init()
-		//u.Infof("after init")
 		quit := make(chan bool)
 		go func() {
 			ServerCtx.PlanGrid.Run(quit)
@@ -267,7 +273,9 @@ func NewTestServerForDb(t *testing.T, db string) {
 		u.Infof("starting %q schema in test", db)
 
 		svr, err := proxy.NewServer(ServerCtx)
-		assert.T(t, err == nil, "must start without error ", err)
+		if err != nil {
+			panic(fmt.Sprintf("must not have error %v", err))
+		}
 
 		go svr.Run()
 
@@ -279,9 +287,9 @@ func NewTestServerForDb(t *testing.T, db string) {
 }
 
 func NewTestServer(t *testing.T) {
-	NewTestServerForDb(t, "datauxtest")
+	startServer("datauxtest")
 }
 
 func RunTestServer(t *testing.T) {
-	NewTestServer(t)
+	startServer("datauxtest")
 }
