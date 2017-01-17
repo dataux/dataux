@@ -17,9 +17,21 @@ func init() {
 }
 func LoadMySqlFunctions() {
 	loadOnce.Do(func() {
-		expr.FuncAdd("current_user", CurrentUser)
-		expr.FuncAdd("connection_id", ConnectionId)
-		expr.FuncAdd("database", DatabaseName)
+		expr.FuncAdd("current_user", &funcTemplate{
+			field:    "@@user",
+			t:        value.StringType,
+			defvalue: value.NewStringValue("root"),
+		})
+		expr.FuncAdd("connection_id", &funcTemplate{
+			field:    "@@connection_id",
+			t:        value.IntType,
+			defvalue: value.NewIntValue(1),
+		})
+		expr.FuncAdd("database", &funcTemplate{
+			field:    "@@database",
+			t:        value.StringType,
+			defvalue: value.NewStringValue(""),
+		})
 	})
 }
 
@@ -27,40 +39,40 @@ func LoadMySqlFunctions() {
 //
 //      DATABASE()     =>  "your_db", true
 //
-func DatabaseName(ctx expr.EvalContext) (value.StringValue, bool) {
-	if dbVal, ok := ctx.Get("@@database"); ok {
-		if dbValStr, ok := dbVal.(value.StringValue); ok {
-			return dbValStr, true
-		}
-	}
-	return value.NewStringValue(""), true
-}
 
 // ConnectionId:   id of current connection
 //
 //      connection_id()     =>  11, true
 //
-func ConnectionId(ctx expr.EvalContext) (value.IntValue, bool) {
-	if connVal, ok := ctx.Get("@@connection_id"); ok {
-		if connInt, ok := connVal.(value.IntValue); ok {
-			return connInt, true
-		}
-	}
-	//u.Infof("ConnectionId: %#v", ctx)
-	return value.NewIntValue(1), true
-}
 
 // CurrentUser:   username of current user
 //
 //      current_user()     =>  user, true
 //
-func CurrentUser(ctx expr.EvalContext) (value.StringValue, bool) {
-	if ctx == nil {
-		return value.NewStringValue("root"), true
-	}
-	v, ok := ctx.Get("@@user")
-	if !ok {
-		return value.EmptyStringValue, false
-	}
-	return value.NewStringValue(v.ToString()), true
+
+type funcTemplate struct {
+	t        value.ValueType
+	field    string
+	defvalue value.Value
 }
+
+func (m *funcTemplate) Eval(ctx expr.EvalContext, args []value.Value) (value.Value, bool) {
+	if ctx == nil {
+		if m.defvalue != nil {
+			return m.defvalue, true
+		}
+		return m.defvalue, false
+	}
+	v, ok := ctx.Get(m.field)
+	if !ok {
+		if m.defvalue != nil {
+			return m.defvalue, true
+		}
+		return v, false
+	}
+	return v, true
+}
+func (m *funcTemplate) Validate(n *expr.FuncNode) (expr.EvaluatorFunc, error) {
+	return m.Eval, nil
+}
+func (m *funcTemplate) Type() value.ValueType { return m.t }
