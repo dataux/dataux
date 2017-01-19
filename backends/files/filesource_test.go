@@ -257,28 +257,48 @@ func TestSimpleRowSelect(t *testing.T) {
 	})
 }
 
-// go test -bench="BenchFile" --run="BenchFile"
+// go test -bench="FileSqlWhere" --run="FileSqlWhere"
 //
-// go test -bench="BenchFile" --run="BenchFile" -cpuprofile cpu.out
+// go test -bench="FileSqlWhere" --run="FileSqlWhere" -cpuprofile cpu.out
 // go tool pprof files.test cpu.out
-func BenchmarkBenchFile(b *testing.B) {
+func BenchmarkFileSqlWhere(b *testing.B) {
 
-	RunBenchServer(b)
-	b.StartTimer()
 	data := struct {
 		Playerid string
 		Yearid   string
 		Teamid   string
 	}{}
-	validateQuerySpec(b, tu.QuerySpec{
-		Sql:         `select playerid, yearid, teamid from appearances WHERE playerid = "barnero01" AND yearid = "1871";`,
-		ExpectRowCt: 1,
-		ValidateRowData: func() {
-			u.Infof("%v", data)
-			if data.Playerid != "barnero01" {
-				b.Fail()
-			}
-		},
-		RowData: &data,
-	})
+	RunBenchServer(b)
+	b.StartTimer()
+
+	for i := 0; i < b.N; i++ {
+		validateQuerySpec(b, tu.QuerySpec{
+			Sql:         `select playerid, yearid, teamid from appearances WHERE playerid = "barnero01" AND yearid = "1871";`,
+			ExpectRowCt: 1,
+			ValidateRowData: func() {
+				u.Infof("%v", data)
+				if data.Playerid != "barnero01" {
+					b.Fail()
+				}
+			},
+			RowData: &data,
+		})
+	}
 }
+
+/*
+
+QLBridge
+SQLWhere                              356800349
+
+DataUx april 2016
+
+BenchmarkFileSqlWhere-4          1  1435390817 ns/op
+ok  	github.com/dataux/dataux/backends/files	1.453s
+
+Dataux jan 17
+BenchmarkFileSqlWhere-4          1  1295538235 ns/op
+PASS
+ok  	github.com/dataux/dataux/backends/files	1.313s
+
+*/
