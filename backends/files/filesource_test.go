@@ -288,8 +288,8 @@ func BenchmarkFileSqlWhere(b *testing.B) {
 
 /*
 
-QLBridge
-SQLWhere                              356800349
+Dataux  SQLWhere                      466711273  (measured from mysql_handler)
+QLBridge                              441293018 ns/op
 
 DataUx april 2016
 

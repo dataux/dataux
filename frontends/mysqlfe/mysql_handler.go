@@ -3,6 +3,7 @@ package mysqlfe
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	u "github.com/araddon/gou"
 	"github.com/kr/pretty"
@@ -186,6 +187,7 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 		m.schema = s.InfoSchema
 	}
 
+	start := time.Now()
 	ctx := plan.NewContext(sql)
 	ctx.DisableRecover = m.svr.Config.SupressRecover
 	ctx.Session = m.sess
@@ -273,6 +275,8 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 	if closeErr != nil {
 		u.Errorf("could not close ? %v", closeErr)
 	}
+	end := time.Now().Sub(start)
+	u.Infof("completed in %v   ns: %v", end, time.Now().UnixNano()-start.UnixNano())
 	//u.Infof("mysqlhandler %p task.Close() complete  err=%v", job.RootTask, err)
 	return err
 }
