@@ -13,7 +13,6 @@ import (
 	"github.com/araddon/dateparse"
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/datasource"
-	"github.com/bmizerany/assert"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 
@@ -174,41 +173,56 @@ type QuerySpec struct {
 	ValidateRowData func()
 }
 
-func ValidateQuery(t *testing.T, querySql string, expectCols []string, expectColCt, expectRowCt int, rowValidate func([]interface{})) {
+func ValidateQuery(t testing.TB, querySql string, expectCols []string, expectColCt, expectRowCt int, rowValidate func([]interface{})) {
 	ValidateQuerySpec(t, QuerySpec{Sql: querySql,
 		Cols:        expectCols,
 		ExpectRowCt: expectRowCt, ExpectColCt: expectColCt,
 		ValidateRow: rowValidate})
 }
 
-func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
+func ValidateQuerySpec(t testing.TB, testSpec QuerySpec) {
 
-	testmysql.RunTestServer(t)
+	switch tt := t.(type) {
+	case *testing.T:
+		testmysql.RunTestServer(tt)
+	}
 
 	// This is a connection to RunTestServer, which starts on port 13307
 	dbx, err := sqlx.Connect("mysql", fmt.Sprintf("root@tcp(127.0.0.1:13307)/%s?parseTime=true", DbName))
-	assert.Tf(t, err == nil, "%v", err)
+	if err != nil {
+		t.Errorf("Expected no err got %v", err)
+	}
 	defer dbx.Close()
 	//u.Debugf("%v", testSpec.Sql)
 	switch {
 	case len(testSpec.Exec) > 0:
 		result, err := dbx.Exec(testSpec.Exec)
-		assert.Tf(t, err == nil, "%v", err)
+		if err != nil {
+			t.Errorf("Expected no err got %v", err)
+		}
 		u.Infof("result: %#v", result)
 		if testSpec.ExpectRowCt > -1 {
 			affected, err := result.RowsAffected()
-			assert.Tf(t, err == nil, "%v", err)
-			assert.Tf(t, affected == int64(testSpec.ExpectRowCt), "expected %v affected but got %v for %s", testSpec.ExpectRowCt, affected, testSpec.Exec)
+			if err != nil {
+				t.Errorf("Expected no err got %v", err)
+			}
+			if affected != int64(testSpec.ExpectRowCt) {
+				t.Errorf("expected %v affected but got %v for %s", testSpec.ExpectRowCt, affected, testSpec.Exec)
+			}
 		}
 
 	case len(testSpec.Sql) > 0:
 		//u.Debugf("----ABOUT TO QUERY")
 		rows, err := dbx.Queryx(testSpec.Sql)
-		assert.Tf(t, err == nil, "%v", err)
+		if err != nil {
+			t.Errorf("Expected no err got %v", err)
+		}
 		defer rows.Close()
 
 		cols, err := rows.Columns()
-		assert.Tf(t, err == nil, "%v", err)
+		if err != nil {
+			t.Errorf("Expected no err got %v", err)
+		}
 		if len(testSpec.Cols) > 0 {
 			for _, expectCol := range testSpec.Cols {
 				found := false
@@ -217,7 +231,9 @@ func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
 						found = true
 					}
 				}
-				assert.Tf(t, found, "Should have found column: %v", expectCol)
+				if !found {
+					t.Errorf("Should have found column: %v", expectCol)
+				}
 			}
 		}
 		rowCt := 0
@@ -225,7 +241,9 @@ func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
 			if testSpec.RowData != nil {
 				err = rows.StructScan(testSpec.RowData)
 				//u.Infof("%#v rowVals: %#v", rows.Rows., testSpec.RowData)
-				assert.Tf(t, err == nil, "data:%+v   err=%v", testSpec.RowData, err)
+				if err != nil {
+					t.Errorf("Expected no err got %v for data: %+v", err, testSpec.RowData)
+				}
 				rowCt++
 				if testSpec.ValidateRowData != nil {
 					testSpec.ValidateRowData()
@@ -235,9 +253,13 @@ func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
 				// rowVals is an []interface{} of all of the column results
 				rowVals, err := rows.SliceScan()
 				//u.Infof("rowVals: %#v", rowVals)
-				assert.Tf(t, err == nil, "%v", err)
+				if err != nil {
+					t.Errorf("Expected no err got %v", err)
+				}
 				if testSpec.ExpectColCt > 0 {
-					assert.Tf(t, len(rowVals) == testSpec.ExpectColCt, "wanted %d cols but got %v", testSpec.ExpectColCt, len(rowVals))
+					if len(rowVals) != testSpec.ExpectColCt {
+						t.Errorf("wanted %d cols but got %v", testSpec.ExpectColCt, len(rowVals))
+					}
 				}
 				rowCt++
 				if testSpec.ValidateRow != nil {
@@ -248,11 +270,13 @@ func ValidateQuerySpec(t *testing.T, testSpec QuerySpec) {
 		}
 
 		if testSpec.ExpectRowCt > -1 {
-			assert.Tf(t, rowCt == testSpec.ExpectRowCt, "expected %v rows but got %v", testSpec.ExpectRowCt, rowCt)
+			if rowCt != testSpec.ExpectRowCt {
+				t.Errorf("expected %v rows but got %v", testSpec.ExpectRowCt, rowCt)
+			}
 		}
-
-		assert.T(t, rows.Err() == nil)
-		//u.Infof("rows: %v", cols)
+		if rows.Err() != nil {
+			t.Errorf("Expected no err got %v", err)
+		}
 	}
 
 }

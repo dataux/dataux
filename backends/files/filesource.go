@@ -127,6 +127,9 @@ func (m *FileSource) Open(tableName string) (schema.Conn, error) {
 		u.Errorf("could not get pager: %v", err)
 		return nil, err
 	}
+	// Start a go routine to fetch files
+	go pg.fetcher()
+
 	return pg, nil
 }
 
@@ -272,7 +275,7 @@ func (m *FileSource) addFile(fi *FileInfo) {
 	}
 }
 
-// Table satisfys Source Schema interface to get table schema for given table
+// Table satisfies Source Schema interface to get table schema for given table
 func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 
 	// We have a special table that is the list of all files
@@ -281,7 +284,7 @@ func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 	}
 
 	var err error
-	//u.Debugf("Table(%q)", tableName)
+	//u.Debugf("%p Table(%q)", m, tableName)
 	t, ok := m.tables[tableName]
 	if ok {
 		return t, nil
@@ -312,6 +315,7 @@ func (m *FileSource) Table(tableName string) (*schema.Table, error) {
 		return nil, fmt.Errorf("Missing table for %q", tableName)
 	}
 
+	//u.Debugf("%p Table(%q)", m, tableName)
 	m.tables[tableName] = t
 	return t, nil
 }
@@ -325,6 +329,9 @@ func (m *FileSource) buildTable(tableName string) (*schema.Table, error) {
 		u.Errorf("could not find scanner for table %q table err:%v", tableName, err)
 		return nil, err
 	}
+
+	// Since we aren't calling WalkExec, we need to get the data
+	pager.RunFetcher()
 
 	scanner, err := pager.NextScanner()
 	if err != nil {
@@ -399,11 +406,11 @@ func createConfStore(ss *schema.SchemaSource) (cloudstorage.Store, error) {
 		c := cloudstorage.CloudStoreContext{
 			LogggingContext: "localfiles",
 			TokenSource:     cloudstorage.LocalFileSource,
-			LocalFS:         conf.String("path"),
+			LocalFS:         conf.String("localpath"),
 			TmpDir:          "/tmp/localcache",
 		}
 		if c.LocalFS == "" {
-			return nil, fmt.Errorf(`"localfs" filestore requires a {"settings":{"path":"/path/to/files"}} to local files`)
+			return nil, fmt.Errorf(`"localfs" filestore requires a {"settings":{"localpath":"/path/to/files"}} to local files`)
 		}
 		//os.RemoveAll("/tmp/localcache")
 

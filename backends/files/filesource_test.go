@@ -72,6 +72,19 @@ func RunTestServer(t *testing.T) {
 	}
 }
 
+func RunBenchServer(b *testing.B) {
+	if !testServicesRunning {
+		testServicesRunning = true
+		planner.GridConf.JobMaker = jobMaker
+		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
+		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
+		//createTestData(t)
+		testmysql.StartServer()
+		quit := make(chan bool)
+		planner.RunWorkerNodes(quit, 2, testmysql.ServerCtx.Reg)
+	}
+}
+
 func createLocalStore() (cloudstorage.Store, error) {
 
 	cloudstorage.LogConstructor = func(prefix string) logging.Logger {
@@ -101,8 +114,12 @@ func clearStore(t *testing.T, store cloudstorage.Store) {
 	// }
 }
 
-func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
-	RunTestServer(t)
+func validateQuerySpec(t testing.TB, testSpec tu.QuerySpec) {
+
+	switch tt := t.(type) {
+	case *testing.T:
+		RunTestServer(tt)
+	}
 	tu.ValidateQuerySpec(t, testSpec)
 }
 
@@ -193,7 +210,7 @@ func TestSelectFilesList(t *testing.T) {
 	}{}
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select file, `table`, size, partition from localfiles_files",
-		ExpectRowCt: 2,
+		ExpectRowCt: 3,
 		ValidateRowData: func() {
 			u.Infof("%v", data)
 			// assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
@@ -239,3 +256,49 @@ func TestSimpleRowSelect(t *testing.T) {
 		RowData: &data,
 	})
 }
+
+// go test -bench="FileSqlWhere" --run="FileSqlWhere"
+//
+// go test -bench="FileSqlWhere" --run="FileSqlWhere" -cpuprofile cpu.out
+// go tool pprof files.test cpu.out
+func BenchmarkFileSqlWhere(b *testing.B) {
+
+	data := struct {
+		Playerid string
+		Yearid   string
+		Teamid   string
+	}{}
+	RunBenchServer(b)
+	b.StartTimer()
+
+	for i := 0; i < b.N; i++ {
+		validateQuerySpec(b, tu.QuerySpec{
+			Sql:         `select playerid, yearid, teamid from appearances WHERE playerid = "barnero01" AND yearid = "1871";`,
+			ExpectRowCt: 1,
+			ValidateRowData: func() {
+				u.Infof("%v", data)
+				if data.Playerid != "barnero01" {
+					b.Fail()
+				}
+			},
+			RowData: &data,
+		})
+	}
+}
+
+/*
+
+Dataux  SQLWhere                      466711273  (measured from mysql_handler)
+QLBridge                              441293018 ns/op
+
+DataUx april 2016
+
+BenchmarkFileSqlWhere-4          1  1435390817 ns/op
+ok  	github.com/dataux/dataux/backends/files	1.453s
+
+Dataux jan 17
+BenchmarkFileSqlWhere-4          1  1295538235 ns/op
+PASS
+ok  	github.com/dataux/dataux/backends/files	1.313s
+
+*/
