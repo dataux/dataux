@@ -46,7 +46,7 @@ var (
 
 const (
 	// SourceType is the registered Source name in the qlbridge source registry
-	SourceType = "cloudstore"
+	SourceType = "cloudstoreOLD"
 )
 
 func init() {
@@ -78,7 +78,7 @@ type FileSource struct {
 	store          cloudstorage.Store
 	fh             FileHandler
 	fdbcols        []string
-	fdb            schema.SourceAll
+	fdb            schema.Source
 	fc             schema.ConnAll
 	filesTable     string
 	tablenames     []string

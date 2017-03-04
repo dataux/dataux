@@ -12,6 +12,7 @@ import (
 	"github.com/lytics/cloudstorage"
 	"github.com/lytics/cloudstorage/logging"
 
+	_ "github.com/araddon/qlbridge/datasource/files"
 	"github.com/araddon/qlbridge/plan"
 
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
