@@ -2,6 +2,7 @@ package files
 
 import (
 	"io"
+	"time"
 
 	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/exec"
@@ -16,6 +17,9 @@ var (
 	_ schema.ConnScanner    = (*FilePager)(nil)
 	_ exec.ExecutorSource   = (*FilePager)(nil)
 	//_ exec.RequiresContext  = (*FilePager)(nil)
+
+	// Default file queue size to buffer by pager
+	FileBufferSize = 5
 )
 
 // FilePager acts like a Partitionied Data Source Conn, wrapping underlying FileSource
@@ -30,6 +34,7 @@ type FilePager struct {
 	closed    bool
 	fs        *FileSource
 	files     []*FileInfo
+	readers   chan (*FileReader)
 	partition *schema.Partition
 	partid    int
 	tbl       *schema.Table
@@ -39,17 +44,15 @@ type FilePager struct {
 
 // NewFilePager creates default new FilePager
 func NewFilePager(tableName string, fs *FileSource) *FilePager {
-	return &FilePager{
-		fs:     fs,
-		table:  tableName,
-		exit:   make(chan bool),
-		partid: -1,
+	fp := &FilePager{
+		fs:      fs,
+		table:   tableName,
+		exit:    make(chan bool),
+		readers: make(chan *FileReader, FileBufferSize),
+		partid:  -1,
 	}
+	return fp
 }
-
-// func (m *FilePager) SetContext(ctx *plan.Context) {
-// 	m.ctx = ctx
-// }
 
 // WalkExecSource Provide ability to implement a source plan for execution
 func (m *FilePager) WalkExecSource(p *plan.Source) (exec.Task, error) {
@@ -104,40 +107,73 @@ func (m *FilePager) NextScanner() (schema.ConnScanner, error) {
 // NextFile gets next file
 func (m *FilePager) NextFile() (*FileReader, error) {
 
-	var fi *FileInfo
-	//u.Debugf("%p file ct=%d partid:%d", m, len(m.files), m.partid)
-	for {
-		if m.cursor >= len(m.files) {
+	select {
+	case <-m.exit:
+		// See if exit was called
+		return nil, io.EOF
+	case fr := <-m.readers:
+		if fr == nil {
 			return nil, io.EOF
 		}
-		fi = m.files[m.cursor]
-		m.cursor++
-		// partid = -1 means we are not partitioning
-		if m.partid < 0 || fi.Partition == m.partid {
-			break
+		return fr, nil
+	}
+}
+
+func (m *FilePager) RunFetcher() {
+	go m.fetcher()
+}
+
+// fetcher process
+func (m *FilePager) fetcher() {
+
+	for {
+
+		// See if exit was called
+		select {
+		case <-m.exit:
+			return
+		default:
 		}
-	}
 
-	//u.Debugf("%p opening: partition:%v desiredpart:%v file: %q ", m, fi.Partition, m.partid, fi.Name)
-	obj, err := m.fs.store.Get(fi.Name)
-	if err != nil {
-		u.Errorf("could not read %q table %v", err)
-		return nil, err
-	}
+		var fi *FileInfo
+		//u.Debugf("%p file ct=%d partid:%d  cursor:%d", m, len(m.files), m.partid, m.cursor)
+		for {
+			if m.cursor >= len(m.files) {
+				m.readers <- nil
+				return
+			}
+			fi = m.files[m.cursor]
+			m.cursor++
+			// partid = -1 means we are not partitioning
+			if m.partid < 0 || fi.Partition == m.partid {
+				break
+			}
+		}
 
-	f, err := obj.Open(cloudstorage.ReadOnly)
-	if err != nil {
-		u.Errorf("could not read %q table %v", m.table, err)
-		return nil, err
-	}
-	//u.Infof("found file: %s   %p", obj.Name(), f)
+		//u.Debugf("%p opening: partition:%v desiredpart:%v file: %q ", m, fi.Partition, m.partid, fi.Name)
+		obj, err := m.fs.store.Get(fi.Name)
+		if err != nil {
+			u.Errorf("could not read %q table %v", err)
+			return
+		}
 
-	fr := &FileReader{
-		F:        f,
-		Exit:     make(chan bool),
-		FileInfo: fi,
+		start := time.Now()
+		f, err := obj.Open(cloudstorage.ReadOnly)
+		if err != nil {
+			u.Errorf("could not read %q table %v", m.table, err)
+			return
+		}
+		u.Debugf("found file: %s   took:%vms", obj.Name(), time.Now().Sub(start).Nanoseconds()/1e6)
+
+		fr := &FileReader{
+			F:        f,
+			Exit:     make(chan bool),
+			FileInfo: fi,
+		}
+
+		// This will back-pressure after we reach our queue size
+		m.readers <- fr
 	}
-	return fr, nil
 }
 
 // Next iterator for next message, wraps the file Scanner, Next file abstractions
@@ -146,7 +182,7 @@ func (m *FilePager) Next() schema.Message {
 		m.NextScanner()
 	}
 	for {
-		if m.closed {
+		if m.closed || m.ConnScanner == nil {
 			return nil
 		}
 		msg := m.ConnScanner.Next()
