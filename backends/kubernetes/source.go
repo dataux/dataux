@@ -89,10 +89,13 @@ func (m *Source) Init() {
 	u.Debug("init 4")
 
 	ss.DS = m
-	reg.SourceSchemaAdd(sch.Name, ss)
-	u.Debug("init 5")
-	sch.RefreshSchema()
-	u.Debug("init 6")
+
+	go func() {
+		reg.SourceSchemaAdd(sch.Name, ss)
+		u.Debug("init 5")
+		sch.RefreshSchema()
+		u.Debug("init 6")
+	}()
 
 	// if err := m.Setup(ss); err != nil {
 	// 	u.Warnf("could not sniff kube config %v", err)
