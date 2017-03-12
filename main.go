@@ -11,12 +11,12 @@ import (
 	// Backend Side-Effect imports, ie load the providers into registry but
 	// config will determine if they get used.
 	// if you are building custom daemon, you can cherry pick sources you care about
+	_ "github.com/araddon/qlbridge/datasource/files"
 	_ "github.com/dataux/dataux/backends/bigtable"
 	_ "github.com/dataux/dataux/backends/cassandra"
 	_ "github.com/dataux/dataux/backends/datastore"
 	_ "github.com/dataux/dataux/backends/elasticsearch"
-	_ "github.com/dataux/dataux/backends/files"
-	_ "github.com/dataux/dataux/backends/kubernetes"
+	//_ "github.com/dataux/dataux/backends/kubernetes"
 	_ "github.com/dataux/dataux/backends/mongo"
 
 	// Frontend's side-effect imports
