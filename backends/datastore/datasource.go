@@ -39,7 +39,7 @@ var (
 )
 
 func init() {
-	// We need to register our Source into Datastource provider here
+	// We need to register our Source into Datasource provider here
 	datasource.Register(SourceLabel, &Source{})
 }
 
