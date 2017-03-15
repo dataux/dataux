@@ -216,6 +216,7 @@ func ValidateQuerySpec(t testing.TB, testSpec QuerySpec) {
 		rows, err := dbx.Queryx(testSpec.Sql)
 		if err != nil {
 			t.Errorf("Expected no err got %v", err)
+			return
 		}
 		defer rows.Close()
 

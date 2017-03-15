@@ -73,7 +73,8 @@ schemas : [
       "google_ds_test", 
       "cass", 
       "bt",
-      "kube"
+      "kube",
+      "lytics"
     ]
   }
 ]
@@ -167,6 +168,13 @@ sources : [
     settings {
       instance  "bigtable0"
       # project will be loaded from ENV   $GCEPROJECT
+    }
+  }
+
+  {
+    name : lytics
+    type : lytics
+    settings {
     }
   }
 
