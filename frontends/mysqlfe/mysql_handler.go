@@ -250,6 +250,14 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 			return err
 		}
 		return m.conn.WriteOK(nil)
+	case *rel.SqlCreate:
+		// DDL?
+		err = job.Run()
+		job.Close()
+		if err != nil {
+			return err
+		}
+		return m.conn.WriteOK(nil)
 	default:
 		u.Warnf("sql not supported?  %v  %T", stmt, stmt)
 		return fmt.Errorf("statement type %T not supported", stmt)

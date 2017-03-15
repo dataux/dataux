@@ -121,11 +121,9 @@ func (m *ResultReader) Columns() []string {
 	return m.cols
 }
 
-// Run()
-//
-//  Normally, finalize is responsible for ensuring schema, setu
-//   but in the case of elasticsearch, since it is a non-streaming
-//   response, we build out values in advance
+// Run() Fetch api response, wait for response, then convert
+// response into rows (static) and allow Next() to start
+// iterating through them.
 func (m *ResultReader) Run() error {
 
 	sigChan := m.SigChan()

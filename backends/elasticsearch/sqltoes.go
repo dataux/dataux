@@ -21,8 +21,8 @@ import (
 var (
 	DefaultLimit = 1000
 
-	// Implement Datasource interface that allows Mongo
-	//  to fully implement a full select statement
+	// Implement SourcePlanner interface that allows sql statements
+	// to be converted/generate native es statements
 	_ plan.SourcePlanner  = (*SqlToEs)(nil)
 	_ exec.ExecutorSource = (*SqlToEs)(nil)
 )

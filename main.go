@@ -16,7 +16,8 @@ import (
 	_ "github.com/dataux/dataux/backends/cassandra"
 	_ "github.com/dataux/dataux/backends/datastore"
 	_ "github.com/dataux/dataux/backends/elasticsearch"
-	//_ "github.com/dataux/dataux/backends/kubernetes"
+	_ "github.com/dataux/dataux/backends/kubernetes"
+	_ "github.com/dataux/dataux/backends/lytics"
 	_ "github.com/dataux/dataux/backends/mongo"
 
 	// Frontend's side-effect imports
