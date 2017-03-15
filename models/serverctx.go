@@ -171,15 +171,13 @@ func (m *ServerCtx) loadConfig() error {
 			ds := m.Reg.Get(sourceConf.SourceType)
 			//u.Debugf("after reg.Get(%q)  %#v", sourceConf.SourceType, ds)
 			if ds == nil {
-				//u.Debugf("could not find source for %v", sourceName)
+				//u.Warnf("could not find source for %v  %v", sourceName, sourceConf.SourceType)
 			} else {
 				ss.DS = ds
 				ss.Partitions = sourceConf.Partitions
-				if dsConfig, getsConfig := ss.DS.(schema.SourceSetup); getsConfig {
-					//u.Debugf("about to Setup %#v", dsConfig)
-					if err := dsConfig.Setup(ss); err != nil {
-						u.Errorf("Error setuping up %v  %v", sourceName, err)
-					}
+				//u.Debugf("about to Setup %#v", ds)
+				if err := ss.DS.Setup(ss); err != nil {
+					u.Errorf("Error setuping up %v  %v", sourceName, err)
 				}
 				//u.Infof("about to SourceSchemaAdd")
 				m.Reg.SourceSchemaAdd(sch.Name, ss)
