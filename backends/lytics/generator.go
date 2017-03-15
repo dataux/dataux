@@ -82,10 +82,6 @@ func (m *Generator) WalkExecSource(p *plan.Source) (exec.Task, error) {
 	}
 
 	m.sel = p.Stmt.Source
-	//u.Infof("projection? %#v", p.Proj)
-	// for _, col := range p.Proj.Columns {
-	// 	u.Debugf("col %#v", col)
-	// }
 
 	if m.sel.Where != nil {
 		ql := &rel.FilterStatement{}

@@ -77,6 +77,9 @@ func (m *ResultReader) Run() error {
 		if e == nil {
 			break
 		}
+
+		//u.Debugf("%v\n\n", e.PrettyJson())
+
 		row := make([]driver.Value, len(colNames))
 		eh := u.JsonHelper(e)
 		for i, col := range cols {
@@ -109,13 +112,11 @@ func (m *ResultReader) Run() error {
 				u.Warnf("unhandled %s", col.Type)
 				row[i] = eh.PrettyJson()
 			}
-			colNames[col.As] = i
+
+			//u.Debugf("%q  %T  %v", col.As, row[i], row[i])
 		}
 
-		//u.Debugf("new row ct: %v cols:%v vals:%v", len(m.Vals), colNames, vals)
-		//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
 		msg := datasource.NewSqlDriverMessageMap(uint64(rowCt), row, colNames)
-		//u.Infof("In source Scanner iter %#v", msg)
 		select {
 		case <-sigChan:
 			return nil
@@ -123,8 +124,6 @@ func (m *ResultReader) Run() error {
 		}
 
 		rowCt++
-
-		//fmt.Printf("%v\n\n", e.PrettyJson())
 	}
 
 	return nil

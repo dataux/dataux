@@ -135,7 +135,7 @@ func (m *Source) loadTableSchema(s *lytics.Schema) error {
 
 	for _, col := range s.Columns {
 
-		//u.Infof("%#v", col)
+		u.Infof("%#v", col)
 
 		var fld *schema.Field
 		switch col.Type {
