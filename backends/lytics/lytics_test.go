@@ -2,6 +2,7 @@ package lytics_test
 
 import (
 	"database/sql"
+	"os"
 	"testing"
 
 	u "github.com/araddon/gou"
@@ -17,6 +18,8 @@ import (
 
 var (
 	testServicesRunning bool
+	_                   = u.EMPTY
+	_                   = sql.Drivers()
 )
 
 func init() {
@@ -60,6 +63,10 @@ func validateQuery(t *testing.T, querySql string, expectCols []string, expectCol
 
 func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 
+	if os.Getenv("LIOKEY") == "" {
+		t.Skip("No LIOKEY to run tests")
+		return
+	}
 	RunTestServer(t)
 
 	// This is a connection to RunTestServer, which starts on port 13307
@@ -137,32 +144,25 @@ func TestShowTablesSelect(t *testing.T) {
 	assert.Tf(t, found, `Must have found "user"`)
 }
 
-func TestInvalidQuery(t *testing.T) {
-	testmysql.RunTestServer(t)
-	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
-	assert.T(t, err == nil)
-	// It is parsing the SQL on server side (proxy)
-	//  not in client, so hence that is what this is testing, making sure
-	//  proxy responds gracefully
-	rows, err := db.Query("select `stuff`, NOTAKEYWORD github_fork NOTWHERE `description` LIKE \"database\";")
-	assert.Tf(t, err != nil, "%v", err)
-	assert.Tf(t, rows == nil, "must not get rows")
-}
-
 func TestSimpleRowSelect(t *testing.T) {
 	data := struct {
-		Actor string
+		Propensity float64 `db:"score_propensity"`
+		UserId     string  `db:"user_id"`
+		Paying     bool    `db:"paying_user"`
+		Org        string  `db:"org"`
 	}{}
 	validateQuerySpec(t, QuerySpec{
-		Sql:         "select actor from user WHERE `actor` = \"cabadsanchez\" LIMIT 10;",
-		ExpectRowCt: 2,
+		Sql:         "select score_propensity, user_id, paying_user, org from user WHERE `user_id` = \"triggers123\" LIMIT 10;",
+		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
-			assert.Tf(t, data.Actor == "cabadsanchez", "%v", data)
+			assert.Tf(t, data.UserId == "triggers123", "%v", data)
 		},
 		RowData: &data,
 	})
 }
+
+/*
 
 func TestSelectAggs(t *testing.T) {
 	data := struct {
@@ -203,9 +203,7 @@ func TestSelectAggs(t *testing.T) {
 }
 
 func TestSelectAggsGroupBy(t *testing.T) {
-	/*
-		NOTE:   This fails because of parsing the response, not because request is bad
-	*/
+	// NOTE:   This fails because of parsing the response, not because request is bad
 	return
 	data := struct {
 		Actor string
@@ -275,11 +273,11 @@ func TestSelectWhereEqual(t *testing.T) {
 	validateQuerySpec(t, QuerySpec{
 		Sql: `
 		SELECT
-			actor, repository.name, repository.stargazers_count, repository.language 
+			actor, repository.name, repository.stargazers_count, repository.language
 		FROM github_watch
 		WHERE
-				repository.language = "Go" 
-				AND repository.forks_count > 1000 
+				repository.language = "Go"
+				AND repository.forks_count > 1000
 				AND repository.description NOT LIKE "docker";`,
 		ExpectRowCt: 20,
 		ValidateRowData: func() {
@@ -352,7 +350,7 @@ func TestSelectWhereBetween(t *testing.T) {
 	// curl -s XGET localhost:9200/github_watch/_search -d '{"filter": { "range": { "repository.created_at": {"gte": "2008-10-21T17:20:37Z","lte": "2008-10-21T19:20:37Z"}}}}' | jq '.'
 	validateQuerySpec(t, QuerySpec{
 		Sql: `SELECT actor, repository.organization AS org
-			FROM github_watch 
+			FROM github_watch
 			WHERE repository.created_at BETWEEN "2008-10-21T17:20:37Z" AND "2008-10-21T19:20:37Z";`,
 		ExpectRowCt: 3,
 		ValidateRowData: func() {
@@ -369,10 +367,10 @@ func TestSelectWhereBetween(t *testing.T) {
 	// simple test of mixed aliasing, non-aliasing on field names
 	validateQuerySpec(t, QuerySpec{
 		Sql: `
-			SELECT 
+			SELECT
 				actor, repository.name, repository.stargazers_count AS stars
-			FROM github_watch 
-			WHERE 
+			FROM github_watch
+			WHERE
 				repository.stargazers_count BETWEEN 1000 AND 1100;
 		`,
 		ExpectRowCt: 132,
@@ -389,7 +387,7 @@ func TestSelectWhereBetween(t *testing.T) {
 	// Try again but with missing field org to show it will return nil
 	validateQuerySpec(t, QuerySpec{
 		Sql: `SELECT actor, org
-			FROM github_watch 
+			FROM github_watch
 			WHERE repository.created_at BETWEEN "2008-10-21T17:20:37Z" AND "2008-10-21T19:20:37Z";`,
 		ExpectRowCt: 3,
 		ValidateRowData: func() {
@@ -417,3 +415,4 @@ func TestSelectOrderBy(t *testing.T) {
 		RowData: &data,
 	})
 }
+*/

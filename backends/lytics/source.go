@@ -52,6 +52,7 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 	m.conf = ss.Conf
 	m.tablemap = make(map[string]*schema.Table)
 
+	u.Infof("%p Conf: %+v  settings:%v", ss, ss.Conf, ss.Conf.Settings)
 	if ss.Conf != nil && len(ss.Conf.Settings) > 0 {
 		m.apiKey = ss.Conf.Settings.String("apikey")
 	}
@@ -86,7 +87,7 @@ func (m *Source) Open(schemaName string) (schema.Conn, error) {
 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.srcschema.Name, schemaName)
 	}
 
-	sqlConverter := NewGenerator(tbl)
+	sqlConverter := NewGenerator(tbl, m.apiKey)
 	return sqlConverter, nil
 }
 
@@ -96,7 +97,7 @@ func (m *Source) DataSource() schema.Source { return m }
 func (m *Source) Tables() []string { return m.tables }
 
 func (m *Source) Table(table string) (*schema.Table, error) {
-	u.Debugf("get table for %s", table)
+	//u.Debugf("get table for %s", table)
 	t := m.tablemap[table]
 	if t != nil {
 		return t, nil
@@ -113,11 +114,10 @@ func (m *Source) loadSchema() error {
 
 	schemas, err := m.client.GetSchema()
 	if err != nil {
-		u.Warnf("wat %v", err)
 		return err
 	}
 
-	m.tables = make([]string, 0)
+	m.tables = make([]string, 0, len(schemas))
 
 	for _, s := range schemas {
 		m.tables = append(m.tables, s.Name)
@@ -149,8 +149,15 @@ func (m *Source) loadTableSchema(s *lytics.Schema) error {
 			fld = schema.NewFieldBase(col.As, value.IntType, 46, col.ShortDesc)
 		case "double", "float", "number":
 			fld = schema.NewFieldBase(col.As, value.NumberType, 64, col.ShortDesc)
-		case "[]string":
+		case "[]string", "ts[]string":
 			fld = schema.NewFieldBase(col.As, value.StringsType, 2000, col.ShortDesc)
+		case "map[string]intsum", "map[string]int", "map[string]number",
+			"map[string]time", "map[string]string", "map[string]bool", "membership":
+			fld = schema.NewFieldBase(col.As, value.JsonType, 2000, col.ShortDesc)
+		case "[]timebucket", "dynamic":
+			continue
+		default:
+			u.Warnf("Unahndled type %v type=%v", col.As, col.Type)
 		}
 		if fld != nil {
 			tbl.AddField(fld)
@@ -167,46 +174,3 @@ func (m *Source) loadTableSchema(s *lytics.Schema) error {
 
 	return nil
 }
-
-/*
-func (m DataType) String() string {
-	switch m {
-	case DataTypeString:
-		return "string"
-	case DataTypeBool:
-		return "bool"
-	case DataTypeInt:
-		return "int"
-	case DataTypeNumber:
-		return "number"
-	case DataTypeDate:
-		return "date"
-	case DataTypeSliceString:
-		return "[]string"
-	case DataTypeSliceTsString:
-		return "ts[]string"
-	case DataTypeMapStringIntSum:
-		return "map[string]intsum"
-	case DataTypeMapStringInt:
-		return "map[string]int"
-	case DataTypeMapStringNumber:
-		return "map[string]number"
-	case DataTypeMapStringString:
-		return "map[string]string"
-	case DataTypeMapStringBool:
-		return "map[string]bool"
-	case DataTypeMapStringValue:
-		return "map[string]value"
-	case DataTypeMapStringTime:
-		return "map[string]time"
-	case DataTypeMembership:
-		return "membership"
-	case DataTypeSortedTimeBuckets:
-		return "[]timebucket"
-	case DataTypeDynamic:
-		return "dynamic"
-	default:
-		return fmt.Sprintf("Unknown output type %d", int(m))
-	}
-}
-*/
