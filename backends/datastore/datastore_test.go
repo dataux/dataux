@@ -132,6 +132,10 @@ type Article struct {
 	*tu.Article
 }
 
+func NewArticle() Article {
+	return Article{&tu.Article{}}
+}
+
 func (m *Article) Load(props []datastore.Property) error {
 	for _, p := range props {
 		switch p.Name {
@@ -270,7 +274,7 @@ func TestDataSourceInterface(t *testing.T) {
 
 	// Now make sure that the datastore source has been registered
 	// and meets api for qlbridge.DataSource
-	ds, err := datasource.OpenConn(gds.DataSourceLabel, ArticleKind)
+	ds, err := datasource.OpenConn(gds.SourceLabel, ArticleKind)
 	assert.Tf(t, err == nil, "no error on conn: %v", err)
 	assert.Tf(t, ds != nil, "Found datastore")
 }
