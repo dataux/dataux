@@ -17,14 +17,15 @@ can now have complete `WHERE` clause support as well as aggregate functions etc.
 Most similar to [prestodb](http://prestodb.io/) but in Golang, and focused on
 easy to add custom data sources as well as REST api sources.
 
-## Backend Sources
+## Storage Sources
 
-* [Kubernetes](https://github.com/dataux/dataux/tree/master/backends/kubernetes) An example of REST api backend.
-* [Big Table](https://github.com/dataux/dataux/tree/master/backends/bigtable) SQL against big-table.
+* [Google Big Table](https://github.com/dataux/dataux/tree/master/backends/bigtable) SQL against big-table.
 * [Elasticsearch](https://github.com/dataux/dataux/tree/master/backends/elasticsearch) Simplify access to Elasticsearch.
 * [Mongo](https://github.com/dataux/dataux/tree/master/backends/mongo) Translate SQL into mongo.
 * [Google Cloud Storage / (csv, json files)](https://github.com/dataux/dataux/tree/master/backends/files) An example of REST api backends (list of files), as well as the file contents themselves are tables.
 * [Cassandra](https://github.com/dataux/dataux/tree/master/backends/cassandra) SQL against cassandra.  Adds sql features that are missing.
+* [Lytics](https://github.com/dataux/dataux/tree/master/backends/lytics) SQL against [Lytics REST Api's](https://www.getlytics.com)
+* [Kubernetes](https://github.com/dataux/dataux/tree/master/backends/kubernetes) An example of REST api backend.
 
 
 ## Features
