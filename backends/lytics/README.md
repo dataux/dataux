@@ -23,9 +23,6 @@ We are going to add our own source (Lytics) via a `SQL CREATE` statement.
 docker pull gcr.io/dataux-io/dataux:latest
 docker run --rm -e "LOGGING=debug" -p 4000:4000 --name dataux gcr.io/dataux-io/dataux:latest
 
-# delete it
-docker -D run gcr.io/dataux-io/dataux:latest
-
 ```
 
 ![dataux_lytics](https://cloud.githubusercontent.com/assets/7269/23976456/0c6bc878-09a5-11e7-9cec-207c300ed0ab.png)
