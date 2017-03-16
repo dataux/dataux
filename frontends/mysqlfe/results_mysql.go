@@ -3,6 +3,7 @@ package mysqlfe
 import (
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"time"
 
 	u "github.com/araddon/gou"
@@ -208,7 +209,7 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 
 	s := m.schema
 	if s == nil {
-		panic("no schema")
+		return fmt.Errorf("no schema")
 	}
 
 	cols := m.proj.Columns

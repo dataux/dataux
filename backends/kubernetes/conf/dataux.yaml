@@ -26,7 +26,7 @@ spec:
     spec:
       containers:
       - name: dataux
-        image: "gcr.io/dataux-io/dataux:v0.0.1"
+        image: "gcr.io/dataux-io/dataux:v2017.03.15a"
         # un-comment this for testing, it will force pull latest image
         imagePullPolicy: Always
         command: ["/dataux", "--loglevel=debug"]

@@ -5,16 +5,25 @@
 
 
 # cleanup local docker
+docker rm -f gcr.io/dataux-io/dataux:latest
+docker rmi -f gcr.io/dataux-io/dataux:latest
+
 # docker rm -f gcr.io/dataux-io/dataux:v0.0.1
 # docker rmi -f gcr.io/dataux-io/dataux:v0.0.1
+
+docker rm -f gcr.io/dataux-io/dataux:v2017.03.15a
+docker rmi -f gcr.io/dataux-io/dataux:v2017.03.15a
 
 # if you get auth issues
 #
 #  rm ~/.docker/config.json 
 #  gcloud docker --authorize-only
 
-docker build -t gcr.io/dataux-io/dataux:v0.0.1 .
-gcloud docker -- push gcr.io/dataux-io/dataux:v0.0.1
+docker build -t gcr.io/dataux-io/dataux:v2017.03.15a .
+gcloud docker -- push gcr.io/dataux-io/dataux:v2017.03.15a
+
+docker build -t gcr.io/dataux-io/dataux:latest .
+gcloud docker -- push gcr.io/dataux-io/dataux:latest
 
 # now lets allow anyone to read these gcr images
 #  https://cloud.google.com/container-registry/docs/access-control

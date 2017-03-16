@@ -6,6 +6,7 @@ import (
 	u "github.com/araddon/gou"
 
 	"github.com/araddon/qlbridge/exec"
+	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
@@ -20,10 +21,19 @@ var (
 	// much as possible to lytics api
 	_ plan.SourcePlanner  = (*Generator)(nil)
 	_ exec.ExecutorSource = (*Generator)(nil)
+
+	// Prebuild a statement for no where clause
+	filterAll expr.Node
 )
 
-// Generator Sql To Lytics Request Generator
-//   Map sql queries into Lytics Api Requests
+func init() {
+	fs := rel.MustParseFilter("FILTER *")
+	filterAll = fs.Filter
+}
+
+// Generator Generate Lytics api requests from Sql Statements
+// - convert sql WHERE into SegmentQL api statements
+// - fetch entities from entity scan api
 type Generator struct {
 	resp          *ResultReader
 	p             *plan.Source
@@ -83,14 +93,13 @@ func (m *Generator) WalkExecSource(p *plan.Source) (exec.Task, error) {
 
 	m.sel = p.Stmt.Source
 
+	m.ql = &rel.FilterStatement{}
+	m.ql.From = m.sel.From[0].Name
+
 	if m.sel.Where != nil {
-		ql := &rel.FilterStatement{}
-		ql.Filter = m.sel.Where.Expr
-		ql.From = m.sel.From[0].Name
-		m.ql = ql
-		u.Infof("query %v", ql)
+		m.ql.Filter = m.sel.Where.Expr
 	} else {
-		u.Warnf("NO WHERE/FILTER? %v", m.sel)
+		m.ql.Filter = filterAll
 	}
 
 	reader := NewResultReader(m)

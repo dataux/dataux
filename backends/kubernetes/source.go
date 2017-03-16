@@ -74,27 +74,19 @@ func (m *Source) Init() {
 		return
 	}
 
-	u.Warnf("kube Init()  No Schema!!!!!!")
 	ss := schema.NewSchemaSource("kubernetes", DataSourceLabel)
 
 	ss.Conf = &schema.ConfigSource{Name: "kubernetes"}
 
-	u.Debug("init 2")
 	reg := datasource.DataSourcesRegistry()
 	sch := schema.NewSchema("kubernetes")
-	u.Debug("init 2.5")
 	reg.SchemaAdd(sch)
-	u.Debug("init 3")
-	//sch.AddSourceSchema(ss)
-	u.Debug("init 4")
 
 	ss.DS = m
 
 	go func() {
 		reg.SourceSchemaAdd(sch.Name, ss)
-		u.Debug("init 5")
 		sch.RefreshSchema()
-		u.Debug("init 6")
 	}()
 
 	// if err := m.Setup(ss); err != nil {
