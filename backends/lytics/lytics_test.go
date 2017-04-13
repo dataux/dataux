@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	u "github.com/araddon/gou"
-	"github.com/bmizerany/assert"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/araddon/qlbridge/plan"
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
@@ -71,15 +71,15 @@ func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 
 	// This is a connection to RunTestServer, which starts on port 13307
 	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
-	assert.Tf(t, err == nil, "%v", err)
+	assert.True(t, err == nil, "%v", err)
 	defer dbx.Close()
 	//u.Debugf("%v", testSpec.Sql)
 	rows, err := dbx.Queryx(testSpec.Sql)
-	assert.Tf(t, err == nil, "%v", err)
+	assert.True(t, err == nil, "%v", err)
 	defer rows.Close()
 
 	cols, err := rows.Columns()
-	assert.Tf(t, err == nil, "%v", err)
+	assert.True(t, err == nil, "%v", err)
 	if len(testSpec.Cols) > 0 {
 		for _, expectCol := range testSpec.Cols {
 			found := false
@@ -88,7 +88,7 @@ func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 					found = true
 				}
 			}
-			assert.Tf(t, found, "Should have found column: %v", expectCol)
+			assert.True(t, found, "Should have found column: %v", expectCol)
 		}
 	}
 	rowCt := 0
@@ -96,7 +96,7 @@ func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 		if testSpec.RowData != nil {
 			err = rows.StructScan(testSpec.RowData)
 			//u.Infof("rowVals: %#v", testSpec.RowData)
-			assert.Tf(t, err == nil, "%v", err)
+			assert.True(t, err == nil, "%v", err)
 			rowCt++
 			if testSpec.ValidateRowData != nil {
 				testSpec.ValidateRowData()
@@ -106,8 +106,8 @@ func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 			// rowVals is an []interface{} of all of the column results
 			rowVals, err := rows.SliceScan()
 			//u.Infof("rowVals: %#v", rowVals)
-			assert.Tf(t, err == nil, "%v", err)
-			assert.Tf(t, len(rowVals) == testSpec.ExpectColCt, "wanted cols but got %v", len(rowVals))
+			assert.True(t, err == nil, "%v", err)
+			assert.True(t, len(rowVals) == testSpec.ExpectColCt, "wanted cols but got %v", len(rowVals))
 			rowCt++
 			if testSpec.ValidateRow != nil {
 				testSpec.ValidateRow(rowVals)
@@ -117,10 +117,10 @@ func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 	}
 
 	if testSpec.ExpectRowCt > -1 {
-		assert.Tf(t, rowCt == testSpec.ExpectRowCt, "expected %v rows but got %v", testSpec.ExpectRowCt, rowCt)
+		assert.True(t, rowCt == testSpec.ExpectRowCt, "expected %v rows but got %v", testSpec.ExpectRowCt, rowCt)
 	}
 
-	assert.T(t, rows.Err() == nil)
+	assert.True(t, rows.Err() == nil)
 	//u.Infof("rows: %v", cols)
 }
 
@@ -134,14 +134,14 @@ func TestShowTablesSelect(t *testing.T) {
 		ExpectRowCt: -1,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
-			assert.Tf(t, data.Table != "", "%v", data)
+			assert.True(t, data.Table != "", "%v", data)
 			if data.Table == "user" {
 				found = true
 			}
 		},
 		RowData: &data,
 	})
-	assert.Tf(t, found, `Must have found "user"`)
+	assert.True(t, found, `Must have found "user"`)
 }
 
 func TestSimpleRowSelect(t *testing.T) {
@@ -156,7 +156,7 @@ func TestSimpleRowSelect(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
-			assert.Tf(t, data.UserId == "triggers123", "%v", data)
+			assert.True(t, data.UserId == "triggers123", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -174,8 +174,8 @@ func TestSelectAggs(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Debugf("%v", data)   {765 3448}
-			assert.Tf(t, data.Card == 3448, "%v", data)
-			assert.Tf(t, data.Oldest == 765, "%v", data)
+			assert.True(t, data.Card == 3448, "%v", data)
+			assert.True(t, data.Oldest == 765, "%v", data)
 
 		},
 		RowData: &data,
@@ -194,9 +194,9 @@ func TestSelectAggs(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			u.Debugf("%+v", data2) //{108110 32 32}
-			assert.Tf(t, data2.Card == 32, "%v", data2)
-			assert.Tf(t, data2.Oldest == 108110, "%#v", data2)
-			assert.Tf(t, data2.Ct == 32, "%v", data2) // 47 docs had database
+			assert.True(t, data2.Card == 32, "%v", data2)
+			assert.True(t, data2.Oldest == 108110, "%#v", data2)
+			assert.True(t, data2.Ct == 32, "%v", data2) // 47 docs had database
 		},
 		RowData: &data2,
 	})
@@ -213,7 +213,7 @@ func TestSelectAggsGroupBy(t *testing.T) {
 		ExpectRowCt: 0,
 		ValidateRowData: func() {
 			u.Infof("%v", data)
-			//assert.Tf(t, data.Actor == "araddon", "%v", data)
+			//assert.True(t, data.Actor == "araddon", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -229,7 +229,7 @@ func TestSelectAggsGroupBy(t *testing.T) {
 		ExpectRowCt: 10,
 		ValidateRowData: func() {
 			u.Infof("%v", data2)
-			//assert.Tf(t, data2.Actor == "araddon", "%v", data2)
+			//assert.True(t, data2.Actor == "araddon", "%v", data2)
 		},
 		RowData: &data2,
 	})
@@ -248,8 +248,8 @@ func TestSelectWhereEqual(t *testing.T) {
 		ExpectRowCt: 114,
 		ValidateRowData: func() {
 			//u.Infof("%+v", data)
-			assert.Tf(t, data.Actor != "", "%+v", data)
-			assert.Tf(t, data.Language == "Go", "%+v", data)
+			assert.True(t, data.Actor != "", "%+v", data)
+			assert.True(t, data.Language == "Go", "%+v", data)
 		},
 		RowData: &data,
 	})
@@ -261,9 +261,9 @@ func TestSelectWhereEqual(t *testing.T) {
 		ExpectRowCt: 5,
 		ValidateRowData: func() {
 			//u.Infof("%+v", data)
-			assert.Tf(t, data.Language == "Go", "%v", data)
-			assert.Tf(t, data.Stars > 1000, "must have filterd by forks: %v", data)
-			assert.Tf(t, data.Actor != "", "%v", data)
+			assert.True(t, data.Language == "Go", "%v", data)
+			assert.True(t, data.Stars > 1000, "must have filterd by forks: %v", data)
+			assert.True(t, data.Actor != "", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -282,9 +282,9 @@ func TestSelectWhereEqual(t *testing.T) {
 		ExpectRowCt: 20,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
-			assert.Tf(t, data.Language == "Go", "%v", data)
-			assert.Tf(t, data.Stars > 1000, "must have filterd by forks: %v", data)
-			assert.Tf(t, data.Actor != "", "%v", data)
+			assert.True(t, data.Language == "Go", "%v", data)
+			assert.True(t, data.Stars > 1000, "must have filterd by forks: %v", data)
+			assert.True(t, data.Actor != "", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -302,8 +302,8 @@ func TestSelectWhereLike(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Debugf("%#v", data)
-			assert.Tf(t, data.Name == "flockdb", "%v", data)
-			assert.Tf(t, data.Ct == 2348, "%v", data)
+			assert.True(t, data.Name == "flockdb", "%v", data)
+			assert.True(t, data.Ct == 2348, "%v", data)
 		},
 		RowData: &data,
 	})
@@ -319,8 +319,8 @@ func TestSelectWhereIn(t *testing.T) {
 		ExpectRowCt: 37,
 		ValidateRowData: func() {
 			//u.Debugf("%#v", data)
-			assert.Tf(t, data.Name != "", "%v", data)
-			//assert.Tf(t, data.Ct == 74995 || data.Ct == 74994, "%v", data)
+			assert.True(t, data.Name != "", "%v", data)
+			//assert.True(t, data.Ct == 74995 || data.Ct == 74994, "%v", data)
 		},
 		RowData: &data,
 	})
@@ -336,8 +336,8 @@ func TestSelectWhereBetween(t *testing.T) {
 		ExpectRowCt: 132,
 		ValidateRowData: func() {
 			//u.Debugf("%#v", data)
-			assert.Tf(t, data.Name != "", "%v", data)
-			//assert.Tf(t, data.Ct == 74995 || data.Ct == 74994, "%v", data)
+			assert.True(t, data.Name != "", "%v", data)
+			//assert.True(t, data.Ct == 74995 || data.Ct == 74994, "%v", data)
 		},
 		RowData: &data,
 	})
@@ -355,7 +355,7 @@ func TestSelectWhereBetween(t *testing.T) {
 		ExpectRowCt: 3,
 		ValidateRowData: func() {
 			u.Debugf("%#v", data2)
-			assert.Tf(t, data2.Org == "android", "%v", data2)
+			assert.True(t, data2.Org == "android", "%v", data2)
 		},
 		RowData: &data2,
 	})
@@ -376,7 +376,7 @@ func TestSelectWhereBetween(t *testing.T) {
 		ExpectRowCt: 132,
 		ValidateRowData: func() {
 			//u.Debugf("%#v", datact)
-			assert.Tf(t, datact.Stars >= 1000 && datact.Stars < 1101, "%v", datact)
+			assert.True(t, datact.Stars >= 1000 && datact.Stars < 1101, "%v", datact)
 		},
 		RowData: &datact,
 	})
@@ -392,8 +392,8 @@ func TestSelectWhereBetween(t *testing.T) {
 		ExpectRowCt: 3,
 		ValidateRowData: func() {
 			u.Debugf("%#v", data3)
-			assert.T(t, data3.Org.Valid == false)
-			assert.Tf(t, data3.Org.String == "", "%v", data3.Org.String)
+			assert.True(t, data3.Org.Valid == false)
+			assert.True(t, data3.Org.String == "", "%v", data3.Org.String)
 		},
 		RowData: &data3,
 	})
@@ -409,8 +409,8 @@ func TestSelectOrderBy(t *testing.T) {
 			" FROM github_watch ORDER BY `repository.stargazers_count` DESC limit 3;",
 		ExpectRowCt: 3,
 		ValidateRowData: func() {
-			assert.Tf(t, data.Name == "bootstrap", "%v", data)
-			assert.Tf(t, data.Ct == 74907 || data.Ct == 74906, "%v", data)
+			assert.True(t, data.Name == "bootstrap", "%v", data)
+			assert.True(t, data.Ct == 74907 || data.Ct == 74906, "%v", data)
 		},
 		RowData: &data,
 	})

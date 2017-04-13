@@ -12,9 +12,9 @@ import (
 
 	"cloud.google.com/go/bigtable"
 	u "github.com/araddon/gou"
-	"github.com/bmizerany/assert"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
 
 	"github.com/araddon/qlbridge/datasource"
@@ -196,14 +196,14 @@ func TestShowTables(t *testing.T) {
 		ExpectRowCt: 3,
 		ValidateRowData: func() {
 			//u.Infof("%+v", data)
-			assert.Tf(t, data.Table != "", "%v", data)
+			assert.True(t, data.Table != "", "%v", data)
 			if data.Table == strings.ToLower("article") {
 				found = true
 			}
 		},
 		RowData: &data,
 	})
-	assert.Tf(t, found, "Must have found article")
+	assert.True(t, found, "Must have found article")
 }
 
 func TestBasic(t *testing.T) {
@@ -213,11 +213,11 @@ func TestBasic(t *testing.T) {
 
 	// This is a connection to RunTestServer, which starts on port 13307
 	dbx, err := sqlx.Connect("mysql", DbConn)
-	assert.Tf(t, err == nil, "%v", err)
+	assert.True(t, err == nil, "%v", err)
 	defer dbx.Close()
 	//u.Debugf("%v", testSpec.Sql)
 	rows, err := dbx.Queryx(fmt.Sprintf("select * from article"))
-	assert.Equalf(t, err, nil, "%v", err)
+	assert.Equal(t, err, nil, "%v", err)
 	defer rows.Close()
 }
 
@@ -239,31 +239,31 @@ func TestDescribeTable(t *testing.T) {
 		ExpectRowCt: 10,
 		ValidateRowData: func() {
 			//u.Infof("%s   %#v", data.Field, data)
-			assert.Tf(t, data.Field != "", "%v", data)
+			assert.True(t, data.Field != "", "%v", data)
 			switch data.Field {
 			case "embedded":
-				assert.Tf(t, data.Type == "binary" || data.Type == "text", "%#v", data)
+				assert.True(t, data.Type == "binary" || data.Type == "text", "%#v", data)
 				describedCt++
 			case "author":
-				assert.Tf(t, data.Type == "varchar(255)", "data: %#v", data)
+				assert.True(t, data.Type == "varchar(255)", "data: %#v", data)
 				describedCt++
 			case "created":
-				assert.Tf(t, data.Type == "datetime", "data: %#v", data)
+				assert.True(t, data.Type == "datetime", "data: %#v", data)
 				describedCt++
 			case "category":
-				assert.Tf(t, data.Type == "json", "data: %#v", data)
+				assert.True(t, data.Type == "json", "data: %#v", data)
 				describedCt++
 			case "body":
-				assert.Tf(t, data.Type == "json", "data: %#v", data)
+				assert.True(t, data.Type == "json", "data: %#v", data)
 				describedCt++
 			case "deleted":
-				assert.Tf(t, data.Type == "bool" || data.Type == "tinyint", "data: %#v", data)
+				assert.True(t, data.Type == "bool" || data.Type == "tinyint", "data: %#v", data)
 				describedCt++
 			}
 		},
 		RowData: &data,
 	})
-	assert.Tf(t, describedCt == 5, "Should have found/described 5 but was %v", describedCt)
+	assert.True(t, describedCt == 5, "Should have found/described 5 but was %v", describedCt)
 }
 
 func TestSimpleRowSelect(t *testing.T) {
@@ -280,8 +280,8 @@ func TestSimpleRowSelect(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
-			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
-			assert.Tf(t, data.Title == "article1", "%v", data)
+			assert.True(t, data.Deleted == false, "Not deleted? %v", data)
+			assert.True(t, data.Title == "article1", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -289,7 +289,7 @@ func TestSimpleRowSelect(t *testing.T) {
 		Sql:         "select title, count,deleted from article WHERE count = 22;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			assert.Tf(t, data.Title == "article1", "%v", data)
+			assert.True(t, data.Title == "article1", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -326,9 +326,9 @@ func TestSelectGroupBy(t *testing.T) {
 			//u.Infof("%v", data)
 			switch data.Author {
 			case "aaron":
-				assert.Tf(t, data.Ct == 1, "Should have found 1? %v", data)
+				assert.True(t, data.Ct == 1, "Should have found 1? %v", data)
 			case "bjorn":
-				assert.Tf(t, data.Ct == 2, "Should have found 2? %v", data)
+				assert.True(t, data.Ct == 2, "Should have found 2? %v", data)
 			}
 		},
 		RowData: &data,
@@ -346,7 +346,7 @@ func TestSelectWhereLike(t *testing.T) {
 		Sql:         `SELECT title, author from article WHERE title like "%stic%"`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			assert.Tf(t, data.Title == "listicle1", "%v", data)
+			assert.True(t, data.Title == "listicle1", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -354,7 +354,7 @@ func TestSelectWhereLike(t *testing.T) {
 		Sql:         `SELECT title, author from article WHERE title like "list%"`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			assert.Tf(t, data.Title == "listicle1", "%v", data)
+			assert.True(t, data.Title == "listicle1", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -373,7 +373,7 @@ func TestSelectProjectionRewrite(t *testing.T) {
 		Sql:         `SELECT title, count AS ct from article WHERE title like "list%"`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			assert.Tf(t, data.Title == "listicle1", "%v", data)
+			assert.True(t, data.Title == "listicle1", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -391,8 +391,8 @@ func TestSelectOrderBy(t *testing.T) {
 		Sql:         "select title, count64 AS ct FROM article ORDER BY title DESC LIMIT 1;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			assert.Tf(t, data.Title == "zarticle3", "%v", data)
-			assert.Tf(t, data.Ct == 100, "%v", data)
+			assert.True(t, data.Title == "zarticle3", "%v", data)
+			assert.True(t, data.Ct == 100, "%v", data)
 		},
 		RowData: &data,
 	})
@@ -405,8 +405,8 @@ func TestSelectOrderBy(t *testing.T) {
 		Sql:         "select title, count64 AS ct FROM article ORDER BY count64 ASC LIMIT 1;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			assert.Tf(t, data.Title == "listicle1", "%v", data)
-			assert.Tf(t, data.Ct == 12, "%v", data)
+			assert.True(t, data.Title == "listicle1", "%v", data)
+			assert.True(t, data.Ct == 12, "%v", data)
 		},
 		RowData: &data,
 	})
@@ -504,9 +504,9 @@ func TestMutationUpdateSimple(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
-			assert.Tf(t, data.Id == "update123", "%v", data)
-			assert.Tf(t, data.Name == "test_name", "%v", data)
-			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
+			assert.True(t, data.Id == "update123", "%v", data)
+			assert.True(t, data.Name == "test_name", "%v", data)
+			assert.True(t, data.Deleted == false, "Not deleted? %v", data)
 		},
 		RowData: &data,
 	})
@@ -516,8 +516,8 @@ func TestMutationUpdateSimple(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			u.Infof("%v", data)
-			assert.Tf(t, data.Id == "update123", "%v", data)
-			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
+			assert.True(t, data.Id == "update123", "%v", data)
+			assert.True(t, data.Deleted == false, "Not deleted? %v", data)
 		},
 		RowData: &data,
 	})
@@ -533,9 +533,9 @@ func TestMutationUpdateSimple(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			u.Infof("%v", data)
-			assert.Tf(t, data.Id == "user815", "fr1 %v", data)
-			assert.Tf(t, data.Name == "was_updated", "fr2 %v", data)
-			assert.Tf(t, data.Deleted == true, "fr3 deleted? %v", data)
+			assert.True(t, data.Id == "user815", "fr1 %v", data)
+			assert.True(t, data.Name == "was_updated", "fr2 %v", data)
+			assert.True(t, data.Deleted == true, "fr3 deleted? %v", data)
 		},
 		RowData: &data,
 	})
@@ -544,10 +544,10 @@ func TestMutationUpdateSimple(t *testing.T) {
 func TestInvalidQuery(t *testing.T) {
 	RunTestServer(t)
 	db, err := sql.Open("mysql", DbConn)
-	assert.T(t, err == nil)
+	assert.True(t, err == nil)
 	// It is parsing the SQL on server side (proxy) not in client
 	//  so hence that is what this is testing, making sure proxy responds gracefully
 	rows, err := db.Query("select `stuff`, NOTAKEYWORD fake_tablename NOTWHERE `description` LIKE \"database\";")
-	assert.Tf(t, err != nil, "%v", err)
-	assert.Tf(t, rows == nil, "must not get rows")
+	assert.True(t, err != nil, "%v", err)
+	assert.True(t, rows == nil, "must not get rows")
 }

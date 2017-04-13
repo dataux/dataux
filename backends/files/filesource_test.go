@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	u "github.com/araddon/gou"
-	"github.com/bmizerany/assert"
 	"github.com/lytics/cloudstorage"
 	"github.com/lytics/cloudstorage/logging"
+	"github.com/stretchr/testify/assert"
 
 	_ "github.com/araddon/qlbridge/datasource/files"
 	"github.com/araddon/qlbridge/plan"
@@ -103,7 +103,7 @@ func clearStore(t *testing.T, store cloudstorage.Store) {
 	q := cloudstorage.Query{}
 	q.Sorted()
 	objs, err := store.List(q)
-	assert.T(t, err == nil)
+	assert.True(t, err == nil)
 	for _, o := range objs {
 		u.Debugf("deleting %q", o.Name())
 		store.Delete(o.Name())
@@ -126,7 +126,7 @@ func validateQuerySpec(t testing.TB, testSpec tu.QuerySpec) {
 
 func createTestData(t *testing.T) {
 	store, err := createLocalStore()
-	assert.T(t, err == nil)
+	assert.True(t, err == nil)
 	//clearStore(t, store)
 	//defer clearStore(t, store)
 
@@ -135,9 +135,9 @@ func createTestData(t *testing.T) {
 	if err != nil {
 		return // already created
 	}
-	assert.T(t, err == nil)
+	assert.True(t, err == nil)
 	f, err := obj.Open(cloudstorage.ReadWrite)
-	assert.T(t, err == nil)
+	assert.True(t, err == nil)
 
 	w := bufio.NewWriter(f)
 	w.WriteString(tu.Articles[0].Header())
@@ -151,7 +151,7 @@ func createTestData(t *testing.T) {
 	}
 	w.Flush()
 	err = obj.Close()
-	assert.T(t, err == nil)
+	assert.True(t, err == nil)
 
 	obj, _ = store.NewObject("tables/user/user1.csv")
 	f, _ = obj.Open(cloudstorage.ReadWrite)
@@ -170,15 +170,15 @@ func createTestData(t *testing.T) {
 
 	//Read the object back out of the cloud storage.
 	obj2, err := store.Get("tables/article/article1.csv")
-	assert.T(t, err == nil)
+	assert.True(t, err == nil)
 
 	f2, err := obj2.Open(cloudstorage.ReadOnly)
-	assert.T(t, err == nil)
+	assert.True(t, err == nil)
 
 	bytes, err := ioutil.ReadAll(f2)
-	assert.T(t, err == nil)
+	assert.True(t, err == nil)
 
-	assert.Tf(t, tu.ArticleCsv == string(bytes), "Wanted equal got %s", bytes)
+	assert.True(t, tu.ArticleCsv == string(bytes), "Wanted equal got %s", bytes)
 }
 
 func TestShowTables(t *testing.T) {
@@ -192,14 +192,14 @@ func TestShowTables(t *testing.T) {
 		ExpectRowCt: -1,
 		ValidateRowData: func() {
 			u.Infof("%v", data)
-			assert.Tf(t, data.Table != "", "%v", data)
+			assert.True(t, data.Table != "", "%v", data)
 			if data.Table == "article" {
 				found = true
 			}
 		},
 		RowData: &data,
 	})
-	assert.Tf(t, found, "Must have found article table with show")
+	assert.True(t, found, "Must have found article table with show")
 }
 
 func TestSelectFilesList(t *testing.T) {
@@ -214,8 +214,8 @@ func TestSelectFilesList(t *testing.T) {
 		ExpectRowCt: 3,
 		ValidateRowData: func() {
 			u.Infof("%v", data)
-			// assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
-			// assert.Tf(t, data.Title == "article1", "%v", data)
+			// assert.True(t, data.Deleted == false, "Not deleted? %v", data)
+			// assert.True(t, data.Title == "article1", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -224,19 +224,19 @@ func TestSelectFilesList(t *testing.T) {
 func TestSelectStar(t *testing.T) {
 	RunTestServer(t)
 	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
-	assert.T(t, err == nil)
+	assert.True(t, err == nil)
 	rows, err := db.Query("select * from article;")
-	assert.Tf(t, err == nil, "did not want err but got %v", err)
+	assert.True(t, err == nil, "did not want err but got %v", err)
 	cols, _ := rows.Columns()
-	assert.Tf(t, len(cols) == 7, "want 7 cols but got %v", cols)
-	assert.Tf(t, rows.Next(), "must get next row but couldn't")
+	assert.True(t, len(cols) == 7, "want 7 cols but got %v", cols)
+	assert.True(t, rows.Next(), "must get next row but couldn't")
 	readCols := make([]interface{}, len(cols))
 	writeCols := make([]string, len(cols))
 	for i, _ := range writeCols {
 		readCols[i] = &writeCols[i]
 	}
 	rows.Scan(readCols...)
-	//assert.Tf(t, len(rows) == 7, "must get 7 rows but got %d", len(rows))
+	//assert.True(t, len(rows) == 7, "must get 7 rows but got %d", len(rows))
 }
 
 func TestSimpleRowSelect(t *testing.T) {
@@ -251,8 +251,8 @@ func TestSimpleRowSelect(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
-			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
-			assert.Tf(t, data.Title == "article1", "%v", data)
+			assert.True(t, data.Deleted == false, "Not deleted? %v", data)
+			assert.True(t, data.Title == "article1", "%v", data)
 		},
 		RowData: &data,
 	})

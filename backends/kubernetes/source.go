@@ -11,10 +11,10 @@ import (
 
 	u "github.com/araddon/gou"
 
-	"k8s.io/client-go/1.4/kubernetes"
-	"k8s.io/client-go/1.4/pkg/api"
-	"k8s.io/client-go/1.4/rest"
-	"k8s.io/client-go/1.4/tools/clientcmd"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/pkg/api/v1"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/rel"
@@ -228,7 +228,7 @@ func (m *Source) loadSchema() error {
 
 func (m *Source) describeServices(c *kubernetes.Clientset) error {
 
-	services, err := c.Core().Services("").List(api.ListOptions{})
+	services, err := c.Core().Services("").List(v1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("Could not get kubernetes services %v", err)
 	}
@@ -276,7 +276,7 @@ func (m *Source) describeServices(c *kubernetes.Clientset) error {
 
 func (m *Source) describeNodes(c *kubernetes.Clientset) error {
 
-	nodes, err := c.Core().Nodes().List(api.ListOptions{})
+	nodes, err := c.Core().Nodes().List(v1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("Could not get kubernetes nodes %v", err)
 	}
@@ -326,7 +326,7 @@ func (m *Source) describeNodes(c *kubernetes.Clientset) error {
 
 func (m *Source) describePods(c *kubernetes.Clientset) error {
 
-	pods, err := c.Core().Pods("").List(api.ListOptions{})
+	pods, err := c.Core().Pods("").List(v1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("Could not get kubernetes pods %v", err)
 	}

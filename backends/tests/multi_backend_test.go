@@ -8,8 +8,8 @@ import (
 
 	"github.com/araddon/dateparse"
 	u "github.com/araddon/gou"
-	"github.com/bmizerany/assert"
 	"github.com/jmoiron/sqlx"
+	"github.com/stretchr/testify/assert"
 	"gopkg.in/mgo.v2"
 
 	_ "github.com/dataux/dataux/backends/elasticsearch"
@@ -113,15 +113,15 @@ func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 	testmysql.RunTestServer(t)
 	dbName := "datauxtest"
 	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/"+dbName)
-	assert.Tf(t, err == nil, "%v", err)
+	assert.True(t, err == nil, "%v", err)
 	defer dbx.Close()
 	//u.Debugf("%v", testSpec.Sql)
 	rows, err := dbx.Queryx(testSpec.Sql)
-	assert.Tf(t, err == nil, "%v", err)
+	assert.True(t, err == nil, "%v", err)
 	defer rows.Close()
 
 	cols, err := rows.Columns()
-	assert.Tf(t, err == nil, "%v", err)
+	assert.True(t, err == nil, "%v", err)
 	if len(testSpec.Cols) > 0 {
 		for _, expectCol := range testSpec.Cols {
 			found := false
@@ -130,7 +130,7 @@ func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 					found = true
 				}
 			}
-			assert.Tf(t, found, "Should have found column: %v", expectCol)
+			assert.True(t, found, "Should have found column: %v", expectCol)
 		}
 	}
 	rowCt := 0
@@ -138,7 +138,7 @@ func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 		if testSpec.RowData != nil {
 			err = rows.StructScan(testSpec.RowData)
 			//u.Infof("rowVals: %#v", testSpec.RowData)
-			assert.Tf(t, err == nil, "%v", err)
+			assert.True(t, err == nil, "%v", err)
 			rowCt++
 			if testSpec.ValidateRowData != nil {
 				testSpec.ValidateRowData()
@@ -148,8 +148,8 @@ func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 			// rowVals is an []interface{} of all of the column results
 			rowVals, err := rows.SliceScan()
 			//u.Infof("rowVals: %#v", rowVals)
-			assert.Tf(t, err == nil, "%v", err)
-			assert.Tf(t, len(rowVals) == testSpec.ExpectColCt, "wanted cols but got %v", len(rowVals))
+			assert.True(t, err == nil, "%v", err)
+			assert.True(t, len(rowVals) == testSpec.ExpectColCt, "wanted cols but got %v", len(rowVals))
 			rowCt++
 			if testSpec.ValidateRow != nil {
 				testSpec.ValidateRow(rowVals)
@@ -158,10 +158,10 @@ func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 
 	}
 	if testSpec.ExpectRowCt >= 0 {
-		assert.Tf(t, rowCt == testSpec.ExpectRowCt, "expected %v rows but got %v", testSpec.ExpectRowCt, rowCt)
+		assert.True(t, rowCt == testSpec.ExpectRowCt, "expected %v rows but got %v", testSpec.ExpectRowCt, rowCt)
 	}
 
-	assert.T(t, rows.Err() == nil)
+	assert.True(t, rows.Err() == nil)
 	//u.Infof("rows: %v", cols)
 }
 
@@ -188,9 +188,9 @@ func TestMongoToEsJoin(t *testing.T) {
 			switch data.Actor {
 			case "araddon":
 				u.Debugf("araddon:  %#v", data)
-				assert.Tf(t, data.Repo == "qlparser" || data.Repo == "dateparse", "%#v", data)
+				assert.True(t, data.Repo == "qlparser" || data.Repo == "dateparse", "%#v", data)
 			default:
-				//assert.Tf(t, false, "Should not have found this column: %#v", data)
+				//assert.True(t, false, "Should not have found this column: %#v", data)
 				u.Debugf("%#v", data)
 			}
 

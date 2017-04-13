@@ -7,9 +7,9 @@ import (
 	"time"
 
 	u "github.com/araddon/gou"
-	"github.com/bmizerany/assert"
 	"github.com/dataux/dataux/models"
 	"github.com/dataux/dataux/vendored/mixer/client"
+	"github.com/stretchr/testify/assert"
 )
 
 var (
@@ -114,13 +114,13 @@ type testListenerWraper struct {
 func newTestServer(t *testing.T) *testListenerWraper {
 	f := func() {
 		Conf, err := models.LoadConfig(testConfigData)
-		assert.Tf(t, err == nil, "must load config without err: %v", err)
+		assert.True(t, err == nil, "must load config without err: %v", err)
 
 		u.Debugf("conf: %+v", Conf.Frontends[0])
 		myl, err := newMysqlListener(Conf.Frontends[0], Conf, nil)
-		assert.Tf(t, err == nil, "must create listener without err: %v", err)
+		assert.True(t, err == nil, "must create listener without err: %v", err)
 		handler, err := NewHandlerSharded(Conf)
-		assert.Tf(t, err == nil, "must create handler without err: %v", err)
+		assert.True(t, err == nil, "must create handler without err: %v", err)
 		testHandler = handler.(*HandlerSharded)
 
 		ServerCtx := models.NewServerCtx(Conf)
@@ -146,7 +146,7 @@ func newTestDB(t *testing.T) *client.DB {
 		var err error
 		testDB, err = client.Open("127.0.0.1:4000", "root", "", "mixer")
 
-		assert.Tf(t, err == nil, "must not err: %v", err)
+		assert.True(t, err == nil, "must not err: %v", err)
 
 		testDB.SetMaxIdleConnNum(4)
 	}

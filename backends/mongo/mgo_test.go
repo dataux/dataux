@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	u "github.com/araddon/gou"
-	"github.com/bmizerany/assert"
 	"github.com/go-sql-driver/mysql"
+	"github.com/stretchr/testify/assert"
 	"gopkg.in/mgo.v2"
 
 	"github.com/araddon/qlbridge/datasource"
@@ -70,13 +70,13 @@ func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
 func TestInvalidQuery(t *testing.T) {
 	RunTestServer(t)
 	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
-	assert.T(t, err == nil)
+	assert.True(t, err == nil)
 	// It is parsing the SQL on server side (proxy)
 	//  not in client, so hence that is what this is testing, making sure
 	//  proxy responds gracefully with an error
 	rows, err := db.Query("select `stuff`, NOTAKEYWORD github_fork NOTWHERE `description` LIKE \"database\";")
-	assert.Tf(t, err != nil, "%v", err)
-	assert.Tf(t, rows == nil, "must not get rows")
+	assert.True(t, err != nil, "%v", err)
+	assert.True(t, rows == nil, "must not get rows")
 }
 
 func TestSessionVarQueries(t *testing.T) {
@@ -92,11 +92,11 @@ func TestSessionVarQueries(t *testing.T) {
 		RowData:     &data,
 		ValidateRowData: func() {
 			u.Infof("%v  T:%T", data, data.Max)
-			assert.T(t, data.Max == 4194304)
+			assert.True(t, data.Max == 4194304)
 			found = true
 		},
 	})
-	assert.Tf(t, found, "Must have found @@vaars")
+	assert.True(t, found, "Must have found @@vaars")
 
 	found = false
 	validateQuerySpec(t, tu.QuerySpec{
@@ -109,25 +109,25 @@ func TestSessionVarQueries(t *testing.T) {
 		ExpectColCt: 3,
 		ValidateRow: func(row []interface{}) {
 			u.Infof("%#v", row)
-			assert.T(t, len(row) == 3)
+			assert.True(t, len(row) == 3)
 			found = true
 		},
 	})
-	assert.Tf(t, found, "Must have found @@vaars")
+	assert.True(t, found, "Must have found @@vaars")
 
 	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
-	assert.T(t, err == nil)
+	assert.True(t, err == nil)
 
 	result, err := db.Exec(`SET @my_test_var = "hello world";`)
-	assert.Tf(t, err == nil, "got error on SET? %v", err)
-	assert.Tf(t, result != nil, "must get result")
+	assert.True(t, err == nil, "got error on SET? %v", err)
+	assert.True(t, result != nil, "must get result")
 
 	rows, err := db.Query("select @my_test_var;")
-	assert.Tf(t, err == nil, "%v", err)
-	assert.T(t, rows.Next(), "Must have a row")
+	assert.True(t, err == nil, "%v", err)
+	assert.True(t, rows.Next(), "Must have a row")
 	hw := ""
 	err = rows.Scan(&hw)
-	assert.T(t, hw == "hello world", "Should have found @var?")
+	assert.True(t, hw == "hello world", "Should have found @var?")
 }
 
 func TestShowTables(t *testing.T) {
@@ -141,14 +141,14 @@ func TestShowTables(t *testing.T) {
 		ExpectRowCt: -1,
 		ValidateRowData: func() {
 			u.Infof("%v", data)
-			assert.Tf(t, data.Table != "", "%v", data)
+			assert.True(t, data.Table != "", "%v", data)
 			if data.Table == "article" {
 				found = true
 			}
 		},
 		RowData: &data,
 	})
-	assert.Tf(t, found, "Must have found article table with show")
+	assert.True(t, found, "Must have found article table with show")
 
 	data2 := struct {
 		Table  string `db:"Table"`
@@ -160,15 +160,15 @@ func TestShowTables(t *testing.T) {
 		ExpectRowCt: -1,
 		ValidateRowData: func() {
 			u.Infof("\n%v", data2)
-			assert.Tf(t, data2.Table != "", "%v", data2)
+			assert.True(t, data2.Table != "", "%v", data2)
 			if data2.Table == "article" {
 				found = true
 			}
-			assert.Tf(t, len(data2.Create) > 10, "has create statement")
+			assert.True(t, len(data2.Create) > 10, "has create statement")
 		},
 		RowData: &data2,
 	})
-	assert.Tf(t, found, "Must have found article table with show")
+	assert.True(t, found, "Must have found article table with show")
 }
 func TestShowColumns(t *testing.T) {
 	//[]string{"Field", "Type", "Collation", "Null", "Key", "Default", "Extra", "Privileges", "Comment"}
@@ -189,31 +189,31 @@ func TestShowColumns(t *testing.T) {
 		ExpectRowCt: 12,
 		ValidateRowData: func() {
 			u.Infof("%#v", data)
-			assert.Tf(t, data.Field != "", "%v", data)
+			assert.True(t, data.Field != "", "%v", data)
 			switch data.Field {
 			case "embedded":
-				assert.Tf(t, data.Type == "text", "wanted text got %v", data.Type)
+				assert.True(t, data.Type == "text", "wanted text got %v", data.Type)
 				describedCt++
 			case "author":
-				assert.Tf(t, data.Type == "varchar(255)", "wanted varchar(255) got %q", data.Type)
+				assert.True(t, data.Type == "varchar(255)", "wanted varchar(255) got %q", data.Type)
 				describedCt++
 			case "created":
-				assert.Tf(t, data.Type == "datetime", "Wanted datetime, got %q")
+				assert.True(t, data.Type == "datetime", "Wanted datetime, got %q")
 				describedCt++
 			case "category":
-				assert.Tf(t, data.Type == "text", `wanted "text" got %q`, data.Type)
+				assert.True(t, data.Type == "text", `wanted "text" got %q`, data.Type)
 				describedCt++
 			case "body":
-				assert.Tf(t, data.Type == "text", "wanted text got %q")
+				assert.True(t, data.Type == "text", "wanted text got %q")
 				describedCt++
 			case "deleted":
-				assert.Tf(t, data.Type == "tinyint", "Wanted tinyint got? %q", data.Type)
+				assert.True(t, data.Type == "tinyint", "Wanted tinyint got? %q", data.Type)
 				describedCt++
 			}
 		},
 		RowData: &data,
 	})
-	assert.Tf(t, describedCt == 6, "Should have found/described 6 but was %v", describedCt)
+	assert.True(t, describedCt == 6, "Should have found/described 6 but was %v", describedCt)
 }
 
 func TestDescribeTable(t *testing.T) {
@@ -231,49 +231,49 @@ func TestDescribeTable(t *testing.T) {
 		ExpectRowCt: 12,
 		ValidateRowData: func() {
 			//u.Infof("%#v", data)
-			assert.Tf(t, data.Field != "", "%v", data)
+			assert.True(t, data.Field != "", "%v", data)
 			switch data.Field {
 			case "embedded":
-				assert.Tf(t, data.Type == "text", "%#v", data)
+				assert.True(t, data.Type == "text", "%#v", data)
 				describedCt++
 			case "author":
-				assert.T(t, data.Type == "varchar(255)")
+				assert.True(t, data.Type == "varchar(255)")
 				describedCt++
 			case "created":
-				assert.T(t, data.Type == "datetime")
+				assert.True(t, data.Type == "datetime")
 				describedCt++
 			case "category":
-				assert.T(t, data.Type == "text")
+				assert.True(t, data.Type == "text")
 				describedCt++
 			case "body":
-				assert.T(t, data.Type == "text")
+				assert.True(t, data.Type == "text")
 				describedCt++
 			case "deleted":
-				assert.T(t, data.Type == "tinyint", "type?", data.Type)
+				assert.True(t, data.Type == "tinyint", "type?", data.Type)
 				describedCt++
 			}
 		},
 		RowData: &data,
 	})
-	assert.Tf(t, describedCt == 6, "Should have found/described 6 but was %v", describedCt)
+	assert.True(t, describedCt == 6, "Should have found/described 6 but was %v", describedCt)
 }
 
 func TestSelectStar(t *testing.T) {
 	RunTestServer(t)
 	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
-	assert.T(t, err == nil)
+	assert.True(t, err == nil)
 	rows, err := db.Query("select * from article;")
-	assert.Tf(t, err == nil, "did not want err but got %v", err)
+	assert.True(t, err == nil, "did not want err but got %v", err)
 	cols, _ := rows.Columns()
-	assert.Tf(t, len(cols) == 12, "want 12 cols but got %v", cols)
-	assert.Tf(t, rows.Next(), "must get next row but couldn't")
+	assert.True(t, len(cols) == 12, "want 12 cols but got %v", cols)
+	assert.True(t, rows.Next(), "must get next row but couldn't")
 	readCols := make([]interface{}, len(cols))
 	writeCols := make([]string, len(cols))
 	for i, _ := range writeCols {
 		readCols[i] = &writeCols[i]
 	}
 	rows.Scan(readCols...)
-	//assert.Tf(t, len(rows) == 12, "must get 12 rows but got %d", len(rows))
+	//assert.True(t, len(rows) == 12, "must get 12 rows but got %d", len(rows))
 }
 func TestSelectCountStar(t *testing.T) {
 	data := struct {
@@ -284,7 +284,7 @@ func TestSelectCountStar(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			u.Infof("%#v", data.Count)
-			//assert.Tf(t, data.Count == 4, "Not count right?? %v", data)
+			//assert.True(t, data.Count == 4, "Not count right?? %v", data)
 		},
 		RowData: &data,
 	})
@@ -302,7 +302,7 @@ func TestSelectDistributed(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			u.Infof("%#v", data.Avg)
-			assert.Tf(t, data.Avg == 8.75, "Not avg right?? %v", data)
+			assert.True(t, data.Avg == 8.75, "Not avg right?? %v", data)
 		},
 		RowData: &data,
 	})
@@ -325,15 +325,15 @@ func TestSelectDistributed(t *testing.T) {
 			switch data2.Author {
 			case "bjorn":
 				found = true
-				assert.Tf(t, data2.Ct == 2, "Not ct right?? %v", data2)
+				assert.True(t, data2.Ct == 2, "Not ct right?? %v", data2)
 			case "aaron":
-				assert.Tf(t, data2.Ct == 1, "Not ct right?? %v", data2)
+				assert.True(t, data2.Ct == 1, "Not ct right?? %v", data2)
 			}
 			u.Infof("%#v", data2)
 		},
 		RowData: &data2,
 	})
-	assert.T(t, found == true)
+	assert.True(t, found == true)
 }
 
 func TestSelectAggAvg(t *testing.T) {
@@ -347,7 +347,7 @@ func TestSelectAggAvg(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			u.Infof("%#v", data.Avg)
-			assert.Tf(t, data.Avg == 8.75, "Not avg right?? %v", data)
+			assert.True(t, data.Avg == 8.75, "Not avg right?? %v", data)
 		},
 		RowData: &data,
 	})
@@ -357,7 +357,7 @@ func TestSelectAggAvg(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			u.Infof("%#v", data.Avg)
-			assert.Tf(t, data.Avg == 8.75, "Not avg right?? %v", data)
+			assert.True(t, data.Avg == 8.75, "Not avg right?? %v", data)
 		},
 		RowData: &data,
 	})
@@ -375,8 +375,8 @@ func TestSimpleRowSelect(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
-			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
-			assert.Tf(t, data.Title == "article1", "%v", data)
+			assert.True(t, data.Deleted == false, "Not deleted? %v", data)
+			assert.True(t, data.Title == "article1", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -395,8 +395,8 @@ func TestSimpleRowSelect(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Infof("%v", dataComplex)
-			assert.Tf(t, dataComplex.Deleted == false, "Not deleted? %v", dataComplex)
-			assert.Tf(t, dataComplex.Title == "article1", "%v", dataComplex)
+			assert.True(t, dataComplex.Deleted == false, "Not deleted? %v", dataComplex)
+			assert.True(t, dataComplex.Title == "article1", "%v", dataComplex)
 		},
 		RowData: &dataComplex,
 	})
@@ -406,8 +406,8 @@ func TestSimpleRowSelect(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
-			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
-			assert.Tf(t, data.Title == "article1", "%v", data)
+			assert.True(t, data.Deleted == false, "Not deleted? %v", data)
+			assert.True(t, data.Title == "article1", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -416,8 +416,8 @@ func TestSimpleRowSelect(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
-			assert.Tf(t, data.Deleted == false, "Not deleted? %v", data)
-			assert.Tf(t, data.Title == "article1", "%v", data)
+			assert.True(t, data.Deleted == false, "Not deleted? %v", data)
+			assert.True(t, data.Title == "article1", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -425,7 +425,7 @@ func TestSimpleRowSelect(t *testing.T) {
 		Sql:         "select title, count,deleted from article WHERE count = 22;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			assert.Tf(t, data.Title == "article1", "%v", data)
+			assert.True(t, data.Title == "article1", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -470,7 +470,7 @@ func TestSelectAggsSimple(t *testing.T) {
 			//u.Debugf("%v", data)
 			switch data.Author {
 			case "bjorn":
-				assert.Tf(t, data.Ct == 2, "%v", data)
+				assert.True(t, data.Ct == 2, "%v", data)
 			}
 		},
 		RowData: &data,
@@ -489,9 +489,9 @@ func TestSelectAggsSimple(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			//u.Debugf("%v", data2)
-			assert.Tf(t, data2.Card == 36, "%v", data2)
-			assert.Tf(t, data2.Oldest == 904810, "%v", data2)
-			assert.Tf(t, data2.Ct == 47, "%v", data2) // 47 docs had database
+			assert.True(t, data2.Card == 36, "%v", data2)
+			assert.True(t, data2.Oldest == 904810, "%v", data2)
+			assert.True(t, data2.Ct == 47, "%v", data2) // 47 docs had database
 		},
 		RowData: &data2,
 	})
@@ -508,7 +508,7 @@ func TestSelectAggsGroupBy(t *testing.T) {
 		ExpectRowCt: 0,
 		ValidateRowData: func() {
 			u.Infof("%v", data)
-			//assert.Tf(t, data.Actor == "araddon", "%v", data)
+			//assert.True(t, data.Actor == "araddon", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -524,7 +524,7 @@ func TestSelectAggsGroupBy(t *testing.T) {
 		ExpectRowCt: 10,
 		ValidateRowData: func() {
 			u.Infof("%v", data2)
-			//assert.Tf(t, data2.Actor == "araddon", "%v", data2)
+			//assert.True(t, data2.Actor == "araddon", "%v", data2)
 		},
 		RowData: &data2,
 	})
@@ -544,8 +544,8 @@ func TestSelectWhereEqual(t *testing.T) {
 			ExpectRowCt: 1,
 			ValidateRowData: func() {
 				//u.Infof("%v", data)
-				assert.Tf(t, data.Title != "", "%v", data)
-				//assert.Tf(t, data.Language == "Go", "%v", data)
+				assert.True(t, data.Title != "", "%v", data)
+				//assert.True(t, data.Language == "Go", "%v", data)
 			},
 			RowData: &data,
 		})
@@ -558,9 +558,9 @@ func TestSelectWhereEqual(t *testing.T) {
 					ExpectRowCt: 20,
 					ValidateRowData: func() {
 						//u.Infof("%v", data)
-						assert.Tf(t, data.Language == "Go", "%v", data)
-						assert.Tf(t, data.Stars > 1000, "must have filterd by forks: %v", data)
-						assert.Tf(t, data.Actor != "", "%v", data)
+						assert.True(t, data.Language == "Go", "%v", data)
+						assert.True(t, data.Stars > 1000, "must have filterd by forks: %v", data)
+						assert.True(t, data.Actor != "", "%v", data)
 					},
 					RowData: &data,
 				})
@@ -579,9 +579,9 @@ func TestSelectWhereEqual(t *testing.T) {
 				ExpectRowCt: 20,
 				ValidateRowData: func() {
 					//u.Infof("%v", data)
-					assert.Tf(t, data.Language == "Go", "%v", data)
-					assert.Tf(t, data.Stars > 1000, "must have filterd by forks: %v", data)
-					assert.Tf(t, data.Actor != "", "%v", data)
+					assert.True(t, data.Language == "Go", "%v", data)
+					assert.True(t, data.Stars > 1000, "must have filterd by forks: %v", data)
+					assert.True(t, data.Actor != "", "%v", data)
 				},
 				RowData: &data,
 			})
@@ -597,7 +597,7 @@ func TestSelectWhereLike(t *testing.T) {
 		Sql:         `SELECT title, count as ct from article WHERE title like "list%"`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			assert.Tf(t, data.Title == "listicle1", "%v", data)
+			assert.True(t, data.Title == "listicle1", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -605,7 +605,7 @@ func TestSelectWhereLike(t *testing.T) {
 		Sql:         `SELECT title, count as ct from article WHERE title like "%stic%"`,
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			assert.Tf(t, data.Title == "listicle1", "%v", data)
+			assert.True(t, data.Title == "listicle1", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -623,7 +623,7 @@ func TestSelectWhereIn(t *testing.T) {
 		ExpectRowCt: 2,
 		ValidateRowData: func() {
 			//u.Debugf("Updated: %v", data.Updated.Time)
-			assert.Tf(t, data.Title != "", "%v", data)
+			assert.True(t, data.Title != "", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -639,7 +639,7 @@ func TestSelectWhereExists(t *testing.T) {
 		Sql:         `select title, count, deleted from article WHERE exists(title);`,
 		ExpectRowCt: 4,
 		ValidateRowData: func() {
-			assert.Tf(t, data.Title != "", "%v", data)
+			assert.True(t, data.Title != "", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -664,9 +664,9 @@ func TestSelectWhereBetween(t *testing.T) {
 			//u.Debugf("%#v", data)
 			switch data.Title {
 			case "article1":
-				assert.Tf(t, data.Count == 22, "%v", data)
+				assert.True(t, data.Count == 22, "%v", data)
 			case "listicle1":
-				assert.Tf(t, data.Count == 7, "%v", data)
+				assert.True(t, data.Count == 7, "%v", data)
 			default:
 				t.Errorf("Should not be in results: %#v", data)
 			}
@@ -682,9 +682,9 @@ func TestSelectWhereBetween(t *testing.T) {
 			//u.Debugf("%#v", data)
 			switch data.Title {
 			case "qarticle2":
-				assert.Tf(t, data.Count == 2, "%v", data)
+				assert.True(t, data.Count == 2, "%v", data)
 			case "zarticle3":
-				assert.Tf(t, data.Count == 55, "%v", data)
+				assert.True(t, data.Count == 55, "%v", data)
 			default:
 				t.Errorf("Should not be in results: %#v", data)
 			}
@@ -701,9 +701,9 @@ func TestSelectWhereBetween(t *testing.T) {
 	// 		u.Debugf("%#v", data)
 	// 		switch data.Title {
 	// 		case "article1":
-	// 			assert.Tf(t, data.Count == 22, "%v", data)
+	// 			assert.True(t, data.Count == 22, "%v", data)
 	// 		case "listicle1":
-	// 			assert.Tf(t, data.Count == 7, "%v", data)
+	// 			assert.True(t, data.Count == 7, "%v", data)
 	// 		default:
 	// 			t.Errorf("Should not be in results: %#v", data)
 	// 		}
@@ -721,8 +721,8 @@ func TestSelectOrderBy(t *testing.T) {
 		Sql:         "select title, count64 AS ct FROM article ORDER BY count64 DESC LIMIT 1;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			assert.Tf(t, data.Title == "zarticle3", "%v", data)
-			assert.Tf(t, data.Ct == 100, "%v", data)
+			assert.True(t, data.Title == "zarticle3", "%v", data)
+			assert.True(t, data.Ct == 100, "%v", data)
 		},
 		RowData: &data,
 	})
@@ -730,8 +730,8 @@ func TestSelectOrderBy(t *testing.T) {
 		Sql:         "select title, count64 AS ct FROM article ORDER BY count64 ASC LIMIT 1;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			assert.Tf(t, data.Title == "listicle1", "%v", data)
-			assert.Tf(t, data.Ct == 12, "%v", data)
+			assert.True(t, data.Title == "listicle1", "%v", data)
+			assert.True(t, data.Ct == 12, "%v", data)
 		},
 		RowData: &data,
 	})
@@ -757,15 +757,15 @@ func TestMongoToMongoJoin(t *testing.T) {
 		ValidateRowData: func() {
 			switch data.Title {
 			case "listicle1":
-				assert.Tf(t, data.Id == "user789", "%#v", data)
+				assert.True(t, data.Id == "user789", "%#v", data)
 			case "article1":
-				assert.Tf(t, data.Id == "user123", "%#v", data)
+				assert.True(t, data.Id == "user123", "%#v", data)
 			case "qarticle2":
-				assert.Tf(t, data.Id == "user456", "%#v", data)
+				assert.True(t, data.Id == "user456", "%#v", data)
 			case "zarticle3":
-				assert.Tf(t, data.Id == "user789", "%#v", data)
+				assert.True(t, data.Id == "user789", "%#v", data)
 			default:
-				assert.Tf(t, false, "Should not have found this column: %#v", data)
+				assert.True(t, false, "Should not have found this column: %#v", data)
 			}
 
 		},

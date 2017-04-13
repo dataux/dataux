@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	u "github.com/araddon/gou"
-	"github.com/bmizerany/assert"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
@@ -110,5 +110,5 @@ func TestSqlCreate(t *testing.T) {
 			return
 		}
 	}
-	assert.Tf(t, expected == createStmt, "%s", createStmt)
+	assert.True(t, expected == createStmt, "%s", createStmt)
 }

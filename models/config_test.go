@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	u "github.com/araddon/gou"
-	"github.com/bmizerany/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func init() {
@@ -78,7 +78,7 @@ nodes : [
 `
 
 	conf, err := LoadConfig(configData)
-	assert.Tf(t, err == nil && conf != nil, "Must not error on parse of config: %v", err)
+	assert.True(t, err == nil && conf != nil, "Must not error on parse of config: %v", err)
 
-	assert.T(t, conf.LogLevel == "debug")
+	assert.True(t, conf.LogLevel == "debug")
 }

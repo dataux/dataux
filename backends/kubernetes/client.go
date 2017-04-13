@@ -10,9 +10,8 @@ import (
 
 	"golang.org/x/net/context"
 	"google.golang.org/api/iterator"
-	"k8s.io/client-go/1.4/pkg/api"
-	"k8s.io/client-go/1.4/pkg/api/unversioned"
-	v1 "k8s.io/client-go/1.4/pkg/api/v1"
+	"k8s.io/client-go/pkg/api/unversioned"
+	"k8s.io/client-go/pkg/api/v1"
 )
 
 // Objects returns an iterator over the objects in the bucket that match the Query q.
@@ -66,7 +65,7 @@ func (it *ObjectIterator) fetch(pageSize int, pageToken string) (string, error) 
 
 	switch it.kind {
 	case "pod", "pods":
-		pods, err := it.query.k.Core().Pods("").List(api.ListOptions{})
+		pods, err := it.query.k.Core().Pods("").List(v1.ListOptions{})
 		if err != nil {
 			return "", fmt.Errorf("Could not get kubernetes pods %v", err)
 		}
@@ -75,7 +74,7 @@ func (it *ObjectIterator) fetch(pageSize int, pageToken string) (string, error) 
 			it.items = append(it.items, &Object{&pod, podValues(&pod)})
 		}
 	case "service", "services":
-		services, err := it.query.k.Core().Services("").List(api.ListOptions{})
+		services, err := it.query.k.Core().Services("").List(v1.ListOptions{})
 		if err != nil {
 			return "", fmt.Errorf("Could not get kubernetes services %v", err)
 		}
@@ -84,7 +83,7 @@ func (it *ObjectIterator) fetch(pageSize int, pageToken string) (string, error) 
 			it.items = append(it.items, &Object{&svc, serviceValues(&svc)})
 		}
 	case "node", "nodes":
-		nodes, err := it.query.k.Core().Nodes().List(api.ListOptions{})
+		nodes, err := it.query.k.Core().Nodes().List(v1.ListOptions{})
 		if err != nil {
 			return "", fmt.Errorf("Could not get kubernetes nodes %v", err)
 		}

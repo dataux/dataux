@@ -7,7 +7,7 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/dataux/dataux/vendored/mixer/mysql"
-	//"github.com/bmizerany/assert"
+	//"github.com/stretchr/testify/assert"
 )
 
 var _ = u.EMPTY

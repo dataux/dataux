@@ -10,7 +10,7 @@ import (
 
 	u "github.com/araddon/gou"
 	"golang.org/x/net/context"
-	"k8s.io/client-go/1.4/kubernetes"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
