@@ -73,6 +73,7 @@ schemas : [
       "google_ds_test", 
       "cass", 
       "bt",
+      "bigquery",
       "kube",
       "lytics"
     ]
@@ -169,6 +170,11 @@ sources : [
       instance  "bigtable0"
       # project will be loaded from ENV   $GCEPROJECT
     }
+  }
+
+  {
+    name : bigquery
+    type : bigquery
   }
 
   {

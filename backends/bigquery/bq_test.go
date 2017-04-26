@@ -10,18 +10,16 @@ import (
 	"testing"
 	"time"
 
-	"cloud.google.com/go/bigtable"
 	u "github.com/araddon/gou"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/net/context"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/schema"
 
-	btbe "github.com/dataux/dataux/backends/bigtable"
+	//bqbe "github.com/dataux/dataux/backends/bigquery"
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
 	"github.com/dataux/dataux/planner"
 	tu "github.com/dataux/dataux/testutil"
@@ -44,46 +42,6 @@ func init() {
 		panic("Must have $GCEPROJECT env")
 	}
 	tu.Setup()
-}
-
-var testTables = []string{`
--- DROP TABLE IF EXISTS article;
-CREATE TABLE IF NOT EXISTS article (
-  title varchar,
-  author varchar,
-  count int,
-  count64 bigint,
-  category set<text>,
-  deleted boolean,
-  created timestamp,
-  updated timestamp,
-  f double,
-  embedded blob,
-  body blob,
-  PRIMARY KEY (title)
-);`,
-	`
-CREATE TABLE IF NOT EXISTS user (
-  id varchar,
-  name varchar,
-  deleted boolean,
-  roles set<text>,
-  created timestamp,
-  updated timestamp,
-  PRIMARY KEY (id)
-);`, `
--- Events Table
-CREATE TABLE IF NOT EXISTS event (
-  url varchar,
-  ts timestamp,
-  date text,
-  jsondata text,
-  PRIMARY KEY ((date, url), ts)
-);
-`,
-	`truncate event`,
-	`truncate user`,
-	`truncate article`,
 }
 
 func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
@@ -115,71 +73,15 @@ func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
 func loadTestData(t *testing.T) {
 	loadTestDataOnce.Do(func() {
 
-		var btconf *schema.ConfigSource
+		var bqconf *schema.ConfigSource
 		for _, sc := range testmysql.Conf.Sources {
-			if sc.SourceType == "bigtable" {
-				btconf = sc
+			if sc.SourceType == "bigquery" {
+				bqconf = sc
 			}
 		}
-		if btconf == nil {
-			panic("must have bigtable conf")
+		if bqconf == nil {
+			panic("must have bigquery conf")
 		}
-		//u.Debugf("loading bigtable test data %#v", btconf)
-
-		btInstance = btconf.Settings.String("instance")
-		ctx := context.Background()
-
-		ac, err := bigtable.NewAdminClient(ctx, gceProject, btInstance)
-		if err != nil {
-			panic(fmt.Sprintf("admin client required but got err: %v", err))
-		}
-		tables, err := ac.Tables(ctx)
-		if err != nil {
-			panic(fmt.Sprintf("Must be able to get tables %v", err))
-		}
-		foundTbl := false
-		for _, table := range tables {
-			if table == "datauxtest" {
-				foundTbl = true
-			}
-		}
-		if !foundTbl {
-			err = ac.CreateTable(ctx, "datauxtest")
-			if err != nil {
-				panic(fmt.Sprintf("Must be able to create test table %v", err))
-			}
-			for _, cf := range []string{"user", "article", "event"} {
-				err = ac.CreateColumnFamily(ctx, "datauxtest", cf)
-				if err != nil {
-					panic(fmt.Sprintf("Must be able to create test column-family %v", err))
-				}
-			}
-		}
-
-		client, err := bigtable.NewClient(ctx, gceProject, btInstance)
-		if err != nil {
-			panic(fmt.Sprintf("client required but got err: %v", err))
-		}
-
-		tbl := client.Open("datauxtest")
-
-		for _, article := range tu.Articles {
-
-			mut := btbe.Mutation("article", article.Values(), article.ColNames())
-
-			if err := tbl.Apply(ctx, article.Title, mut); err != nil {
-				u.Errorf("Error Applying mutation: %v", err)
-			}
-		}
-
-		for _, user := range tu.Users {
-			mut := btbe.Mutation("user", user.Values(), user.ColNames())
-
-			if err := tbl.Apply(ctx, user.Id, mut); err != nil {
-				u.Errorf("Error Applying mutation: %v", err)
-			}
-		}
-
 	})
 }
 
