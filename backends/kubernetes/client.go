@@ -10,7 +10,8 @@ import (
 
 	"golang.org/x/net/context"
 	"google.golang.org/api/iterator"
-	"k8s.io/client-go/pkg/api/unversioned"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/pkg/api/v1"
 )
 
@@ -65,7 +66,7 @@ func (it *ObjectIterator) fetch(pageSize int, pageToken string) (string, error) 
 
 	switch it.kind {
 	case "pod", "pods":
-		pods, err := it.query.k.Core().Pods("").List(v1.ListOptions{})
+		pods, err := it.query.k.Core().Pods("").List(metav1.ListOptions{})
 		if err != nil {
 			return "", fmt.Errorf("Could not get kubernetes pods %v", err)
 		}
@@ -74,7 +75,7 @@ func (it *ObjectIterator) fetch(pageSize int, pageToken string) (string, error) 
 			it.items = append(it.items, &Object{&pod, podValues(&pod)})
 		}
 	case "service", "services":
-		services, err := it.query.k.Core().Services("").List(v1.ListOptions{})
+		services, err := it.query.k.Core().Services("").List(metav1.ListOptions{})
 		if err != nil {
 			return "", fmt.Errorf("Could not get kubernetes services %v", err)
 		}
@@ -83,7 +84,7 @@ func (it *ObjectIterator) fetch(pageSize int, pageToken string) (string, error) 
 			it.items = append(it.items, &Object{&svc, serviceValues(&svc)})
 		}
 	case "node", "nodes":
-		nodes, err := it.query.k.Core().Nodes().List(v1.ListOptions{})
+		nodes, err := it.query.k.Core().Nodes().List(metav1.ListOptions{})
 		if err != nil {
 			return "", fmt.Errorf("Could not get kubernetes nodes %v", err)
 		}
@@ -136,7 +137,6 @@ func serviceValues(v *v1.Service) []driver.Value {
 		v.Spec.ClusterIP,
 		v.Spec.Type,
 		v.Spec.ExternalIPs,
-		v.Spec.DeprecatedPublicIPs,
 		v.Spec.SessionAffinity,
 		v.Spec.LoadBalancerIP,
 		v.Spec.LoadBalancerSourceRanges,
@@ -192,7 +192,7 @@ func nodeValues(v *v1.Node) []driver.Value {
 	}...)
 	return vals
 }
-func metadata(p *v1.ObjectMeta) []driver.Value {
+func metadata(p *metav1.ObjectMeta) []driver.Value {
 	/*
 		// http://kubernetes.io/docs/api-reference/v1/definitions/#_v1_objectmeta
 		tbl.AddField(schema.NewFieldBase("name", value.StringType, 256, "string"))
@@ -297,7 +297,7 @@ func nni(v *int64) int64 {
 	}
 	return *v
 }
-func tv(v *unversioned.Time) *time.Time {
+func tv(v *metav1.Time) *time.Time {
 	if v == nil {
 		return nil
 	}

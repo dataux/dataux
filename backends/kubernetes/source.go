@@ -11,8 +11,8 @@ import (
 
 	u "github.com/araddon/gou"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
@@ -228,7 +228,7 @@ func (m *Source) loadSchema() error {
 
 func (m *Source) describeServices(c *kubernetes.Clientset) error {
 
-	services, err := c.Core().Services("").List(v1.ListOptions{})
+	services, err := c.Core().Services("").List(metav1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("Could not get kubernetes services %v", err)
 	}
@@ -258,7 +258,6 @@ func (m *Source) describeServices(c *kubernetes.Clientset) error {
 	tbl.AddField(schema.NewFieldBase("clusterip", value.StringType, 256, "string"))
 	tbl.AddField(schema.NewFieldBase("type", value.StringType, 32, "string"))
 	tbl.AddField(schema.NewFieldBase("externalips", value.JsonType, 32, "json array"))
-	tbl.AddField(schema.NewFieldBase("deprecatedpublicips", value.JsonType, 32, "json array"))
 	tbl.AddField(schema.NewFieldBase("sessionaffinity", value.StringType, 256, "string"))
 	tbl.AddField(schema.NewFieldBase("loadbalancerip", value.StringType, 256, "string"))
 	tbl.AddField(schema.NewFieldBase("loadbalancersourceranges", value.JsonType, 32, "json array"))
@@ -276,7 +275,7 @@ func (m *Source) describeServices(c *kubernetes.Clientset) error {
 
 func (m *Source) describeNodes(c *kubernetes.Clientset) error {
 
-	nodes, err := c.Core().Nodes().List(v1.ListOptions{})
+	nodes, err := c.Core().Nodes().List(metav1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("Could not get kubernetes nodes %v", err)
 	}
@@ -326,7 +325,7 @@ func (m *Source) describeNodes(c *kubernetes.Clientset) error {
 
 func (m *Source) describePods(c *kubernetes.Clientset) error {
 
-	pods, err := c.Core().Pods("").List(v1.ListOptions{})
+	pods, err := c.Core().Pods("").List(metav1.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("Could not get kubernetes pods %v", err)
 	}
