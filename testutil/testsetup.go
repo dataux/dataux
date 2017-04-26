@@ -202,6 +202,10 @@ func ValidateQuerySpec(t testing.TB, testSpec QuerySpec) {
 		}
 		u.Infof("result: %#v", result)
 		if testSpec.ExpectRowCt > -1 {
+			if result == nil {
+				t.Errorf("No results for query")
+				t.FailNow()
+			}
 			affected, err := result.RowsAffected()
 			if err != nil {
 				t.Errorf("Expected no err got %v", err)

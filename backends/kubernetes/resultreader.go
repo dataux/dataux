@@ -8,8 +8,6 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/api/iterator"
 
-	//"k8s.io/client-go/1.4/kubernetes"
-
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/rel"
