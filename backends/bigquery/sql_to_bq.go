@@ -59,7 +59,7 @@ type SqlToBQ struct {
 	needsOrderByPolyFill bool
 }
 
-// NewSqlToBQ create a SQL ast -> BogQuery Rows/Filters/Mutations converter
+// NewSqlToBQ create a SQL ast -> BigQuery Converter
 func NewSqlToBQ(s *Source, t *schema.Table) *SqlToBQ {
 	m := &SqlToBQ{
 		tbl:    t,
@@ -83,8 +83,13 @@ func (m *SqlToBQ) queryRewrite(original *rel.SqlSelect) error {
 
 	req.RewriteAsRawSelect()
 
+	for _, from := range req.From {
+		u.Infof("from: %+v", from)
+		from.Name = fmt.Sprintf("[bigquery-public-data:%s.%s]", m.s.dataset, from.Name)
+	}
+
 	if req.Where != nil {
-		u.Debugf("original vs new: \n%s\n%s", original.Where, req.Where)
+		u.Debugf("WHERE original vs new: \n%s\n%s", original.Where, req.Where)
 		m.whereIdents = make(map[string]bool)
 		w, err := m.walkWhereNode(req.Where.Expr)
 		if err != nil {
@@ -352,7 +357,13 @@ func (m *SqlToBQ) Put(ctx context.Context, key schema.Key, val interface{}) (sch
 
 	goctx := context.Background()
 	// [START bigquery_insert_stream]
-	tu := m.s.client.Dataset(m.s.dataset).Table(m.tbl.Name).Uploader()
+	client, err := bigquery.NewClient(context.Background(), m.s.dataProject)
+	if err != nil {
+		u.Warnf("Could not create bigquery client %v", err)
+		return nil, err
+	}
+
+	tu := client.Dataset(m.s.dataset).Table(m.tbl.Name).Uploader()
 	if err := tu.Put(goctx, row); err != nil {
 		return nil, err
 	}

@@ -175,12 +175,19 @@ sources : [
   {
     name : bigquery
     type : bigquery
+    settings {
+      # project will be loaded from ENV   $GCEPROJECT
+      billing_project : ""
+      data_project : "bigquery-public-data"
+      dataset : "san_francisco"
+    }
   }
 
   {
     name : lytics
     type : lytics
     settings {
+
     }
   }
 

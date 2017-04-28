@@ -46,13 +46,13 @@ func init() {
 // - provides schema info about bigtable table/column-families
 type Source struct {
 	db               string
-	project          string
+	billingProject   string
+	dataProject      string
 	dataset          string
 	tables           []string // Lower cased
 	tablemap         map[string]*schema.Table
 	conf             *schema.ConfigSource
 	schema           *schema.SchemaSource
-	client           *bigquery.Client
 	lastSchemaUpdate time.Time
 	mu               sync.Mutex
 	closed           bool
@@ -81,15 +81,20 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 	m.db = strings.ToLower(ss.Name)
 	m.tablemap = make(map[string]*schema.Table)
 
-	//u.Infof("Init:  %#v", m.schema.Conf)
+	u.Infof("Init:  %#v", m.schema.Conf)
 	if m.schema.Conf == nil {
 		return fmt.Errorf("Schema conf not found")
 	}
 
-	m.project = m.conf.Settings.String("project")
-	if len(m.project) == 0 {
+	m.dataProject = m.conf.Settings.String("data_project")
+	if len(m.dataProject) == 0 {
+		return fmt.Errorf("No 'data_project' for bigquery found in config %v", m.conf.Settings)
+	}
+
+	m.billingProject = m.conf.Settings.String("billing_project")
+	if len(m.billingProject) == 0 {
 		if gceProject != "" {
-			m.project = gceProject
+			m.billingProject = gceProject
 		} else {
 			return fmt.Errorf("No 'project' for bigquery found in config %v", m.conf.Settings)
 		}
@@ -99,13 +104,6 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 	if len(m.dataset) == 0 {
 		return fmt.Errorf("No 'dataset' for bigquery found in config %v", m.conf.Settings)
 	}
-
-	client, err := bigquery.NewClient(context.Background(), m.project)
-	if err != nil {
-		u.Warnf("Could not create bigquery client %v", err)
-		return err
-	}
-	m.client = client
 
 	m.loadSchema()
 	return nil
@@ -127,12 +125,15 @@ func (m *Source) loadSchema() error {
 		}
 	}
 
+	client, err := bigquery.NewClient(context.Background(), m.dataProject)
+	if err != nil {
+		u.Warnf("Could not create bigquery client %v", err)
+		return err
+	}
+
 	tableNames := make([]string, 0)
-
 	ctx := context.Background()
-
-	bqds := m.client.Dataset(m.dataset)
-
+	bqds := client.Dataset(m.dataset)
 	tbliter := bqds.Tables(ctx)
 
 	for {
@@ -144,7 +145,7 @@ func (m *Source) loadSchema() error {
 			u.Warnf("could not read tables %v", err)
 			return err
 		}
-		u.Debugf("table fqname:%s  id:%s", t.FullyQualifiedName(), t.TableID)
+		//u.Debugf("table fqname:%s  id:%s", t.FullyQualifiedName(), t.TableID)
 		table := t.TableID
 		if len(tablesToLoad) > 0 {
 			if _, shouldLoad := tablesToLoad[table]; !shouldLoad {
@@ -157,46 +158,63 @@ func (m *Source) loadSchema() error {
 			u.Warnf("could not read tables %v", err)
 			return err
 		}
-		u.Debugf("%#v", md)
 
 		tableNames = append(tableNames, table)
 
 		tbl := schema.NewTable(strings.ToLower(table))
 		tbl.Parent = t.DatasetID
-		//u.Infof("building tbl schema %v", colFamily)
+		tbl.AddContext("fqname", t.FullyQualifiedName())
 		colNames := make([]string, 0)
 
-		//u.Debugf("tbl:%s cf:%s  key: %v  cellct:%d", table.Name, colFamily, r.Key(), len(ris))
 		for _, fs := range md.Schema {
-			//ts := time.Unix(0, int64(ri.Timestamp)*1e3)
-			u.Debugf("%#v", fs)
+			//u.Debugf("%#v", fs)
 			colName := strings.ToLower(fs.Name)
 
 			var f *schema.Field
-			vt := value.ValueTypeFromStringAll("fake")
-			switch vt {
-			case value.JsonType:
+			/*
+			   const (
+			   	StringFieldType    FieldType = "STRING"
+			   	BytesFieldType     FieldType = "BYTES"
+			   	IntegerFieldType   FieldType = "INTEGER"
+			   	FloatFieldType     FieldType = "FLOAT"
+			   	BooleanFieldType   FieldType = "BOOLEAN"
+			   	TimestampFieldType FieldType = "TIMESTAMP"
+			   	RecordFieldType    FieldType = "RECORD"
+			   	DateFieldType      FieldType = "DATE"
+			   	TimeFieldType      FieldType = "TIME"
+			   	DateTimeFieldType  FieldType = "DATETIME"
+			   )
+			*/
+			switch fs.Type {
+			case bigquery.RecordFieldType:
 				f = schema.NewFieldBase(colName, value.JsonType, 2000, "json")
-			case value.IntType:
-				f = schema.NewFieldBase(colName, value.IntType, 32, "int")
-			case value.NumberType:
-				f = schema.NewFieldBase(colName, value.NumberType, 64, "float64")
-			case value.BoolType:
-				f = schema.NewFieldBase(colName, value.BoolType, 1, "bool")
-			case value.TimeType:
+			case bigquery.BytesFieldType:
+				f = schema.NewFieldBase(colName, value.JsonType, 2000, "json")
+			case bigquery.DateTimeFieldType:
 				f = schema.NewFieldBase(colName, value.TimeType, 64, "datetime")
-			case value.StringType:
+			case bigquery.DateFieldType:
+				f = schema.NewFieldBase(colName, value.TimeType, 64, "datetime")
+			case bigquery.TimeFieldType:
+				f = schema.NewFieldBase(colName, value.TimeType, 64, "datetime")
+			case bigquery.TimestampFieldType:
+				f = schema.NewFieldBase(colName, value.TimeType, 64, "datetime")
+			case bigquery.IntegerFieldType:
+				f = schema.NewFieldBase(colName, value.IntType, 64, "int")
+			case bigquery.FloatFieldType:
+				f = schema.NewFieldBase(colName, value.IntType, 64, "float64")
+			case bigquery.BooleanFieldType:
+				f = schema.NewFieldBase(colName, value.BoolType, 1, "bool")
+			case bigquery.StringFieldType:
 				f = schema.NewFieldBase(colName, value.StringType, 200, "varchar")
 			default:
 				u.Warnf("unknown column type %#v", fs)
 				continue
 			}
-			//u.Debugf("%s = %v vt:%s  %#v", colName, string(ri.Value), vt, f)
+			f.Description = fs.Description
+			f.Extra = fs.Description
 			tbl.AddField(f)
 		}
 
-		//tbl.AddContext("bigtable_table", btt)
-		//u.Infof("%p  caching table %q  cols=%v", m.schema, tbl.Name, colNames)
 		tbl.SetColumns(colNames)
 		m.tablemap[tbl.Name] = tbl
 	}
@@ -223,7 +241,7 @@ func (m *Source) DataSource() schema.Source { return m }
 func (m *Source) Tables() []string          { return m.tables }
 func (m *Source) Table(table string) (*schema.Table, error) {
 
-	//u.Debugf("Table(%q)", table)
+	u.Debugf("Table(%q)", table)
 	if m.schema == nil {
 		u.Warnf("no schema in use?")
 		return nil, fmt.Errorf("no schema in use")

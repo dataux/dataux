@@ -37,7 +37,6 @@ var (
 )
 
 func init() {
-	u.SetupLogging("debug")
 	if gceProject == "" {
 		panic("Must have $GCEPROJECT env")
 	}
@@ -52,12 +51,21 @@ func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
 func RunTestServer(t *testing.T) func() {
 	if !testServicesRunning {
 		testServicesRunning = true
-
-		loadTestData(t)
-
 		planner.GridConf.JobMaker = jobMaker
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
+
+		var bqconf *schema.ConfigSource
+		for _, sc := range testmysql.Conf.Sources {
+			if sc.SourceType == "bigquery" {
+				bqconf = sc
+			}
+		}
+		if bqconf == nil {
+			panic("must have bigquery conf")
+		}
+		bqconf.Settings["billing_project"] = gceProject
+
 		testmysql.RunTestServer(t)
 		quit := make(chan bool)
 		planner.RunWorkerNodes(quit, 2, testmysql.ServerCtx.Reg)
@@ -70,21 +78,6 @@ func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
 	tu.ValidateQuerySpec(t, testSpec)
 }
 
-func loadTestData(t *testing.T) {
-	loadTestDataOnce.Do(func() {
-
-		var bqconf *schema.ConfigSource
-		for _, sc := range testmysql.Conf.Sources {
-			if sc.SourceType == "bigquery" {
-				bqconf = sc
-			}
-		}
-		if bqconf == nil {
-			panic("must have bigquery conf")
-		}
-	})
-}
-
 func TestShowTables(t *testing.T) {
 	// By running testserver, we will load schema/config
 	RunTestServer(t)
@@ -95,17 +88,17 @@ func TestShowTables(t *testing.T) {
 	found := false
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "show tables;",
-		ExpectRowCt: 3,
+		ExpectRowCt: 8,
 		ValidateRowData: func() {
-			//u.Infof("%+v", data)
+			u.Infof("%+v", data)
 			assert.True(t, data.Table != "", "%v", data)
-			if data.Table == strings.ToLower("article") {
+			if data.Table == strings.ToLower("bikeshare_stations") {
 				found = true
 			}
 		},
 		RowData: &data,
 	})
-	assert.True(t, found, "Must have found article")
+	assert.True(t, found, "Must have found bikeshare_stations")
 }
 
 func TestBasic(t *testing.T) {
@@ -124,8 +117,6 @@ func TestBasic(t *testing.T) {
 }
 
 func TestDescribeTable(t *testing.T) {
-
-	loadTestData(t)
 
 	data := struct {
 		Field   string `db:"Field"`
@@ -169,34 +160,36 @@ func TestDescribeTable(t *testing.T) {
 }
 
 func TestSimpleRowSelect(t *testing.T) {
-	loadTestData(t)
+
+	// bigquery-public-data:san_francisco.bikeshare_stations
 	data := struct {
-		Title   string
-		Count   int
-		Deleted bool
-		Author  string
-		// Category []string  // Crap, downside of sqlx/mysql is no complex types
+		StationId        int `db:"station_id"`
+		Name             string
+		Latitude         float64
+		InstallationDate time.Time `db:"installation_date"`
 	}{}
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         "select title, count, deleted, author from article WHERE author = 'aaron' LIMIT 1",
+		Sql:         "select station_id, name, latitude, installation_date from bikeshare_stations WHERE station_id = 6 LIMIT 1",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			//u.Infof("%v", data)
-			assert.True(t, data.Deleted == false, "Not deleted? %v", data)
-			assert.True(t, data.Title == "article1", "%v", data)
+			u.Infof("%v", data)
+			assert.True(t, data.InstallationDate.IsZero() == false, "should have date? %v", data)
+			assert.True(t, data.Name == "San Pedro Square", "%v", data)
+		},
+		RowData: &data,
+	})
+
+	return
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select title, count,deleted from bikeshare_stations WHERE count = 22;",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			assert.True(t, data.Name == "article1", "%v", data)
 		},
 		RowData: &data,
 	})
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         "select title, count,deleted from article WHERE count = 22;",
-		ExpectRowCt: 1,
-		ValidateRowData: func() {
-			assert.True(t, data.Title == "article1", "%v", data)
-		},
-		RowData: &data,
-	})
-	validateQuerySpec(t, tu.QuerySpec{
-		Sql:             "select title, count, deleted from article LIMIT 10;",
+		Sql:             "select title, count, deleted from bikeshare_stations LIMIT 10;",
 		ExpectRowCt:     4,
 		ValidateRowData: func() {},
 		RowData:         &data,

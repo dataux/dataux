@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/bigquery"
+	"cloud.google.com/go/civil"
 	u "github.com/araddon/gou"
 	"golang.org/x/net/context"
 	"google.golang.org/api/iterator"
@@ -123,20 +124,28 @@ func (m *ResultReader) Run() error {
 	queryStart := time.Now()
 
 	// qry := fmt.Sprintf(`SELECT name, count FROM [%s.%s]`, m.Req.s.dataset, tableID)
-	q := m.Req.s.client.Query(sel.String())
+	client, err := bigquery.NewClient(context.Background(), m.Req.s.billingProject)
+	if err != nil {
+		u.Warnf("Could not create bigquery client billing_project=%q  err=%v", m.Req.s.billingProject, err)
+		return err
+	}
+	q := client.Query(sel.String())
 
 	ctx := context.Background()
 	job, err := q.Run(ctx)
 	if err != nil {
+		u.Warnf("could not run %v", err)
 		return err
 	}
 
 	// Wait until async querying is done.
 	status, err := job.Wait(ctx)
 	if err != nil {
+		u.Warnf("could not run %v", err)
 		return err
 	}
 	if err := status.Err(); err != nil {
+		u.Warnf("could not run %v", err)
 		return err
 	}
 
@@ -157,10 +166,13 @@ func (m *ResultReader) Run() error {
 
 			col := cols[i]
 
-			u.Infof("%s %T", col.Name, v)
-
-			vals[i] = v
-			u.Debugf("%-2d col.name=%-10s prop.T %T\tprop.v%v", i, col.Name, v, v)
+			switch v := v.(type) {
+			case civil.Date:
+				vals[i] = v.In(time.UTC)
+			default:
+				vals[i] = v
+			}
+			u.Debugf("%-2d col.name=%-10s prop.T %T\tprop.v=%v", i, col.Name, v, v)
 		}
 
 		//u.Debugf("%s new row ct: %v cols:%v vals:%v", r.Key(), m.Total, colNames, vals)
