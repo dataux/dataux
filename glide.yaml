@@ -1,0 +1,78 @@
+package: github.com/dataux/dataux
+import:
+- package: cloud.google.com/go
+  version: ~0.7.0
+  subpackages:
+  - bigquery
+  - bigtable
+  - civil
+  - datastore
+- package: github.com/araddon/dateparse
+- package: github.com/araddon/gou
+- package: github.com/araddon/qlbridge
+  subpackages:
+  - datasource
+  - datasource/files
+  - exec
+  - expr
+  - expr/builtins
+  - lex
+  - plan
+  - rel
+  - schema
+  - value
+  - vm
+- package: github.com/coreos/etcd
+  version: ~3.2.0-rc.0
+  subpackages:
+  - embed
+- package: github.com/coreos/pkg
+  subpackages:
+  - capnslog
+- package: github.com/go-sql-driver/mysql
+- package: github.com/gocql/gocql
+- package: github.com/hailocab/go-hostpool
+- package: github.com/jmoiron/sqlx
+- package: github.com/kr/pretty
+- package: github.com/lytics/confl
+- package: github.com/lytics/dfa
+- package: github.com/lytics/go-lytics
+- package: github.com/lytics/grid
+  subpackages:
+  - grid.v2
+  - grid.v2/condition
+  - grid.v2/natsunit
+  - grid.v2/ring
+- package: github.com/lytics/metafora
+- package: github.com/sony/sonyflake
+- package: golang.org/x/net
+  subpackages:
+  - context
+- package: golang.org/x/oauth2
+  subpackages:
+  - google
+  - jwt
+- package: google.golang.org/api
+  subpackages:
+  - iterator
+  - option
+- package: gopkg.in/mgo.v2
+  subpackages:
+  - bson
+- package: k8s.io/apimachinery
+  subpackages:
+  - pkg/apis/meta/v1
+- package: k8s.io/client-go
+  version: ~3.0.0-beta.0
+  subpackages:
+  - kubernetes
+  - pkg/api/v1
+  - rest
+  - tools/clientcmd
+testImport:
+- package: github.com/lytics/cloudstorage
+  subpackages:
+  - logging
+- package: github.com/stretchr/testify
+  subpackages:
+  - assert
