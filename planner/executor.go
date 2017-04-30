@@ -30,10 +30,8 @@ func BuildSqlJob(ctx *plan.Context, pg *PlannerGrid) (*ExecutorGrid, error) {
 	u.Debugf("buildsqljob: %T p:%p  %T p:%p", job, job, job.Executor, job.JobExecutor)
 	if pg == nil {
 		u.Warnf("Grid Server Doesn't exist %v", pg)
-	} else if pg.Grid == nil {
+	} else if pg.GridServer == nil {
 		u.Warnf("Grid doens't exist? ")
-	} else if pg.Grid.Nats() == nil {
-		u.Warnf("Grid.Nats() doesnt exist")
 	}
 	//u.Debugf("buildsqljob2: %T  %T", baseJob, baseJob.Executor)
 	task, err := exec.BuildSqlJobPlanned(job.Planner, job, ctx)
@@ -133,10 +131,8 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 		gs := m.GridServer
 		if gs == nil {
 			u.Warnf("Grid Server Doesn't exist %v", gs)
-		} else if gs.Grid == nil {
+		} else if gs.GridServer == nil {
 			u.Warnf("Grid doens't exist? ")
-		} else if gs.Grid.Nats() == nil {
-			u.Warnf("Grid.Nats() doesnt exist  grid: %p", gs.Grid)
 		}
 
 		flow := NewFlow(taskUint)

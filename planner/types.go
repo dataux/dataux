@@ -53,6 +53,7 @@ type Conf struct {
 	SchemaLoader   plan.SchemaLoader
 	SupressRecover bool
 	NodeCt         int
+	Address        string
 	GridName       string
 	Hostname       string
 	EtcdServers    []string
@@ -71,6 +72,7 @@ func (c *Conf) Clone() *Conf {
 		SchemaLoader:   c.SchemaLoader,
 		SupressRecover: c.SupressRecover,
 		NodeCt:         c.NodeCt,
+		Address:        c.Address,
 		GridName:       c.GridName,
 		Hostname:       c.Hostname,
 		EtcdServers:    c.EtcdServers,

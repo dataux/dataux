@@ -9,8 +9,8 @@ import (
 	"time"
 
 	u "github.com/araddon/gou"
-	"github.com/lytics/grid/grid.v2"
-	"github.com/lytics/grid/grid.v2/condition"
+	etcdv3 "github.com/coreos/etcd/clientv3"
+	"github.com/lytics/grid/grid.v3"
 	"github.com/lytics/metafora"
 	"github.com/sony/sonyflake"
 
@@ -26,6 +26,7 @@ var (
 	//  for a real config
 	GridConf = &Conf{
 		GridName:    "dataux",
+		Address:     "127.0.0.1:10015",
 		EtcdServers: strings.Split("http://127.0.0.1:2379", ","),
 		NatsServers: strings.Split("nats://127.0.0.1:4222", ","),
 	}
@@ -83,7 +84,8 @@ func NodeName2(id1, id2 uint64) string {
 type PlannerGrid struct {
 	Conf       *Conf
 	reg        *datasource.Registry
-	Grid       grid.Grid
+	GridServer *grid.Server
+	gridClient *grid.Client
 	started    bool
 	lastTaskId uint64
 }
@@ -106,11 +108,44 @@ func (m *PlannerGrid) RunSqlMaster(completionTask exec.TaskRunner, ns *SourceNat
 
 func (m *PlannerGrid) Run(quit chan bool) error {
 
+	logger := u.GetLogger()
+
+	// Connect to etcd.1
+	etcd, err := etcdv3.New(etcdv3.Config{Endpoints: m.Conf.EtcdServers})
+	if err != nil {
+		u.Errorf("failed to start etcd client: %v", err)
+		return err
+	}
+
+	// Create a grid client.
+	m.gridClient, err = grid.NewClient(etcd, grid.ClientCfg{Namespace: "dataux", Logger: logger})
+	if err != nil {
+		u.Errorf("failed to start grid client: %v", err)
+		return err
+	}
+
+	// Create a grid server.
+	m.GridServer, err = grid.NewServer(etcd, grid.ServerCfg{Namespace: "dataux", Logger: logger})
+	if err != nil {
+		u.Errorf("failed to start grid server: %v", err)
+		return err
+	}
+
+	// Define how actors are created.
+	m.GridServer.RegisterDef("leader", func(_ []byte) (grid.Actor, error) { return &LeaderActor{client: client}, nil })
+	m.GridServer.RegisterDef("worker", func(_ []byte) (grid.Actor, error) { return &WorkerActor{}, nil })
+
 	// We are going to start a Grid Client for managing our remote tasks
-	m.Grid = grid.NewClient(m.Conf.GridName, m.Conf.Hostname, m.Conf.EtcdServers, m.Conf.NatsServers)
+	//m.Grid = grid.NewClient(m.Conf.GridName, m.Conf.Hostname, m.Conf.EtcdServers, m.Conf.NatsServers)
+
+	lis, err := net.Listen("tcp", m.Conf.Address)
+	if err != nil {
+		u.Errorf("failed to start tcp listener server: %v", err)
+		return err
+	}
 
 	//u.Debugf("%p created new distributed grid sql job maker: %#v", m, m.Grid)
-	exit, err := m.Grid.Start()
+	err = m.GridServer.Serve(lis)
 	if err != nil {
 		u.Errorf("failed to start grid: %v", err)
 		return fmt.Errorf("error starting grid %v", err)
@@ -118,7 +153,7 @@ func (m *PlannerGrid) Run(quit chan bool) error {
 
 	defer func() {
 		u.Debugf("defer grid server complete: %s", m.Conf.Hostname)
-		m.Grid.Stop()
+		m.GridServer.Stop()
 	}()
 
 	complete := make(chan bool)
