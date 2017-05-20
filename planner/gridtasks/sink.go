@@ -1,4 +1,4 @@
-package planner
+package gridtasks
 
 import (
 	"database/sql/driver"
@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	_ exec.Task = (*SourceNats)(nil)
+	_ exec.Task = (*Sink)(nil)
 )
 
 func init() {
@@ -26,60 +26,55 @@ func init() {
 	gob.Register(CmdMsg{})
 }
 
-// SinkNats task that receives messages that optionally may have been
-//   hashed to be sent via nats to a nats source consumer.
+// Sink task that receives messages that optionally may have been
+// hashed to be sent via nats to a nats source consumer.
 //
-//   taska-1 ->  hash-key -> nats-sink--> \                 / --> nats-source -->
-//                                         \               /
-//                                          --> gnatsd  -->
-//                                         /               \
-//   taska-2 ->  hash-key -> nats-sink--> /                 \ --> nats-source -->
+//   taska-1 ->  hash-key -> sink--> \                 / --> source -->
+//                                    \               /
+//                                      --> grid  -->
+//                                    /               \
+//   taska-2 ->  hash-key -> sink--> /                 \ --> source -->
 //
-type SinkNats struct {
+type Sink struct {
 	*exec.TaskBase
 	closed      bool
 	tx          grid.Sender
 	destination string
 }
 
-// NewSinkNats gnats sink to route messages via gnatsd
-func NewSinkNats(ctx *plan.Context, destination string, tx grid.Sender) *SinkNats {
-	return &SinkNats{
+// NewSink grid sink to route messages via gnatsd
+func NewSink(ctx *plan.Context, destination string, tx grid.Sender) *Sink {
+	return &Sink{
 		TaskBase:    exec.NewTaskBase(ctx),
 		tx:          tx,
 		destination: destination,
 	}
 }
 
-// Close closes and cleanup
-func (m *SinkNats) Close() error {
-	//u.Debugf("%p SinkNats Close()", m)
+// Close cleanup and coalesce
+func (m *Sink) Close() error {
+	//u.Debugf("%p Sink Close()", m)
 	if m.closed {
 		return nil
 	}
 	m.closed = true
-	//inCh := m.MessageIn()
-	// m.TaskBase.Close()
 	m.tx.Close()
 	return m.TaskBase.Close()
 }
 
 // CloseFinal after shutdown cleanup the rest of channels
-func (m *SinkNats) CloseFinal() error {
+func (m *Sink) CloseFinal() error {
 	defer func() {
 		if r := recover(); r != nil {
 			u.Warnf("error on close %v", r)
 		}
 	}()
-	//u.Debugf("%p sinknats CloseFinal() ", m)
-	//close(inCh) we don't close input channels, upstream does
-	//m.Ctx.Recover()
 	m.tx.Close()
 	return nil
 }
 
 // Run blocking runner
-func (m *SinkNats) Run() error {
+func (m *Sink) Run() error {
 
 	inCh := m.MessageIn()
 
@@ -106,7 +101,7 @@ func (m *SinkNats) Run() error {
 				return nil
 			}
 
-			//u.Debugf("In SinkNats topic:%q    msg:%#v", m.destination, msg)
+			//u.Debugf("In Sink topic:%q    msg:%#v", m.destination, msg)
 			if err := m.tx.Send(m.destination, msg); err != nil {
 				// Currently we shut down receiving nats listener, and this times-out
 				if m.closed {

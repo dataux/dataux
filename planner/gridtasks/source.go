@@ -1,4 +1,4 @@
-package planner
+package gridtasks
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	_ exec.Task = (*SourceNats)(nil)
+	_ exec.Task = (*Source)(nil)
 )
 
 type CmdMsg struct {
@@ -20,17 +20,17 @@ type CmdMsg struct {
 	BodyJson u.JsonHelper
 }
 
-// SourceNats task that receives messages via Gnatsd, for distribution
-//  across multiple workers.  These messages optionally may have been
-//   hash routed to this node, ie partition-key routed.
+// Source task that receives messages via Grid, for distribution
+// across multiple workers.  These messages optionally may have been
+// hash routed to this node, ie partition-key routed.
 //
-//   taska-1 ->  hash-nats-sink  \                        / --> nats-source -->
-//                                \                      /
-//                                 --nats-route-by-key-->   --> nats-source -->
-//                                /                      \
-//   taska-2 ->  hash-nats-sink  /                        \ --> nats-source -->
+//   taska-1 ->  hash-sink  \                        / --> source -->
+//                           \                      /
+//                             --route-by-key-->   --> source -->
+//                           /                      \
+//   taska-2 ->  hash-sink  /                        \ --> source -->
 //
-type SourceNats struct {
+type Source struct {
 	*exec.TaskBase
 	closed  bool
 	drainCt int
@@ -38,10 +38,10 @@ type SourceNats struct {
 	rx      grid.Receiver
 }
 
-// Nats Source, the plan already provided info to the nats listener
+// Source, the plan already provided info to the nats listener
 // about which key/topic to listen to, Planner holds routing info not here.
-func NewSourceNats(ctx *plan.Context, rx grid.Receiver) *SourceNats {
-	return &SourceNats{
+func NewSource(ctx *plan.Context, rx grid.Receiver) *Source {
+	return &Source{
 		TaskBase: exec.NewTaskBase(ctx),
 		rx:       rx,
 		cmdch:    make(chan *CmdMsg),
@@ -49,8 +49,8 @@ func NewSourceNats(ctx *plan.Context, rx grid.Receiver) *SourceNats {
 }
 
 // Close cleans up and closes channels
-func (m *SourceNats) Close() error {
-	//u.Debugf("SourceNats Close  alreadyclosed?%v", m.closed)
+func (m *Source) Close() error {
+	//u.Debugf("Source Close  alreadyclosed?%v", m.closed)
 	//u.WarnT(8)
 	if m.closed {
 		return nil
@@ -70,7 +70,7 @@ func (m *SourceNats) Close() error {
 	//return m.TaskBase.Close()
 	return nil
 }
-func (m *SourceNats) drain() {
+func (m *Source) drain() {
 
 	for {
 		select {
@@ -85,8 +85,8 @@ func (m *SourceNats) drain() {
 }
 
 // CloseFinal after exit, cleanup some more
-func (m *SourceNats) CloseFinal() error {
-	//u.Debugf("SourceNats CloseFinal  alreadyclosed?%v", m.closed)
+func (m *Source) CloseFinal() error {
+	//u.Debugf("Source CloseFinal  alreadyclosed?%v", m.closed)
 	defer func() {
 		if r := recover(); r != nil {
 			u.Warnf("error on close %v", r)
@@ -101,7 +101,7 @@ func (m *SourceNats) CloseFinal() error {
 }
 
 // Run a blocking runner
-func (m *SourceNats) Run() error {
+func (m *Source) Run() error {
 
 	outCh := m.MessageOut()
 	hasQuit := false
@@ -117,7 +117,7 @@ func (m *SourceNats) Run() error {
 				u.Warnf("error on defer/exit nats source %v", r)
 			}
 		}()
-		//u.Infof("%p defer SourceNats Run() exit", m)
+		//u.Infof("%p defer Source Run() exit", m)
 		close(outCh)
 		m.rx.Close()
 	}()
@@ -148,7 +148,7 @@ func (m *SourceNats) Run() error {
 				continue
 			}
 
-			//u.Debugf("%p In SourceNats msg ", m)
+			//u.Debugf("%p In Source msg ", m)
 			switch mt := msg.(type) {
 			// case *datasource.SqlDriverMessageMap:
 			// 	if len(mt.Vals) == 0 {
@@ -170,7 +170,7 @@ func (m *SourceNats) Run() error {
 				return nil
 			default:
 				u.Warnf("hm   %#v", mt)
-				return fmt.Errorf("To use SourceNats must use SqlDriverMessageMap but got %T", msg)
+				return fmt.Errorf("To use Source must use SqlDriverMessageMap but got %T", msg)
 			}
 		}
 	}
