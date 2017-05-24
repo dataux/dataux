@@ -3,31 +3,32 @@ package planner
 import (
 	"encoding/base64"
 	"fmt"
-	"strconv"
-	"time"
 
 	u "github.com/araddon/gou"
-	"github.com/lytics/grid/grid.v2"
-	"github.com/lytics/grid/grid.v2/condition"
-	"github.com/lytics/grid/grid.v2/ring"
-
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/plan"
+	"github.com/lytics/grid/grid.v3"
+	"github.com/lytics/grid/grid.v3/ring"
+
+	"github.com/dataux/dataux/planner/gridtasks"
 )
 
 // sql task, the master process to run the child actors
 type sqlMasterTask struct {
 	s              *PlannerGrid
 	p              *plan.Select
-	ns             *SourceNats
+	ns             *gridtasks.Source
 	flow           Flow
 	completionTask exec.TaskRunner
 	actorCt        int
 	done           chan bool
 }
 
-func newSqlMasterTask(s *PlannerGrid, completionTask exec.TaskRunner,
-	ns *SourceNats, flow Flow, p *plan.Select) *sqlMasterTask {
+func newSqlMasterTask(s *PlannerGrid,
+	completionTask exec.TaskRunner,
+	ns *gridtasks.Source,
+	flow Flow,
+	p *plan.Select) *sqlMasterTask {
 
 	return &sqlMasterTask{
 		s:              s,
@@ -38,41 +39,19 @@ func newSqlMasterTask(s *PlannerGrid, completionTask exec.TaskRunner,
 		done:           make(chan bool),
 	}
 }
-func (m *sqlMasterTask) startSqlActor(actorId int, partition, pb string, def *grid.ActorDef) error {
+func (m *sqlMasterTask) startSqlTask(a *grid.ActorStart, partition, pb string, pbb []byte) error {
 
-	def.DefineType("sqlactor")
-	def.Define("flow", m.flow.Name())
-	def.Settings["pb64"] = pb
-	def.Settings["partition"] = partition
-	def.Settings["actor_ct"] = strconv.Itoa(m.actorCt)
-	u.Debugf("%p submitting start actor %s  nodeI=%d", m, def.ID(), actorId)
-	err := m.s.Grid.StartActor(def)
+	t := gridtasks.SqlTask{}
+	t.Id = fmt.Sprintf("sql-%v", NextIdUnsafe())
+	t.Pb = pbb
+	t.Partition = partition
+	t.ActorCount = int32(m.actorCt)
+	u.Debugf("%p submitting start actor %s  nodeI=%d", m, a.GetName())
+	_, err := m.s.gridClient.Request(timeout, "sqlworker-1", &t)
 	if err != nil {
 		u.Errorf("error: failed to start: %v, due to: %v", "sqlactor", err)
 	}
 	return err
-}
-
-func (m *sqlMasterTask) heartbeat(rp ring.Ring) {
-	// observe our ring of child actors, they are responsible for checking in every xx seconds
-	// to tell us they are alive, if they don't we cancel those tasks?
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-m.done:
-			//u.Warnf("m.done???")
-			return
-		case <-ticker.C:
-			u.Debugf("alive")
-		case msg, ok := <-m.ns.cmdch:
-			if !ok {
-				u.Debugf("cmd channel closed")
-				return
-			}
-			u.Infof("%p got cmd msg %+v", msg)
-		}
-	}
 }
 
 // Submits a Sql Select statement task for planning across multiple nodes
@@ -117,60 +96,24 @@ func (m *sqlMasterTask) Run() error {
 				}
 			}
 		}
+
+		rp := ring.New(m.flow.NewContextualName("sqlworker"), m.actorCt)
+		u.Debugf("%p master?? submitting distributed sql query with %d actors", m, m.actorCt)
+		for i, def := range rp.Actors() {
+			go func(ad *grid.ActorStart, actorId int) {
+				if err = m.startSqlTask(ad, partitions[actorId], pb64, pb); err != nil {
+					u.Errorf("Could not create sql actor %v", err)
+				}
+			}(def, i)
+		}
+
 	} else {
 		u.Warnf("TODO:  NOT Distributed, don't start tasks!")
 	}
 
-	_, err = m.s.Grid.Etcd().CreateDir(fmt.Sprintf("/%v/%v/%v", m.s.Grid.Name(), m.flow.Name(), "sqlcomplete"), 100000)
-	if err != nil {
-		u.Errorf("Could not initilize dir %v", err)
-	}
-	_, err = m.s.Grid.Etcd().CreateDir(fmt.Sprintf("/%v/%v/%v", m.s.Grid.Name(), m.flow.Name(), "sql_master_done"), 100000)
-	if err != nil {
-		u.Errorf("Could not initilize dir %v", err)
-	}
-	_, err = m.s.Grid.Etcd().CreateDir(fmt.Sprintf("/%v/%v/%v", m.s.Grid.Name(), m.flow.Name(), "finished"), 100000)
-	if err != nil {
-		u.Errorf("Could not initilize dir %v", err)
-	}
-
-	w := condition.NewCountWatch(m.s.Grid.Etcd(), m.s.Grid.Name(), m.flow.Name(), "finished")
-	defer w.Stop()
-
-	finished := w.WatchUntil(m.actorCt)
-
-	rp := ring.New(m.flow.NewContextualName("sqlactor"), m.actorCt)
-	u.Debugf("%p master?? submitting distributed sql query with %d actors", m, m.actorCt)
-	for i, def := range rp.ActorDefs() {
-		go func(ad *grid.ActorDef, actorId int) {
-			if err = m.startSqlActor(actorId, partitions[actorId], pb64, ad); err != nil {
-				u.Errorf("Could not create sql actor %v", err)
-			}
-		}(def, i)
-	}
-
-	// make sure actors are alive and
-	// also watch for cmd messages
-	go m.heartbeat(rp)
-
-	//u.Debugf("submitted actors, waiting for completion signal")
-	sendComplete := func() {
-		u.Debugf("CompletionTask finished sending shutdown signal %s/%s/%s ", m.s.Grid.Name(), m.flow.Name(), "sql_master_done")
-		jdone := condition.NewJoin(m.s.Grid.Etcd(), 10*time.Second, m.s.Grid.Name(), m.flow.Name(), "sql_master_done", "master")
-		if err = jdone.Rejoin(); err != nil {
-			u.Errorf("could not join?? %v", err)
-		}
-		time.Sleep(time.Millisecond * 50)
-		defer jdone.Stop()
-	}
 	select {
-	case <-finished:
-		u.Infof("%s got all finished signal?", m.flow.Name())
-		return nil
 	case <-m.completionTask.SigChan():
-		sendComplete()
-		//case <-time.After(30 * time.Second):
-		//	u.Warnf("%s exiting bc timeout", flow)
+		u.Debugf("completion")
 	}
 	return nil
 }

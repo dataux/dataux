@@ -1,10 +1,12 @@
 package gridtasks
 
 import (
+	"bytes"
+	"encoding/gob"
 	"fmt"
 
 	u "github.com/araddon/gou"
-	"github.com/lytics/grid/grid.v2"
+	"github.com/lytics/grid/grid.v3"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
@@ -34,16 +36,18 @@ type Source struct {
 	*exec.TaskBase
 	closed  bool
 	drainCt int
+	name    string
 	cmdch   chan *CmdMsg
-	rx      grid.Receiver
+	server  *grid.Server
+	mbox    *grid.Mailbox
 }
 
 // Source, the plan already provided info to the nats listener
 // about which key/topic to listen to, Planner holds routing info not here.
-func NewSource(ctx *plan.Context, rx grid.Receiver) *Source {
+func NewSource(ctx *plan.Context, s *grid.Server) *Source {
 	return &Source{
 		TaskBase: exec.NewTaskBase(ctx),
-		rx:       rx,
+		server:   s,
 		cmdch:    make(chan *CmdMsg),
 	}
 }
@@ -70,11 +74,25 @@ func (m *Source) Close() error {
 	//return m.TaskBase.Close()
 	return nil
 }
+
+func (m *Source) Setup(depth int) error {
+	// Listen to a mailbox with the same
+	// name as the actor.
+	mailbox, err := grid.NewMailbox(m.server, m.name, 10)
+	if err != nil {
+		u.Errorf("could not read %v", err)
+		return err
+	}
+	m.mbox = mailbox
+	u.Infof("started mailbox %q", m.name)
+
+	return m.TaskBase.Setup(depth)
+}
 func (m *Source) drain() {
 
 	for {
 		select {
-		case _, ok := <-m.rx.Msgs():
+		case _, ok := <-m.mbox.C:
 			if !ok {
 				u.Debugf("%p NICE, got drain shutdown, drained %d msgs", m, m.drainCt)
 				return
@@ -92,11 +110,10 @@ func (m *Source) CloseFinal() error {
 			u.Warnf("error on close %v", r)
 		}
 	}()
-	//close(inCh) we don't close input channels, upstream does
-	//m.Ctx.Recover()
-	m.rx.Close()
+	if m.mbox != nil {
+		m.mbox.Close()
+	}
 	close(m.cmdch)
-	//return nil
 	return m.TaskBase.Close()
 }
 
@@ -119,8 +136,10 @@ func (m *Source) Run() error {
 		}()
 		//u.Infof("%p defer Source Run() exit", m)
 		close(outCh)
-		m.rx.Close()
 	}()
+
+	buf := &bytes.Buffer{}
+	dec := gob.NewDecoder(buf)
 
 	for {
 
@@ -131,7 +150,7 @@ func (m *Source) Run() error {
 		case <-m.SigChan():
 			u.Debugf("%p got signal quit", m)
 			return nil
-		case msg, ok := <-m.rx.Msgs():
+		case req, ok := <-m.mbox.C:
 			if !ok {
 				u.Debugf("%p NICE, got msg shutdown", m)
 				return nil
@@ -143,22 +162,40 @@ func (m *Source) Run() error {
 			if m.closed {
 				// We want to drain this topic of nats,
 				// not let it back up in gnatsd
-				//u.Debugf("dropping message %v", msg)
+				u.Debugf("dropping message %v", req)
 				m.drainCt++
 				continue
 			}
 
-			//u.Debugf("%p In Source msg ", m)
-			switch mt := msg.(type) {
+			//u.Debugf("%p In Source msg %T", m, m)
+			switch mt := req.Msg().(type) {
 			// case *datasource.SqlDriverMessageMap:
 			// 	if len(mt.Vals) == 0 {
 			// 		u.Infof("NICE EMPTY EOF MESSAGE, CLOSING")
 			// 		return nil
 			// 	}
 			// 	outCh <- mt
+			case *Message:
+				if len(mt.Msg) == 0 {
+					u.Infof("NICE EMPTY EOF MESSAGE 2")
+					return nil
+				}
+				sm := datasource.SqlDriverMessageMap{}
+				buf.Write(mt.Msg)
+				err := dec.Decode(&sm)
+				if err != nil {
+					u.Warnf("error on read %v", err)
+				}
+				if len(sm.Vals) == 0 {
+					u.Infof("NICE EMPTY EOF MESSAGE 3")
+					return nil
+				}
+				//u.Debugf("got msg %#v", sm)
+				req.Respond(req.Msg())
+				outCh <- &sm
 			case datasource.SqlDriverMessageMap:
 				if len(mt.Vals) == 0 {
-					u.Infof("NICE EMPTY EOF MESSAGE 2")
+					u.Infof("NICE EMPTY EOF MESSAGE 4")
 					return nil
 				}
 				outCh <- &mt
@@ -170,7 +207,7 @@ func (m *Source) Run() error {
 				return nil
 			default:
 				u.Warnf("hm   %#v", mt)
-				return fmt.Errorf("To use Source must use SqlDriverMessageMap but got %T", msg)
+				return fmt.Errorf("To use Source must use SqlDriverMessageMap but got %T", req)
 			}
 		}
 	}

@@ -1,12 +1,14 @@
 package gridtasks
 
 import (
+	"bytes"
 	"database/sql/driver"
 	"encoding/gob"
+	"io/ioutil"
 	"time"
 
 	u "github.com/araddon/gou"
-	"github.com/lytics/grid/grid.v2"
+	"github.com/lytics/grid/grid.v3"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
@@ -15,6 +17,8 @@ import (
 
 var (
 	_ exec.Task = (*Sink)(nil)
+	// timeout for requests to mailbox
+	timeout = 5 * time.Second
 )
 
 func init() {
@@ -24,6 +28,9 @@ func init() {
 	gob.Register(datasource.SqlDriverMessageMap{})
 	gob.Register([]driver.Value{})
 	gob.Register(CmdMsg{})
+
+	// Register our Message Types.
+	grid.Register(Message{})
 }
 
 // Sink task that receives messages that optionally may have been
@@ -38,12 +45,12 @@ func init() {
 type Sink struct {
 	*exec.TaskBase
 	closed      bool
-	tx          grid.Sender
+	tx          *grid.Client
 	destination string
 }
 
 // NewSink grid sink to route messages via gnatsd
-func NewSink(ctx *plan.Context, destination string, tx grid.Sender) *Sink {
+func NewSink(ctx *plan.Context, destination string, tx *grid.Client) *Sink {
 	return &Sink{
 		TaskBase:    exec.NewTaskBase(ctx),
 		tx:          tx,
@@ -81,35 +88,66 @@ func (m *Sink) Run() error {
 	defer func() {
 		//close(inCh) we don't close input channels, upstream does
 		m.Ctx.Recover()
-		//m.tx.Close()
+		m.tx.Close()
 	}()
+
+	buf := &bytes.Buffer{}
+	enc := gob.NewEncoder(buf)
 
 	for {
 
 		select {
 		case <-m.SigChan():
-			//u.Debugf("got signal quit")
+			u.Infof("got signal quit")
 			return nil
 		case msg, ok := <-inCh:
 			if !ok {
-				//u.Debugf("NICE, got msg shutdown")
+				u.Debugf("NICE, got msg shutdown")
 				// eofMsg := datasource.NewSqlDriverMessageMapEmpty()
 				// if err := m.tx.Send(m.destination, eofMsg); err != nil {
 				// 	u.Errorf("Could not send eof message? %v", err)
 				// 	return err
 				// }
+				_, err := m.tx.Request(timeout, m.destination, &Message{})
+				if err != nil {
+					u.Warnf("could not send shutdown %v", err)
+				}
 				return nil
 			}
 
-			//u.Debugf("In Sink topic:%q    msg:%#v", m.destination, msg)
-			if err := m.tx.Send(m.destination, msg); err != nil {
-				// Currently we shut down receiving nats listener, and this times-out
-				if m.closed {
-					return nil
+			switch msg := msg.(type) {
+			case *datasource.SqlDriverMessageMap:
+
+				if msg == nil {
+					u.Warnf("nil message, shutdown")
 				}
-				u.Errorf("Could not send message? %v %T  %#v", err, msg, msg)
-				return err
+				err := enc.Encode(msg)
+				if err != nil {
+					u.Warnf("could not encode message %v", err)
+					continue
+				}
+				//u.Debugf("err=%v , %s", err, buf.String())
+				//u.Debugf("In Sink topic:%q    msg:%#v", m.destination, msg)
+				by, err := ioutil.ReadAll(buf)
+				if err != nil {
+					u.Warnf("could not read message %v", err)
+				}
+				sm := Message{Msg: by}
+				_, err = m.tx.Request(timeout, m.destination, &sm)
+				if err != nil {
+					u.Warnf("mailbox: %v  error %v", m.destination, err)
+					// Currently we shut down receiving nats listener, and this times-out
+					if m.closed {
+						return nil
+					}
+					u.Errorf("Could not send message? %v %T  %#v", err, msg, msg)
+					return err
+				}
+				//u.Debugf("sent %v", res)
+			default:
+				u.Warnf("unhandled type %T", msg)
 			}
+
 		}
 	}
 	return nil

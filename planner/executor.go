@@ -4,11 +4,13 @@ import (
 	"fmt"
 
 	u "github.com/araddon/gou"
-	"github.com/lytics/grid/grid.v2"
+	//"github.com/lytics/grid/grid.v3"
 
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/schema"
+
+	"github.com/dataux/dataux/planner/gridtasks"
 )
 
 var (
@@ -136,13 +138,8 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 		}
 
 		flow := NewFlow(taskUint)
-		rx, err := grid.NewReceiver(m.GridServer.Grid.Nats(), flow.Name(), 2, 0)
-		if err != nil {
-			u.Errorf("%p grid receiver start %s err=%v", m, flow.Name(), err)
-			return nil, err
-		}
-		natsSource := NewSourceNats(m.Ctx, rx)
-		localTask.Add(natsSource)
+		txferSource := gridtasks.NewSource(m.Ctx, m.GridServer.GridServer)
+		localTask.Add(txferSource)
 		var completionTask exec.TaskRunner
 
 		// For aggregations, group-by, or limit clauses we will need to do final
@@ -169,14 +166,14 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 		// submit query execution tasks to run on other worker nodes
 		go func() {
 			//
-			if err := m.GridServer.RunSqlMaster(completionTask, natsSource, flow, p); err != nil {
+			if err := m.GridServer.RunSqlTask(completionTask, txferSource, flow, p); err != nil {
 				u.Errorf("Could not run task", err)
 			}
 			//u.Debugf("%p closing Source due to a task (first?) completing", m)
 			//time.Sleep(time.Millisecond * 30)
 			// If we close input source, then will it shutdown the rest?
-			natsSource.Close()
-			//u.Debugf("%p after closing NatsSource %p", m, natsSource)
+			txferSource.Close()
+			//u.Debugf("%p after closing NatsSource %p", m, txferSource)
 		}()
 		return localTask, nil
 	}
