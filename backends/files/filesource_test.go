@@ -68,8 +68,6 @@ func RunTestServer(t *testing.T) {
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
 		createTestData(t)
 		testmysql.RunTestServer(t)
-		quit := make(chan bool)
-		planner.RunWorkerNodes(quit, 2, testmysql.ServerCtx.Reg)
 	}
 }
 
@@ -81,8 +79,6 @@ func RunBenchServer(b *testing.B) {
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
 		//createTestData(t)
 		testmysql.StartServer()
-		quit := make(chan bool)
-		planner.RunWorkerNodes(quit, 2, testmysql.ServerCtx.Reg)
 	}
 }
 

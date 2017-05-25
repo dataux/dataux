@@ -9,15 +9,13 @@ import (
 	"github.com/araddon/qlbridge/plan"
 	"github.com/lytics/grid/grid.v3"
 	"github.com/lytics/grid/grid.v3/ring"
-
-	"github.com/dataux/dataux/planner/gridtasks"
 )
 
 // sql task, the master process to run the child actors
 type sqlMasterTask struct {
 	s              *PlannerGrid
 	p              *plan.Select
-	ns             *gridtasks.Source
+	ns             *Source
 	flow           Flow
 	completionTask exec.TaskRunner
 	actorCt        int
@@ -26,7 +24,7 @@ type sqlMasterTask struct {
 
 func newSqlMasterTask(s *PlannerGrid,
 	completionTask exec.TaskRunner,
-	ns *gridtasks.Source,
+	ns *Source,
 	flow Flow,
 	p *plan.Select) *sqlMasterTask {
 
@@ -41,7 +39,7 @@ func newSqlMasterTask(s *PlannerGrid,
 }
 func (m *sqlMasterTask) startSqlTask(a *grid.ActorStart, partition, pb string, pbb []byte) error {
 
-	t := gridtasks.SqlTask{}
+	t := SqlTask{}
 	t.Id = fmt.Sprintf("sql-%v", NextIdUnsafe())
 	t.Pb = pbb
 	t.Partition = partition

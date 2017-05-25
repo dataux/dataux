@@ -67,8 +67,6 @@ func RunTestServer(t *testing.T) func() {
 		bqconf.Settings["billing_project"] = gceProject
 
 		testmysql.RunTestServer(t)
-		quit := make(chan bool)
-		planner.RunWorkerNodes(quit, 2, testmysql.ServerCtx.Reg)
 	}
 	return func() {}
 }

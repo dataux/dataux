@@ -1,5 +1,5 @@
 syntax = "proto3";
-package gridtasks;
+package planner;
 
 // protoc --go_out=. *.proto
 
@@ -7,6 +7,12 @@ message Message {
 	string type = 1;
 	bytes msg = 2;
 }
+
+message TaskResponse {
+	string id = 1;
+	string msg = 2;
+}
+
 
 message SqlTask {
    string id = 1;

@@ -2,23 +2,15 @@ package planner
 
 import (
 	"context"
-	"encoding/gob"
 	"fmt"
 	"time"
 
 	u "github.com/araddon/gou"
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/plan"
 	"github.com/lytics/dfa"
 	"github.com/lytics/grid/grid.v3"
-
-	"github.com/dataux/dataux/planner/gridtasks"
 )
-
-func init() {
-	gob.Register(datasource.SqlDriverMessageMap{})
-}
 
 type (
 	// SqlActor a worker/actor that runs in distributed grid nodes
@@ -35,7 +27,7 @@ type (
 		exit   <-chan bool
 	}
 
-	SqlTask struct {
+	sqlActorTask struct {
 		p           *plan.Select
 		et          exec.TaskRunner
 		sqlJobMaker interface{}
@@ -92,7 +84,7 @@ func (m *SqlActor) Starting() dfa.Letter {
 	return Started
 }
 
-func (m *SqlActor) runTask(t *gridtasks.SqlTask) error {
+func (m *SqlActor) runTask(t *SqlTask) error {
 
 	p, err := plan.SelectPlanFromPbBytes(t.Pb, m.conf.SchemaLoader)
 	if err != nil {
@@ -146,7 +138,10 @@ func (m *SqlActor) runTask(t *gridtasks.SqlTask) error {
 
 	// Now run the sql dag exec tasks
 	go func() {
-		sink := gridtasks.NewSink(p.Ctx, t.Id, m.client)
+		send := func(msg interface{}) (interface{}, error) {
+			return m.client.Request(timeout, t.Id, msg)
+		}
+		sink := NewSink(p.Ctx, t.Id, send)
 		tr.Add(sink)
 		tr.Setup(0) // Setup our Task in the DAG
 
@@ -187,13 +182,20 @@ func (m *SqlActor) Running() dfa.Letter {
 		case <-m.exit:
 			u.Debugf("%s exit?   what caused this?", m)
 			return Exit
-		case msg := <-mailbox.C:
+		case req := <-mailbox.C:
 
 			// Like any actor we can recieve normal messages
-			u.Debugf("%s mbox Msg:  %#v", m, msg)
-			// switch msg := msg.(type) {
-			// case ResultMsg:
-			// }
+			u.Debugf("%s mbox Request:  %#v", m, req)
+			switch msg := req.Msg().(type) {
+			case *SqlTask:
+				u.Infof("sqltask %+v\n", msg)
+				err := req.Respond(&TaskResponse{Id: m.name})
+				if err != nil {
+					u.Errorf("error on message response %v\n", err)
+				}
+			default:
+				u.Errorf("ERROR:  wrong type %T", msg)
+			}
 		}
 	}
 }

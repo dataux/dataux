@@ -13,7 +13,7 @@ import (
 )
 
 // ServerCtx Server Context for the DataUX Server giving access to the shared
-//  memory objects Config, Schemas, Grid runtime
+// memory objects Config, Schemas, Grid runtime
 type ServerCtx struct {
 	// The dataux server config info on schema, backends, frontends, etc
 	Config *Config
@@ -56,7 +56,6 @@ func (m *ServerCtx) Init() error {
 
 	// Copy over the nats, etcd info from config to
 	// Planner grid
-	planner.GridConf.NatsServers = m.Config.Nats
 	planner.GridConf.EtcdServers = m.Config.Etcd
 
 	// how many worker nodes?

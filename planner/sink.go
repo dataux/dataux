@@ -1,4 +1,4 @@
-package gridtasks
+package planner
 
 import (
 	"bytes"
@@ -17,8 +17,6 @@ import (
 
 var (
 	_ exec.Task = (*Sink)(nil)
-	// timeout for requests to mailbox
-	timeout = 5 * time.Second
 )
 
 func init() {
@@ -27,11 +25,15 @@ func init() {
 	gob.Register(time.Time{})
 	gob.Register(datasource.SqlDriverMessageMap{})
 	gob.Register([]driver.Value{})
-	gob.Register(CmdMsg{})
 
 	// Register our Message Types.
 	grid.Register(Message{})
+	grid.Register(SqlTask{})
+	grid.Register(TaskResponse{})
 }
+
+// SinkSend is func to mock the Grid Client Request
+type SinkSend func(msg interface{}) (interface{}, error)
 
 // Sink task that receives messages that optionally may have been
 // hashed to be sent via nats to a nats source consumer.
@@ -45,15 +47,15 @@ func init() {
 type Sink struct {
 	*exec.TaskBase
 	closed      bool
-	tx          *grid.Client
+	send        SinkSend
 	destination string
 }
 
 // NewSink grid sink to route messages via gnatsd
-func NewSink(ctx *plan.Context, destination string, tx *grid.Client) *Sink {
+func NewSink(ctx *plan.Context, destination string, send SinkSend) *Sink {
 	return &Sink{
 		TaskBase:    exec.NewTaskBase(ctx),
-		tx:          tx,
+		send:        send,
 		destination: destination,
 	}
 }
@@ -65,7 +67,6 @@ func (m *Sink) Close() error {
 		return nil
 	}
 	m.closed = true
-	m.tx.Close()
 	return m.TaskBase.Close()
 }
 
@@ -76,7 +77,6 @@ func (m *Sink) CloseFinal() error {
 			u.Warnf("error on close %v", r)
 		}
 	}()
-	m.tx.Close()
 	return nil
 }
 
@@ -88,7 +88,6 @@ func (m *Sink) Run() error {
 	defer func() {
 		//close(inCh) we don't close input channels, upstream does
 		m.Ctx.Recover()
-		m.tx.Close()
 	}()
 
 	buf := &bytes.Buffer{}
@@ -108,7 +107,7 @@ func (m *Sink) Run() error {
 				// 	u.Errorf("Could not send eof message? %v", err)
 				// 	return err
 				// }
-				_, err := m.tx.Request(timeout, m.destination, &Message{})
+				_, err := m.send(&Message{})
 				if err != nil {
 					u.Warnf("could not send shutdown %v", err)
 				}
@@ -120,6 +119,7 @@ func (m *Sink) Run() error {
 
 				if msg == nil {
 					u.Warnf("nil message, shutdown")
+					return nil
 				}
 				err := enc.Encode(msg)
 				if err != nil {
@@ -131,9 +131,10 @@ func (m *Sink) Run() error {
 				by, err := ioutil.ReadAll(buf)
 				if err != nil {
 					u.Warnf("could not read message %v", err)
+					continue
 				}
 				sm := Message{Msg: by}
-				_, err = m.tx.Request(timeout, m.destination, &sm)
+				_, err = m.send(&sm)
 				if err != nil {
 					u.Warnf("mailbox: %v  error %v", m.destination, err)
 					// Currently we shut down receiving nats listener, and this times-out

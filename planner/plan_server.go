@@ -16,20 +16,15 @@ import (
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/plan"
-
-	"github.com/dataux/dataux/planner/gridtasks"
 )
 
 var (
-	//loggingOnce sync.Once
-
 	// BuiltIn Default Conf, used for testing but real runtime swaps this out
 	// for a real config
 	GridConf = &Conf{
 		GridName:    "dataux",
 		Address:     "localhost:0",
 		EtcdServers: strings.Split("http://127.0.0.1:2379", ","),
-		NatsServers: strings.Split("nats://127.0.0.1:4222", ","),
 	}
 
 	// Unique id service
@@ -99,7 +94,7 @@ func NewServerPlanner(nodeCt int, r *datasource.Registry) *PlannerGrid {
 }
 
 // Submits a Sql Select statement task for planning across multiple nodes
-func (m *PlannerGrid) RunSqlTask(completionTask exec.TaskRunner, ns *gridtasks.Source, flow Flow, p *plan.Select) error {
+func (m *PlannerGrid) RunSqlTask(completionTask exec.TaskRunner, ns *Source, flow Flow, p *plan.Select) error {
 
 	t := newSqlMasterTask(m, completionTask, ns, flow, p)
 	return t.Run()

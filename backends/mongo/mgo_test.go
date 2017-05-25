@@ -58,8 +58,6 @@ func RunTestServer(t *testing.T) {
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
 		testmysql.RunTestServer(t)
-		quit := make(chan bool)
-		planner.RunWorkerNodes(quit, 2, testmysql.ServerCtx.Reg)
 	}
 }
 func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {

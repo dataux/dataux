@@ -1,4 +1,4 @@
-package gridtasks
+package planner
 
 import (
 	"context"
@@ -77,7 +77,10 @@ func TestSink(t *testing.T) {
 	planner := plan.NewPlanner(planCtx)
 	plan.WalkStmt(planCtx, planCtx.Stmt, planner)
 
-	sink := NewSink(planCtx, "worker-1", client)
+	ss := func(msg interface{}) (interface{}, error) {
+		return client.Request(timeout, "worker-1", msg)
+	}
+	sink := NewSink(planCtx, "worker-1", ss)
 	assert.NotEqual(t, nil, sink)
 
 	source := NewSource(planCtx, server)
@@ -88,7 +91,7 @@ func TestSink(t *testing.T) {
 	conn, err := td.MockSchema.Open("users")
 	assert.Equal(t, nil, err)
 
-	iter := conn.(schema.ConnScanner)
+	//iter := conn.(schema.ConnScanner)
 
 	sel := planCtx.Stmt.(*rel.SqlSelect)
 	srcPlan, err := plan.NewSource(planCtx, sel.From[0], true)
@@ -111,8 +114,8 @@ func TestSink(t *testing.T) {
 		msgCt := 0
 		defer func() {
 			assert.Equal(t, 3, msgCt)
-			u.Warnf("about to close")
-			iter.Close()
+			//u.Warnf("about to close")
+			//iter.Close()
 		}()
 		outCh := source.MessageOut()
 		for {

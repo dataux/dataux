@@ -9,8 +9,6 @@ import (
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/schema"
-
-	"github.com/dataux/dataux/planner/gridtasks"
 )
 
 var (
@@ -138,7 +136,7 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 		}
 
 		flow := NewFlow(taskUint)
-		txferSource := gridtasks.NewSource(m.Ctx, m.GridServer.GridServer)
+		txferSource := NewSource(m.Ctx, m.GridServer.GridServer)
 		localTask.Add(txferSource)
 		var completionTask exec.TaskRunner
 

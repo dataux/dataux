@@ -93,28 +93,18 @@ func RunDaemon(listener bool, workerCt int) {
 	// Gratuitous Loading Banner
 	fmt.Println(banner())
 
+	// If distributed mode then we need to prepare the master planner
 	if Conf.DistributedMode() {
-		if workerCt == 0 && Conf.WorkerCt > 0 {
-			workerCt = Conf.WorkerCt
-		}
-		if workerCt > 0 {
-			go planner.RunWorkerNodes(quit, workerCt, svrCtx.Reg)
-		}
+		go func() {
+			// PlanGrid is the master that coordinates
+			// with etcd and submit tasks to worker nodes
+			svrCtx.PlanGrid.Run(quit)
+		}()
 	}
 
-	// If listener, run tcp listeners
+	// If listener, run tcp listeners, optionally
+	// a daemon can be worker only mode without listeners
 	if listener {
-
-		// If distributed mode then we need to prepare the master planner
-		if Conf.DistributedMode() {
-			go func() {
-				// PlanGrid is the master that coordinates
-				// with etcd, nats, etc, submit tasks to worker nodes
-				// Only needed on listener nodes
-				svrCtx.PlanGrid.Run(quit)
-			}()
-		}
-
 		// Blocking
 		svr.RunListeners()
 	}

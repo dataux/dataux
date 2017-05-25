@@ -1,4 +1,4 @@
-package gridtasks
+package planner
 
 import (
 	"bytes"
@@ -14,15 +14,13 @@ import (
 )
 
 var (
+	// Our Source is meant to be inserted into a SQL dag
+	// ensure it meets that interface
 	_ exec.Task = (*Source)(nil)
 )
 
-type CmdMsg struct {
-	Cmd      string
-	BodyJson u.JsonHelper
-}
-
-// Source task that receives messages via Grid, for distribution
+// Source task is injected into a SQL dag task pipeline in order
+// to recieve messages from another server via Grid Mailbox, for distribution
 // across multiple workers.  These messages optionally may have been
 // hash routed to this node, ie partition-key routed.
 //
@@ -37,7 +35,6 @@ type Source struct {
 	closed  bool
 	drainCt int
 	name    string
-	cmdch   chan *CmdMsg
 	server  *grid.Server
 	mbox    *grid.Mailbox
 }
@@ -48,7 +45,6 @@ func NewSource(ctx *plan.Context, s *grid.Server) *Source {
 	return &Source{
 		TaskBase: exec.NewTaskBase(ctx),
 		server:   s,
-		cmdch:    make(chan *CmdMsg),
 	}
 }
 
@@ -70,8 +66,6 @@ func (m *Source) Close() error {
 
 	close(m.SigChan())
 
-	//m.rx.Close()
-	//return m.TaskBase.Close()
 	return nil
 }
 
@@ -113,7 +107,6 @@ func (m *Source) CloseFinal() error {
 	if m.mbox != nil {
 		m.mbox.Close()
 	}
-	close(m.cmdch)
 	return m.TaskBase.Close()
 }
 
@@ -125,6 +118,7 @@ func (m *Source) Run() error {
 	quit := make(chan bool)
 
 	defer func() {
+		u.Infof("starting shutdown of Source")
 		//m.Ctx.Recover()
 		close(quit)
 		hasQuit = true
@@ -169,42 +163,28 @@ func (m *Source) Run() error {
 
 			//u.Debugf("%p In Source msg %T", m, m)
 			switch mt := req.Msg().(type) {
-			// case *datasource.SqlDriverMessageMap:
-			// 	if len(mt.Vals) == 0 {
-			// 		u.Infof("NICE EMPTY EOF MESSAGE, CLOSING")
-			// 		return nil
-			// 	}
-			// 	outCh <- mt
 			case *Message:
+
+				// Respond to caller with empty message effectively acking message
+				req.Respond(&Message{})
+
 				if len(mt.Msg) == 0 {
 					u.Infof("NICE EMPTY EOF MESSAGE 2")
 					return nil
 				}
+
+				// These ones are special gob-encoded messages
 				sm := datasource.SqlDriverMessageMap{}
 				buf.Write(mt.Msg)
 				err := dec.Decode(&sm)
+				buf.Reset()
 				if err != nil {
 					u.Warnf("error on read %v", err)
-				}
-				if len(sm.Vals) == 0 {
-					u.Infof("NICE EMPTY EOF MESSAGE 3")
-					return nil
+					continue
 				}
 				//u.Debugf("got msg %#v", sm)
-				req.Respond(req.Msg())
 				outCh <- &sm
-			case datasource.SqlDriverMessageMap:
-				if len(mt.Vals) == 0 {
-					u.Infof("NICE EMPTY EOF MESSAGE 4")
-					return nil
-				}
-				outCh <- &mt
-			case *CmdMsg:
-				u.Debugf("%p got cmdmsg  %#v", m, mt)
-				m.cmdch <- mt
-			case nil:
-				//u.Debugf("%p got nil, assume this is a shutdown signal?", m)
-				return nil
+
 			default:
 				u.Warnf("hm   %#v", mt)
 				return fmt.Errorf("To use Source must use SqlDriverMessageMap but got %T", req)

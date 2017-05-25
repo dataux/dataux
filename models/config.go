@@ -43,7 +43,6 @@ type (
 		WorkerCt       int                    `json:"worker_ct"`       // 4 how many worker nodes on this instance
 		LogLevel       string                 `json:"log_level"`       // [debug,info,error,]
 		Etcd           []string               `json:"etcd"`            // list of etcd servers http://127.0.0.1:2379,http://127.0.0.1:2380
-		Nats           []string               `json:"nats"`            // list of nats servers http://127.0.0.1:4222,http://127.0.0.1:4223
 		Frontends      []*ListenerConfig      `json:"frontends"`       // tcp listener configs
 		Sources        []*schema.ConfigSource `json:"sources"`         // backend servers/sources (es, mysql etc)
 		Schemas        []*schema.ConfigSchema `json:"schemas"`         // Schemas, each backend has 1 schema
@@ -77,7 +76,7 @@ type (
 
 // DistributedMode  Does this config operate in distributed mode?
 func (c *Config) DistributedMode() bool {
-	if len(c.Etcd) == 0 || len(c.Nats) == 0 {
+	if len(c.Etcd) == 0 {
 		return false
 	}
 	return true
