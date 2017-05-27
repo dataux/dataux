@@ -136,8 +136,14 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 		}
 
 		flow := NewFlow(taskUint)
-		txferSource := NewSource(m.Ctx, m.GridServer.GridServer)
+
+		// Checkout a Source from a Pool of Mailboxes
+		// This is a blocking request, if we have depleted our pool of
+		// mailboxes this will block
+		mbox := m.GridServer.GridServer.GetMailbox()
+		txferSource := NewSource(m.Ctx, mbox.C)
 		localTask.Add(txferSource)
+
 		var completionTask exec.TaskRunner
 
 		// For aggregations, group-by, or limit clauses we will need to do final

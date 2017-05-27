@@ -40,11 +40,13 @@ func newSqlMasterTask(s *PlannerGrid,
 func (m *sqlMasterTask) startSqlTask(a *grid.ActorStart, partition, pb string, pbb []byte) error {
 
 	t := SqlTask{}
-	t.Id = fmt.Sprintf("sql-%v", NextIdUnsafe())
+	t.Id = fmt.Sprintf("sql-%v", NextIdUnsafe()) // The mailbox ID we are listening on
 	t.Pb = pbb
 	t.Partition = partition
 	t.ActorCount = int32(m.actorCt)
 	u.Debugf("%p submitting start actor %s  nodeI=%d", m, a.GetName())
+
+	// this is going to send the Task to a sqlworker to run
 	_, err := m.s.gridClient.Request(timeout, "sqlworker-1", &t)
 	if err != nil {
 		u.Errorf("error: failed to start: %v, due to: %v", "sqlactor", err)

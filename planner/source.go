@@ -35,6 +35,7 @@ type Source struct {
 	closed  bool
 	drainCt int
 	name    string
+	source  SourceSend
 	server  *grid.Server
 	mbox    *grid.Mailbox
 }
@@ -74,7 +75,7 @@ func (m *Source) Setup(depth int) error {
 	// name as the actor.
 	mailbox, err := grid.NewMailbox(m.server, m.name, 10)
 	if err != nil {
-		u.Errorf("could not read %v", err)
+		u.Errorf("could not read name=%q  err=%v", m.name, err)
 		return err
 	}
 	m.mbox = mailbox

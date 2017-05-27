@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	u "github.com/araddon/gou"
@@ -82,6 +83,7 @@ type PlannerGrid struct {
 	gridClient *grid.Client
 	started    bool
 	lastTaskId uint64
+	mailboxes  *mailboxPool
 }
 
 func NewServerPlanner(nodeCt int, r *datasource.Registry) *PlannerGrid {
@@ -90,7 +92,10 @@ func NewServerPlanner(nodeCt int, r *datasource.Registry) *PlannerGrid {
 	conf := GridConf.Clone()
 	conf.NodeCt = nodeCt
 	conf.Hostname = NodeName(nextId)
-	return &PlannerGrid{Conf: conf, reg: r}
+	return &PlannerGrid{
+		Conf: conf,
+		reg:  r,
+	}
 }
 
 // Submits a Sql Select statement task for planning across multiple nodes
@@ -142,4 +147,40 @@ func (m *PlannerGrid) Run(quit chan bool) error {
 		return err
 	}
 	return nil
+}
+
+type mailboxPool struct {
+	clients []*grid.Mailbox
+	mu      sync.Mutex
+	idx     int
+	prefix  string
+}
+
+func newPool(size int, prefix string) (*mailboxPool, error) {
+	pool := make([]*grid.Mailbox, size)
+	for i := 0; i < size; i++ {
+		c, err := newClient(project)
+		if err != nil {
+			return nil, err
+		}
+		pool[i] = c
+	}
+
+	return &mailboxPool{
+		clients: pool,
+		poolmu:  sync.Mutex{},
+		poolidx: 0,
+		project: project,
+	}, nil
+}
+
+func (p *mailboxPool) Start() error {
+
+	return nil
+}
+func (p *mailboxPool) getNext() *grid.Mailbox {
+	p.poolmu.Lock()
+	defer p.poolmu.Unlock()
+	p.poolidx++
+	return p.clients[p.poolidx%len(p.clients)]
 }
