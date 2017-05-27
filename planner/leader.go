@@ -18,13 +18,9 @@ var (
 // LeaderCreate factory function to create the Leader
 func LeaderCreate(client *grid.Client) grid.MakeActor {
 	return func(conf []byte) (grid.Actor, error) {
-		u.Debugf("leader create %s", string(conf))
 		return &LeaderActor{
 			client: client,
-			peers: &peerList{
-				l:       make([]*peerentry, 0),
-				entries: make(map[string]*peerentry),
-			},
+			peers:  newPeerList(),
 		}, nil
 	}
 }
@@ -43,70 +39,129 @@ func (a *LeaderActor) Act(c context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
+	//u.Debugf("leader ACT")
+
+	newPeer := func(e *peerEntry) {
+		// Define a sqlworker.
+		start := grid.NewActorStart("sqlworker-%d", e.id)
+		start.Type = "sqlworker"
+
+		// On new peers start the sqlworker.
+		_, err := a.client.Request(timeout, e.name, start)
+		if err != nil {
+			u.Errorf("could not contact peer %+v  err=%v", e, err)
+		}
+	}
+
+	// long running watch
+	go a.peers.watchPeers(c, a.client, newPeer)
+
 	for {
 		select {
 		case <-c.Done():
 			return
 		case <-ticker.C:
-			// Ask for current peers.
-			peers, err := a.client.Query(timeout, grid.Peers)
-			if err != nil {
-				u.Errorf("Could not query for peers %v", err)
-				continue
-			}
-
-			for _, e := range a.peers.l {
-				e.found = false
-			}
-
-			// Check for new peers.
-			for _, peer := range peers {
-				if e, ok := a.peers.entries[peer.Name()]; ok {
-					e.found = true
-					continue
-				}
-
-				e := &peerentry{
-					name:  peer.Name(),
-					id:    a.peers.NextId(),
-					found: true,
-				}
-				a.peers.Add(e)
-
-				// Define a sqlworker.
-				start := grid.NewActorStart("sqlworker-%d", e.id)
-				start.Type = "sqlworker"
-
-				// On new peers start the sqlworker.
-				_, err := a.client.Request(timeout, e.name, start)
-				if err != nil {
-					u.Errorf("could not contact peer %+v  err=%v", e, err)
-				}
-			}
-
-			// Check for dropped peers
-			for _, e := range a.peers.l {
-				if !e.found {
-					u.Warnf("dropped worker %+v", e)
-					a.peers.Remove(e)
-				}
-			}
+			// hm
 		}
 	}
 }
 
+type NewPeer func(p *peerEntry)
+
 type peerList struct {
-	l       []*peerentry
-	entries map[string]*peerentry
+	l       []*peerEntry
+	entries map[string]*peerEntry
 }
-type peerentry struct {
+type peerEntry struct {
 	name  string
 	found bool
 	id    int
 }
 
-func (s peerList) Remove(e *peerentry) {
-	l := make([]*peerentry, 0, len(s.l)-1)
+func newPeerList() *peerList {
+	return &peerList{
+		l:       make([]*peerEntry, 0),
+		entries: make(map[string]*peerEntry),
+	}
+}
+
+func (p *peerList) watchPeers(ctx context.Context, client *grid.Client, onNew NewPeer) {
+
+	//u.Infof("Starting Peer Watch %#v", p)
+
+	// Ask for current peers.
+	peers, watch, err := client.QueryWatch(ctx, grid.Peers)
+	if err != nil {
+		u.Errorf("Not handled query watch error %v", err)
+		return
+	}
+
+	for _, e := range p.l {
+		e.found = false
+	}
+
+	// Check for new peers.
+	for _, peer := range peers {
+		if e, ok := p.entries[peer.Name()]; ok {
+			e.found = true
+			continue
+		}
+
+		e := &peerEntry{
+			name:  peer.Name(),
+			id:    p.NextId(),
+			found: true,
+		}
+		p.Add(e)
+
+		u.Debugf("found new worker sqlworker-%v  %v", e.id, peer.Name())
+
+		onNew(e)
+	}
+
+	// Check for dropped peers
+	for _, e := range p.l {
+		if !e.found {
+			u.Warnf("dropped worker %+v", e)
+			p.Remove(e)
+		}
+	}
+
+	for event := range watch {
+		switch event.Type {
+		case grid.WatchError:
+			// Error occured watching peers, deal with error.
+			u.Errorf("watch error %#v", event)
+		case grid.EntityLost:
+			// Existing peer lost, reschedule work on extant peers.
+			for _, e := range p.l {
+				if e.name == event.Peer() {
+					p.Remove(e)
+				}
+			}
+		case grid.EntityFound:
+			peer := event.Peer()
+			// New peer found, assign work, get data, reschedule, etc.
+			if e, ok := p.entries[peer]; ok {
+				e.found = true
+				continue
+			}
+
+			e := &peerEntry{
+				name:  peer,
+				id:    p.NextId(),
+				found: true,
+			}
+			p.Add(e)
+			u.Debugf("submitting new worker sqlworker-%v  %v", e.id, peer)
+			onNew(e)
+		}
+	}
+
+}
+
+func (s peerList) Remove(e *peerEntry) {
+	l := make([]*peerEntry, 0, len(s.l)-1)
 	for _, le := range s.l {
 		if le.name != e.name {
 			l = append(l, le)
@@ -115,7 +170,7 @@ func (s peerList) Remove(e *peerentry) {
 	s.l = l
 	delete(s.entries, e.name)
 }
-func (s peerList) Add(e *peerentry) {
+func (s peerList) Add(e *peerEntry) {
 	s.l = append(s.l, e)
 	s.entries[e.name] = e
 }

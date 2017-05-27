@@ -34,19 +34,24 @@ type Source struct {
 	*exec.TaskBase
 	closed  bool
 	drainCt int
+	sinkCt  int
 	name    string
-	source  SourceSend
-	server  *grid.Server
-	mbox    *grid.Mailbox
+	c       <-chan grid.Request
 }
 
 // Source, the plan already provided info to the nats listener
 // about which key/topic to listen to, Planner holds routing info not here.
-func NewSource(ctx *plan.Context, s *grid.Server) *Source {
+func NewSource(ctx *plan.Context, mboxid string, c <-chan grid.Request) *Source {
 	return &Source{
 		TaskBase: exec.NewTaskBase(ctx),
-		server:   s,
+		c:        c,
+		name:     mboxid,
+		sinkCt:   1,
 	}
+}
+
+func (m *Source) MailboxId() string {
+	return m.name
 }
 
 // Close cleans up and closes channels
@@ -71,23 +76,14 @@ func (m *Source) Close() error {
 }
 
 func (m *Source) Setup(depth int) error {
-	// Listen to a mailbox with the same
-	// name as the actor.
-	mailbox, err := grid.NewMailbox(m.server, m.name, 10)
-	if err != nil {
-		u.Errorf("could not read name=%q  err=%v", m.name, err)
-		return err
-	}
-	m.mbox = mailbox
-	u.Infof("started mailbox %q", m.name)
-
 	return m.TaskBase.Setup(depth)
 }
+
 func (m *Source) drain() {
 
 	for {
 		select {
-		case _, ok := <-m.mbox.C:
+		case _, ok := <-m.c:
 			if !ok {
 				u.Debugf("%p NICE, got drain shutdown, drained %d msgs", m, m.drainCt)
 				return
@@ -105,18 +101,24 @@ func (m *Source) CloseFinal() error {
 			u.Warnf("error on close %v", r)
 		}
 	}()
-	if m.mbox != nil {
-		m.mbox.Close()
-	}
 	return m.TaskBase.Close()
 }
 
-// Run a blocking runner
+func (m *Source) sinkStopped() bool {
+	m.sinkCt--
+	if m.sinkCt < 1 {
+		return true
+	}
+	return false
+}
+
+// Run blocking runner
 func (m *Source) Run() error {
 
 	outCh := m.MessageOut()
 	hasQuit := false
 	quit := make(chan bool)
+	actorCt := m.sinkCt
 
 	defer func() {
 		u.Infof("starting shutdown of Source")
@@ -134,18 +136,17 @@ func (m *Source) Run() error {
 	}()
 
 	buf := &bytes.Buffer{}
-	dec := gob.NewDecoder(buf)
 
 	for {
 
 		select {
 		case <-quit:
-			u.Warn("quit")
+			u.Debugf("Source got quit")
 			return nil
 		case <-m.SigChan():
 			u.Debugf("%p got signal quit", m)
 			return nil
-		case req, ok := <-m.mbox.C:
+		case req, ok := <-m.c:
 			if !ok {
 				u.Debugf("%p NICE, got msg shutdown", m)
 				return nil
@@ -170,12 +171,20 @@ func (m *Source) Run() error {
 				req.Respond(&Message{})
 
 				if len(mt.Msg) == 0 {
-					u.Infof("NICE EMPTY EOF MESSAGE 2")
-					return nil
+					if m.sinkStopped() {
+						u.Infof("NICE LAST EMPTY EOF MESSAGE 2")
+						return nil
+					} else {
+						u.Infof("Got empty message but not last? %d:%v", actorCt, m.sinkCt)
+						continue
+					}
 				}
+
+				dec := gob.NewDecoder(buf)
 
 				// These ones are special gob-encoded messages
 				sm := datasource.SqlDriverMessageMap{}
+				//u.Debugf("About to write %s", string(mt.Msg))
 				buf.Write(mt.Msg)
 				err := dec.Decode(&sm)
 				buf.Reset()

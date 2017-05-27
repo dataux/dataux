@@ -62,7 +62,8 @@ func TestSink(t *testing.T) {
 	// Start the actor on the first peer.
 	u.Debugf("%v", peers[0].Name())
 
-	start := grid.NewActorStart("worker-1")
+	name := "worker-1"
+	start := grid.NewActorStart(name)
 	start.Type = "worker"
 
 	res, err := client.Request(timeout, peers[0].Name(), start)
@@ -78,14 +79,19 @@ func TestSink(t *testing.T) {
 	plan.WalkStmt(planCtx, planCtx.Stmt, planner)
 
 	ss := func(msg interface{}) (interface{}, error) {
-		return client.Request(timeout, "worker-1", msg)
+		return client.Request(timeout, name, msg)
 	}
-	sink := NewSink(planCtx, "worker-1", ss)
+	sink := NewSink(planCtx, name, ss)
 	assert.NotEqual(t, nil, sink)
 
-	source := NewSource(planCtx, server)
+	// Listen to a mailbox with the same
+	// name as the actor.
+	mailbox, err := grid.NewMailbox(server, name, 10)
+	assert.Equal(t, nil, err)
+	defer mailbox.Close()
+
+	source := NewSource(planCtx, "abc", mailbox.C)
 	assert.NotEqual(t, nil, source)
-	source.name = "worker-1"
 
 	// get some test data
 	conn, err := td.MockSchema.Open("users")

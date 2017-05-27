@@ -36,12 +36,13 @@ type (
 )
 
 // LeaderCreate factory function to create the Leader
-func WorkerFactory(client *grid.Client, server *grid.Server) grid.MakeActor {
-	return func(conf []byte) (grid.Actor, error) {
-		u.Debugf("worker create %s", string(conf))
+func WorkerFactory(conf *Conf, client *grid.Client, server *grid.Server) grid.MakeActor {
+	return func(actorConf []byte) (grid.Actor, error) {
+		//u.Debugf("worker create %s", string(actorConf))
 		sa := &SqlActor{
 			server: server,
 			client: client,
+			conf:   conf,
 		}
 		return sa, nil
 	}
@@ -63,7 +64,7 @@ func (m *SqlActor) Act(ctx context.Context) {
 	d.SetStartState(Starting)
 	d.SetTerminalStates(Exiting)
 	d.SetTransitionLogger(func(state dfa.State) {
-		u.Infof("%v: switched to state: %v", m, state)
+		//u.Infof("%v: switched to state: %v", m, state)
 	})
 
 	d.SetTransition(Starting, Started, Running, m.Running)
@@ -80,12 +81,15 @@ func (m *SqlActor) Act(ctx context.Context) {
 }
 
 func (m *SqlActor) Starting() dfa.Letter {
-	u.Debugf("%p Starting", m)
+	//u.Debugf("%p Starting", m)
+
 	return Started
 }
 
 func (m *SqlActor) runTask(t *SqlTask) error {
 
+	//u.Debugf("m.conf %#v", m.conf)
+	//u.Debugf("t %#v", t)
 	p, err := plan.SelectPlanFromPbBytes(t.Pb, m.conf.SchemaLoader)
 	if err != nil {
 		u.Errorf("error %v", err)
@@ -112,6 +116,8 @@ func (m *SqlActor) runTask(t *SqlTask) error {
 		return err
 	}
 
+	u.Debugf("Exec Plan %s", p.Stmt)
+
 	//u.Debugf("nodeCt:%v  run executor walk select %#v from ct? %v", nodeCt, p.Stmt.With, len(p.From))
 	for _, f := range p.From {
 		if len(f.Custom) == 0 {
@@ -134,14 +140,14 @@ func (m *SqlActor) runTask(t *SqlTask) error {
 		return fmt.Errorf("task was not TaskRunner")
 	}
 
-	u.Debugf("%p running with %d nodes %+v", m, t.ActorCount, t)
+	//u.Debugf("%p running with %d nodes %+v", m, t.ActorCount, t)
 
 	// Now run the sql dag exec tasks
 	go func() {
 		send := func(msg interface{}) (interface{}, error) {
-			return m.client.Request(timeout, t.Id, msg)
+			return m.client.Request(timeout, t.Source, msg)
 		}
-		sink := NewSink(p.Ctx, t.Id, send)
+		sink := NewSink(p.Ctx, t.Source, send)
 		tr.Add(sink)
 		tr.Setup(0) // Setup our Task in the DAG
 
@@ -185,16 +191,18 @@ func (m *SqlActor) Running() dfa.Letter {
 		case req := <-mailbox.C:
 
 			// Like any actor we can recieve normal messages
-			u.Debugf("%s mbox Request:  %#v", m, req)
-			switch msg := req.Msg().(type) {
+			//u.Debugf("%s mbox Request:  %#v", m, req)
+			switch task := req.Msg().(type) {
 			case *SqlTask:
-				u.Infof("sqltask %+v\n", msg)
+				//u.Infof("sqltask %+v\n", task)
 				err := req.Respond(&TaskResponse{Id: m.name})
 				if err != nil {
 					u.Errorf("error on message response %v\n", err)
+					continue
 				}
+				go m.runTask(task)
 			default:
-				u.Errorf("ERROR:  wrong type %T", msg)
+				u.Errorf("ERROR:  wrong type %T", task)
 			}
 		}
 	}

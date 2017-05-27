@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -15,7 +16,6 @@ import (
 	"github.com/sony/sonyflake"
 
 	"github.com/araddon/qlbridge/datasource"
-	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/plan"
 )
 
@@ -30,6 +30,9 @@ var (
 
 	// Unique id service
 	sf *sonyflake.Sonyflake
+
+	// Default mailbox count
+	mailboxCount = 10
 )
 
 func init() {
@@ -83,7 +86,9 @@ type PlannerGrid struct {
 	gridClient *grid.Client
 	started    bool
 	lastTaskId uint64
+	mu         sync.Mutex
 	mailboxes  *mailboxPool
+	peers      *peerList
 }
 
 func NewServerPlanner(nodeCt int, r *datasource.Registry) *PlannerGrid {
@@ -92,17 +97,12 @@ func NewServerPlanner(nodeCt int, r *datasource.Registry) *PlannerGrid {
 	conf := GridConf.Clone()
 	conf.NodeCt = nodeCt
 	conf.Hostname = NodeName(nextId)
+
 	return &PlannerGrid{
-		Conf: conf,
-		reg:  r,
+		Conf:  conf,
+		reg:   r,
+		peers: newPeerList(),
 	}
-}
-
-// Submits a Sql Select statement task for planning across multiple nodes
-func (m *PlannerGrid) RunSqlTask(completionTask exec.TaskRunner, ns *Source, flow Flow, p *plan.Select) error {
-
-	t := newSqlMasterTask(m, completionTask, ns, flow, p)
-	return t.Run()
 }
 
 func (m *PlannerGrid) Run(quit chan bool) error {
@@ -132,7 +132,7 @@ func (m *PlannerGrid) Run(quit chan bool) error {
 
 	// Define how actors are created.
 	m.GridServer.RegisterDef("leader", LeaderCreate(m.gridClient))
-	m.GridServer.RegisterDef("sqlworker", WorkerFactory(m.gridClient, m.GridServer))
+	m.GridServer.RegisterDef("sqlworker", WorkerFactory(m.Conf, m.gridClient, m.GridServer))
 
 	lis, err := net.Listen("tcp", m.Conf.Address)
 	if err != nil {
@@ -140,6 +140,14 @@ func (m *PlannerGrid) Run(quit chan bool) error {
 		return err
 	}
 
+	go func() {
+		time.Sleep(time.Millisecond * 100)
+		u.Infof("starting mailboxes")
+		m.startMailboxes()
+
+		go m.watchPeers()
+	}()
+	u.Warnf("Starting Grid %q", m.Conf.Hostname)
 	// Blocking call to serve
 	err = m.GridServer.Serve(lis)
 	if err != nil {
@@ -149,38 +157,128 @@ func (m *PlannerGrid) Run(quit chan bool) error {
 	return nil
 }
 
-type mailboxPool struct {
-	clients []*grid.Mailbox
-	mu      sync.Mutex
-	idx     int
-	prefix  string
+func (m *PlannerGrid) watchPeers() {
+	newPeer := func(e *peerEntry) {
+		u.Infof("new actor %+v", e)
+	}
+
+	ctx := context.Background()
+
+	// long running watch
+	m.peers.watchPeers(ctx, m.gridClient, newPeer)
 }
 
-func newPool(size int, prefix string) (*mailboxPool, error) {
-	pool := make([]*grid.Mailbox, size)
+// GetMailbox get next available mailbox, throttled
+func (m *PlannerGrid) GetMailbox() (*grid.Mailbox, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.mailboxes.ready {
+		for i := 0; i < 10; i++ {
+			time.Sleep(time.Millisecond * 200)
+			if m.mailboxes.ready {
+				break
+			}
+		}
+		if !m.mailboxes.ready {
+			return nil, fmt.Errorf("Mailboxes not ready")
+		}
+	}
+	return m.mailboxes.getNext(), nil
+}
+
+// CheckinMailbox return mailbox
+func (m *PlannerGrid) CheckinMailbox(mb *grid.Mailbox) {
+	id := fmt.Sprintf("%p", mb)
+	m.mu.Lock()
+	idx := m.mailboxes.ids[id]
+	m.mailboxes.next <- idx
+	m.mu.Unlock()
+}
+
+func (m *PlannerGrid) startMailboxes() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var err error
+	size := mailboxCount
+	if m.Conf.MailboxCount > 0 {
+		size = m.Conf.MailboxCount
+	}
+	for i := 0; i < 10; i++ {
+		// Lets create mailbox pool
+		m.mailboxes, err = newPool(m.GridServer, size, fmt.Sprintf("%s-mb", m.Conf.Hostname))
+		if err != nil && strings.Contains(err.Error(), "not running") {
+			u.Infof("grid server not ready, sleeping %d", i)
+			time.Sleep(time.Millisecond * 200)
+			continue
+		} else if err != nil {
+			u.Warnf("wtf? %v", err)
+			break
+		} else {
+			//u.Debugf("nice, created mailboxes")
+			m.mailboxes.ready = true
+			break
+		}
+	}
+}
+
+type mailboxPool struct {
+	mailboxes []*grid.Mailbox
+	ids       map[string]int
+	next      chan int
+	mu        sync.Mutex
+	ready     bool
+	idx       int
+	prefix    string
+}
+
+func newPool(s *grid.Server, size int, prefix string) (*mailboxPool, error) {
+
+	p := &mailboxPool{
+		mailboxes: make([]*grid.Mailbox, size),
+		prefix:    prefix,
+		next:      make(chan int, size),
+		ids:       make(map[string]int, size),
+	}
+
 	for i := 0; i < size; i++ {
-		c, err := newClient(project)
+		mailbox, err := grid.NewMailbox(s, fmt.Sprintf("%s-%d", prefix, i), 10)
 		if err != nil {
 			return nil, err
 		}
-		pool[i] = c
+		p.mailboxes[i] = mailbox
+		id := fmt.Sprintf("%p", mailbox)
+		//u.Debugf("started mailbox  P:%s Id():%v  i:%d", id, mailbox.Id(), i)
+		p.ids[id] = i
+		p.next <- i
 	}
 
-	return &mailboxPool{
-		clients: pool,
-		poolmu:  sync.Mutex{},
-		poolidx: 0,
-		project: project,
-	}, nil
+	return p, nil
 }
 
-func (p *mailboxPool) Start() error {
+// // CheckinMailbox return mailbox
+// func (p *mailboxPool) Checkin(mb *grid.Mailbox) {
+// 	id := fmt.Sprintf("%p", mb)
+// 	m.mu.Lock()
+// 	idx := m.ids[id]
+// 	m.next <- idx
+// 	m.mu.Unlock()
+// }
 
-	return nil
+func (p *mailboxPool) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var err error
+	for _, mb := range p.mailboxes {
+		if e := mb.Close(); e != nil {
+			err = e
+		}
+	}
+	return err
 }
+
 func (p *mailboxPool) getNext() *grid.Mailbox {
-	p.poolmu.Lock()
-	defer p.poolmu.Unlock()
-	p.poolidx++
-	return p.clients[p.poolidx%len(p.clients)]
+	i := <-p.next
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.mailboxes[i]
 }

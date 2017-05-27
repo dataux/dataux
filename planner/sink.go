@@ -91,7 +91,6 @@ func (m *Sink) Run() error {
 	}()
 
 	buf := &bytes.Buffer{}
-	enc := gob.NewEncoder(buf)
 
 	for {
 
@@ -101,7 +100,7 @@ func (m *Sink) Run() error {
 			return nil
 		case msg, ok := <-inCh:
 			if !ok {
-				u.Debugf("NICE, got msg shutdown")
+				//u.Debugf("NICE, got msg shutdown")
 				// eofMsg := datasource.NewSqlDriverMessageMapEmpty()
 				// if err := m.tx.Send(m.destination, eofMsg); err != nil {
 				// 	u.Errorf("Could not send eof message? %v", err)
@@ -121,6 +120,7 @@ func (m *Sink) Run() error {
 					u.Warnf("nil message, shutdown")
 					return nil
 				}
+				enc := gob.NewEncoder(buf)
 				err := enc.Encode(msg)
 				if err != nil {
 					u.Warnf("could not encode message %v", err)

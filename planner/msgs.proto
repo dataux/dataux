@@ -18,8 +18,9 @@ message SqlTask {
    string id = 1;
    bytes pb = 2;
    string partition = 3;
-   int32 actorCount = 4;
+   string source = 4;
+   int32 actorCount = 5;
    // The name of the mailbox that contains
    // the master task process to send results to
-   string master = 5; 
+   string master = 6; 
 }

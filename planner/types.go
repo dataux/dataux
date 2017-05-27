@@ -1,11 +1,8 @@
 package planner
 
 import (
-	"fmt"
-
-	"github.com/lytics/dfa"
-
 	"github.com/araddon/qlbridge/plan"
+	"github.com/lytics/dfa"
 )
 
 var (
@@ -22,29 +19,12 @@ var (
 
 type JobMaker func(ctx *plan.Context) (*ExecutorGrid, error)
 
-type Flow string
-
-func NewFlow(nr uint64) Flow {
-	return Flow(fmt.Sprintf("sql-%v", nr))
-}
-
-func (f Flow) NewContextualName(name string) string {
-	return fmt.Sprintf("%v-%v", f, name)
-}
-
-func (f Flow) Name() string {
-	return string(f)
-}
-
-func (f Flow) String() string {
-	return string(f)
-}
-
 type Conf struct {
 	JobMaker       JobMaker
 	SchemaLoader   plan.SchemaLoader
 	SupressRecover bool
 	NodeCt         int
+	MailboxCount   int
 	Address        string
 	GridName       string
 	Hostname       string
@@ -64,6 +44,7 @@ func (c *Conf) Clone() *Conf {
 		SchemaLoader:   c.SchemaLoader,
 		SupressRecover: c.SupressRecover,
 		NodeCt:         c.NodeCt,
+		MailboxCount:   c.MailboxCount,
 		Address:        c.Address,
 		GridName:       c.GridName,
 		Hostname:       c.Hostname,

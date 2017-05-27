@@ -2,9 +2,9 @@ package planner
 
 import (
 	"fmt"
+	"time"
 
 	u "github.com/araddon/gou"
-	//"github.com/lytics/grid/grid.v3"
 
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/plan"
@@ -108,26 +108,26 @@ func (m *ExecutorGrid) WalkGroupBy(p *plan.GroupBy) (exec.Task, error) {
 		//u.Debugf("%p partial groupby distributed? %v", m, m.distributed)
 		p.Partial = true
 	}
+
+	u.Debugf("IS DISTRIBUTED!!!!")
 	return exec.NewGroupBy(m.Ctx, p), nil
 }
 func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
-	if len(p.Stmt.From) > 0 {
-		//u.Debugf("ExecutorGrid.WalkSelect ?  %s", p.Stmt.Raw)
-	}
 
 	//u.WarnT(10)
 	//u.Debugf("%p Walk Select %s", m, p.Stmt)
 	if !p.ChildDag && len(p.Stmt.With) > 0 && p.Stmt.With.Bool("distributed") {
 		u.Debugf("%p has distributed!!!!!: %#v", m, p.Stmt.With)
+		time.Sleep(time.Millisecond * 1000)
 		// We are going to run tasks remotely, so need a local grid source for them
-		//  remoteSink  -> nats ->  localSource
+		// remoteSink  -> nats ->  localSource
 		localTask := exec.NewTaskSequential(m.Ctx)
 		localTask.Name = "DistributedMaster"
-		taskUint, err := NextId()
-		if err != nil {
-			u.Errorf("Could not create task id %v", err)
-			return nil, err
-		}
+		// taskUint, err := NextId()
+		// if err != nil {
+		// 	u.Errorf("Could not create task id %v", err)
+		// 	return nil, err
+		// }
 		gs := m.GridServer
 		if gs == nil {
 			u.Warnf("Grid Server Doesn't exist %v", gs)
@@ -135,13 +135,15 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 			u.Warnf("Grid doens't exist? ")
 		}
 
-		flow := NewFlow(taskUint)
-
 		// Checkout a Source from a Pool of Mailboxes
 		// This is a blocking request, if we have depleted our pool of
 		// mailboxes this will block
-		mbox := m.GridServer.GridServer.GetMailbox()
-		txferSource := NewSource(m.Ctx, mbox.C)
+		mbox, err := m.GridServer.GetMailbox()
+		if err != nil {
+			u.Errorf("Could not get mailbox %v", err)
+			return nil, err
+		}
+		txferSource := NewSource(m.Ctx, mbox.Id(), mbox.C)
 		localTask.Add(txferSource)
 
 		var completionTask exec.TaskRunner
@@ -149,7 +151,7 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 		// For aggregations, group-by, or limit clauses we will need to do final
 		// aggregation here in master as the reduce step
 		if p.Stmt.IsAggQuery() {
-			//u.Debugf("Adding aggregate/group by?")
+			u.Debugf("GRID PLANNER Adding aggregate/group by? %s", p.Stmt)
 			gbplan := plan.NewGroupBy(p.Stmt)
 			gb := exec.NewGroupByFinal(m.Ctx, gbplan)
 			localTask.Add(gb)
@@ -157,7 +159,7 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 		} else if p.NeedsFinalProjection() {
 			projplan, err := plan.NewProjectionFinal(m.Ctx, p)
 			if err != nil {
-				u.Errorf("%p projection final error %s err=%v", m, flow.Name(), err)
+				u.Errorf("%p projection final error %s err=%v", m, mbox.Id(), err)
 				return nil, err
 			}
 			proj := exec.NewProjectionLimit(m.Ctx, projplan)
@@ -167,12 +169,22 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 			completionTask = localTask
 		}
 
+		// Create our distributed sql task
+		task := newSqlMasterTask(m.GridServer, completionTask, txferSource, p)
+		err = task.init()
+		if err != nil {
+			u.Errorf("Could not setup task", err)
+			return nil, err
+		}
+
 		// submit query execution tasks to run on other worker nodes
 		go func() {
-			//
-			if err := m.GridServer.RunSqlTask(completionTask, txferSource, flow, p); err != nil {
-				u.Errorf("Could not run task", err)
+
+			u.Warnf("About to Run the task %d", task.actorCt)
+			if err = task.Run(); err != nil {
+				u.Errorf("Could not run task")
 			}
+			m.GridServer.CheckinMailbox(mbox)
 			//u.Debugf("%p closing Source due to a task (first?) completing", m)
 			//time.Sleep(time.Millisecond * 30)
 			// If we close input source, then will it shutdown the rest?
@@ -188,7 +200,7 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 // WalkSelectPartition is ONLY called by child-dag's, ie the remote end of a distributed
 //  sql query, to allow setup before walking
 func (m *ExecutorGrid) WalkSelectPartition(p *plan.Select, part *schema.Partition) (exec.Task, error) {
-	//u.Infof("%p  %p childdag? %v", m, p, p.ChildDag)
+	u.Infof("%p  %p Exec:%T  ChildDag?%v", m, p, m.JobExecutor, p.ChildDag)
 	m.sp = p
 	m.distributed = true
 	return m.JobExecutor.WalkSelect(p)
