@@ -12,7 +12,9 @@ cd $GOPATH/src/github.com/bmizerany/assert && git checkout master && git pull
 #  metafora upgrades
 cd $GOPATH/src/github.com/boltdb/bolt && git checkout master && git pull
 cd $GOPATH/src/github.com/cockroachdb/cmux && git checkout master && git pull
-cd $GOPATH/src/github.com/coreos/etcd && git checkout master && git pull
+
+cd $GOPATH/src/github.com/coreos/etcd && git checkout v3.1.6 && git pull
+
 cd $GOPATH/src/github.com/coreos/go-etcd && git checkout master && git pull
 cd $GOPATH/src/github.com/coreos/go-semver && git checkout master && git pull
 cd $GOPATH/src/github.com/coreos/go-systemd  && git checkout master && git pull
@@ -81,8 +83,9 @@ cd $GOPATH/src/gopkg.in/inf.v0 && git checkout master && git pull
 #cd $GOPATH/src/gopkg.in/mgo.v2 && git checkout master && git pull
 cd $GOPATH/src/gopkg.in/yaml.v2 && git checkout master && git pull
 
-#echo "Fetch k81.io"
-#cd $GOPATH/src/k8s.io/client-go && git checkout v2.0.0 && git pull
+#echo "Fetch k8s.io"
+cd $GOPATH/src/k8s.io/apimachinery && git checkout master && git pull
+cd $GOPATH/src/k8s.io/client-go && git checkout master && git pull
 
 #go get -u -v ./...
 
