@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	mongoHost           *string = flag.String("host", "localhost", "mongo Server Host Address")
+	mongoHost           *string = flag.String("host", "localhost:27017", "mongo Server Host Address")
 	mongoDb             *string = flag.String("db", "mgo_datauxtest", "mongo database to use for testing")
 	testServicesRunning bool
 )
@@ -315,7 +315,7 @@ func TestSelectDistributed(t *testing.T) {
 	return
 
 	// TODO:  fix me, this doesn't work because our distributed group-by planner/exec
-	//  expects partial results , mgo_sql must add column count for each sum, avg
+	// expects partial results , mgo_sql must add column count for each sum, avg
 
 	found := false
 	validateQuerySpec(t, tu.QuerySpec{

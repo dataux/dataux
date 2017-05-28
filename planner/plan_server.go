@@ -78,7 +78,10 @@ func NodeName2(id1, id2 uint64) string {
 	return fmt.Sprintf("%s-%d-%d", hostname, id1, id2)
 }
 
-// PlannerGrid that manages the sql tasks, workers
+// PlannerGrid Is a singleton service context per process that
+// manages access to registry, and other singleton resources.
+// It starts the workers, grid processes, watch to ensure it
+// knows about the rest of the peers in the system.
 type PlannerGrid struct {
 	Conf       *Conf
 	reg        *datasource.Registry
@@ -91,17 +94,18 @@ type PlannerGrid struct {
 	peers      *peerList
 }
 
-func NewServerPlanner(nodeCt int, r *datasource.Registry) *PlannerGrid {
-	nextId, _ := NextId()
+func NewPlannerGrid(nodeCt int, r *datasource.Registry) *PlannerGrid {
 
+	nextId, _ := NextId()
 	conf := GridConf.Clone()
 	conf.NodeCt = nodeCt
 	conf.Hostname = NodeName(nextId)
+	ctx := u.NewContext(context.Background(), "planner-grid")
 
 	return &PlannerGrid{
 		Conf:  conf,
 		reg:   r,
-		peers: newPeerList(),
+		peers: newPeerList(ctx),
 	}
 }
 
@@ -144,8 +148,9 @@ func (m *PlannerGrid) Run(quit chan bool) error {
 		time.Sleep(time.Millisecond * 100)
 		u.Infof("starting mailboxes")
 		m.startMailboxes()
-
+		u.Infof("Watch for peers")
 		go m.watchPeers()
+
 	}()
 	u.Warnf("Starting Grid %q", m.Conf.Hostname)
 	// Blocking call to serve
@@ -162,7 +167,8 @@ func (m *PlannerGrid) watchPeers() {
 		u.Infof("new actor %+v", e)
 	}
 
-	ctx := context.Background()
+	ctx, _ := context.WithCancel(context.Background())
+	ctx = u.NewContext(ctx, "planner-grid")
 
 	// long running watch
 	m.peers.watchPeers(ctx, m.gridClient, newPeer)

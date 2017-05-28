@@ -19,6 +19,7 @@ type sqlMasterTask struct {
 	distributed    bool
 	done           chan bool
 	partitions     []string
+	workersIds     []int
 }
 
 func newSqlMasterTask(s *PlannerGrid,
@@ -34,9 +35,9 @@ func newSqlMasterTask(s *PlannerGrid,
 		done:           make(chan bool),
 	}
 }
-func (m *sqlMasterTask) startSqlTask(partition string) error {
+func (m *sqlMasterTask) startSqlTask(partition string, workerId int) error {
 
-	mailbox := "sqlworker-1"
+	mailbox := fmt.Sprintf("sqlworker-%d", workerId)
 
 	t := SqlTask{}
 	t.Id = fmt.Sprintf("sql-%v", NextIdUnsafe()) // The mailbox ID we are listening on
@@ -44,7 +45,8 @@ func (m *sqlMasterTask) startSqlTask(partition string) error {
 	t.Source = m.ns.MailboxId()
 	t.Partition = partition
 	t.ActorCount = int32(m.actorCt)
-	//u.Debugf("%p submitting start task actor %s worker=%s", m, a.GetName(), mailbox)
+
+	u.Debugf("%p submitting start task actor worker=%s", m, mailbox)
 
 	// this is going to send the Task to a sqlworker to run
 	_, err := m.s.gridClient.Request(timeout, mailbox, &t)
@@ -96,7 +98,8 @@ func (m *sqlMasterTask) init() error {
 		}
 
 		m.ns.sinkCt = m.actorCt
-		u.Infof("About to Run, has source sinkCt=%v", m.ns.sinkCt)
+		m.workersIds = m.s.peers.GetPeers(m.actorCt)
+		u.Infof("About to Run, has source sinkCt=%v workers=%v", m.ns.sinkCt, m.workersIds)
 
 	} else {
 		u.Warnf("TODO:  NOT Distributed, don't start tasks!")
@@ -114,8 +117,8 @@ func (m *sqlMasterTask) Run() error {
 	//u.Debugf("%p master submitting job childdag?%v  %s", m, p.ChildDag, p.Stmt.String())
 
 	if m.distributed {
-		for i := 0; i < m.actorCt; i++ {
-			if err := m.startSqlTask(m.partitions[i]); err != nil {
+		for i, worker := range m.workersIds {
+			if err := m.startSqlTask(m.partitions[i], worker); err != nil {
 				u.Errorf("Could not create sql actor %v", err)
 			}
 		}
