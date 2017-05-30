@@ -6,8 +6,13 @@
 # +LDFLAGS += -extldflags "-static-libgcc -static-libstdc++"
 # GOOS=linux go build -a --ldflags '-extldflags "-static"' -tags netgo -installsuffix netgo .
 
+version=$(git describe --tags | tr -d '\n')
+pubver=$(git rev-parse --short HEAD)
+
+echo "Making binaries version: $version   versionpublic:  $pubver"
+
 # wtf, this should fix above? but didn't?
 # GOOS=linux go build -a --ldflags '-extldflags "-static-libgcc -static-libstdc++"' -tags netgo -installsuffix netgo .
 go clean
-GOOS=linux GOARCH=amd64 go build
+GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/dataux/dataux/version.Version=${version} -X github.com/dataux/dataux/version.VersionPublic=${pubver}"
 
