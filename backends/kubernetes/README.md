@@ -19,6 +19,10 @@ kubectl create -f https://raw.githubusercontent.com/dataux/dataux/master/backend
 
 kubectl describe service dataux
 
+kubectl logs --tail=1000 -lapp=dataux
+
+
+
 # connect with mysql client
 mysql -h $(minikube service --url --format="{{.IP}}" dataux) -P 30036
 

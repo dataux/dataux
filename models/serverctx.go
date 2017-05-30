@@ -116,11 +116,9 @@ func (m *ServerCtx) loadConfig() error {
 
 	m.schemas = make(map[string]*schema.Schema)
 
-	u.Debugf("server load config schema ct=%d", len(m.schemas))
-
 	for _, schemaConf := range m.Config.Schemas {
 
-		//u.Debugf("parse schemas: %v", schemaConf)
+		u.Debugf("parse schemas: %v", schemaConf)
 		if _, ok := m.schemas[schemaConf.Name]; ok {
 			panic(fmt.Sprintf("duplicate schema '%s'", schemaConf.Name))
 		}
@@ -145,7 +143,7 @@ func (m *ServerCtx) loadConfig() error {
 				return fmt.Errorf("Could not find Source Config for %v", sourceName)
 			}
 
-			//u.Debugf("new Source: %s   %+v", sourceName, sourceConf)
+			u.Debugf("new Source: %s   %+v", sourceName, sourceConf)
 			ss := schema.NewSchemaSource(sourceName, sourceConf.SourceType)
 			ss.Conf = sourceConf
 			//u.Infof("found sourceName: %q schema.Name=%q conf=%+v", sourceName, ss.Name, sourceConf)

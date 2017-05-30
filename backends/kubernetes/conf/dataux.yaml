@@ -30,6 +30,6 @@ spec:
         image: "gcr.io/dataux-io/dataux:latest"
         # un-comment this for testing, it will force pull latest image
         imagePullPolicy: Always
-        command: ["/dataux", "--loglevel=debug"]
+        command: ["/dataux", "--loglevel=debug", "--config=/etc/dataux.conf"]
         ports:
         - containerPort: 4000
