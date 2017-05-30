@@ -30,8 +30,7 @@ var (
 	loadTestDataOnce    sync.Once
 	now                 = time.Now()
 	testServicesRunning bool
-	btTable             = "datauxtest"
-	btInstance          = ""
+	bqTable             = "datauxtest"
 	gceProject          = os.Getenv("GCEPROJECT")
 	_                   = json.RawMessage(nil)
 )
@@ -109,9 +108,22 @@ func TestBasic(t *testing.T) {
 	assert.True(t, err == nil, "%v", err)
 	defer dbx.Close()
 	//u.Debugf("%v", testSpec.Sql)
-	rows, err := dbx.Queryx(fmt.Sprintf("select * from article"))
+	rows, err := dbx.Queryx(fmt.Sprintf("select name from bikeshare_stations LIMIT 10"))
 	assert.Equal(t, err, nil, "%v", err)
+	cols, _ := rows.Columns()
+	assert.Equal(t, []string{"name"}, cols)
 	defer rows.Close()
+	rowCt := 0
+	for {
+		if !rows.Next() {
+			break
+		}
+		rowCt++
+		var name string
+		rows.Scan(&name)
+		assert.True(t, name != "")
+	}
+	assert.Equal(t, 10, rowCt)
 }
 
 func TestDescribeTable(t *testing.T) {
@@ -126,35 +138,29 @@ func TestDescribeTable(t *testing.T) {
 	}{}
 	describedCt := 0
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         fmt.Sprintf("describe article;"),
-		ExpectRowCt: 10,
+		Sql:         fmt.Sprintf("describe bikeshare_stations;"),
+		ExpectRowCt: 7,
 		ValidateRowData: func() {
-			//u.Infof("%s   %#v", data.Field, data)
+			// u.Infof("%s   %#v", data.Field, data)
 			assert.True(t, data.Field != "", "%v", data)
 			switch data.Field {
-			case "embedded":
-				assert.True(t, data.Type == "binary" || data.Type == "text", "%#v", data)
+			case "station_id":
+				assert.True(t, data.Type == "bigint", "data: %#v", data)
 				describedCt++
-			case "author":
+			case "landmark":
 				assert.True(t, data.Type == "varchar(255)", "data: %#v", data)
 				describedCt++
-			case "created":
+			case "installation_date":
 				assert.True(t, data.Type == "datetime", "data: %#v", data)
 				describedCt++
-			case "category":
-				assert.True(t, data.Type == "json", "data: %#v", data)
-				describedCt++
-			case "body":
-				assert.True(t, data.Type == "json", "data: %#v", data)
-				describedCt++
-			case "deleted":
-				assert.True(t, data.Type == "bool" || data.Type == "tinyint", "data: %#v", data)
+			case "name":
+				assert.True(t, data.Type == "varchar(255)", "data: %#v", data)
 				describedCt++
 			}
 		},
 		RowData: &data,
 	})
-	assert.True(t, describedCt == 5, "Should have found/described 5 but was %v", describedCt)
+	assert.Equal(t, 4, describedCt, "Should have found/described 4 but was %v", describedCt)
 }
 
 func TestSimpleRowSelect(t *testing.T) {
@@ -177,30 +183,14 @@ func TestSimpleRowSelect(t *testing.T) {
 		RowData: &data,
 	})
 
-	return
-	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         "select title, count,deleted from bikeshare_stations WHERE count = 22;",
-		ExpectRowCt: 1,
-		ValidateRowData: func() {
-			assert.True(t, data.Name == "article1", "%v", data)
-		},
-		RowData: &data,
-	})
-	validateQuerySpec(t, tu.QuerySpec{
-		Sql:             "select title, count, deleted from bikeshare_stations LIMIT 10;",
-		ExpectRowCt:     4,
-		ValidateRowData: func() {},
-		RowData:         &data,
-	})
 }
 
 func TestSelectLimit(t *testing.T) {
 	data := struct {
-		Title string
-		Count int
+		Name string
 	}{}
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:             "select title, count from article LIMIT 1;",
+		Sql:             "select name from bikeshare_stations LIMIT 1;",
 		ExpectRowCt:     1,
 		ValidateRowData: func() {},
 		RowData:         &data,
@@ -209,19 +199,19 @@ func TestSelectLimit(t *testing.T) {
 
 func TestSelectGroupBy(t *testing.T) {
 	data := struct {
-		Author string
-		Ct     int
+		Landmark string
+		Ct       int
 	}{}
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         "select count(*) as ct, author from article GROUP BY author;",
-		ExpectRowCt: 3,
+		Sql:         "select count(*) as ct, landmark from bikeshare_stations GROUP BY landmark;",
+		ExpectRowCt: 5,
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
-			switch data.Author {
-			case "aaron":
-				assert.True(t, data.Ct == 1, "Should have found 1? %v", data)
-			case "bjorn":
-				assert.True(t, data.Ct == 2, "Should have found 2? %v", data)
+			switch data.Landmark {
+			case "San Jose":
+				assert.Equal(t, 65, data.Ct, "Should have found 1? %v", data)
+			case "Palo Alto":
+				assert.Equal(t, 20, data.Ct, "Should have found 2? %v", data)
 			}
 		},
 		RowData: &data,
@@ -230,43 +220,15 @@ func TestSelectGroupBy(t *testing.T) {
 
 func TestSelectWhereLike(t *testing.T) {
 
-	// We are testing the LIKE clause doesn't exist in Cassandra so we are polyfillying
+	// We are testing the LIKE clause
 	data := struct {
-		Title  string
-		Author string
+		Landmark string
 	}{}
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         `SELECT title, author from article WHERE title like "%stic%"`,
-		ExpectRowCt: 1,
+		Sql:         `SELECT landmark from bikeshare_stations WHERE landmark like "Palo%"`,
+		ExpectRowCt: 20,
 		ValidateRowData: func() {
-			assert.True(t, data.Title == "listicle1", "%v", data)
-		},
-		RowData: &data,
-	})
-	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         `SELECT title, author from article WHERE title like "list%"`,
-		ExpectRowCt: 1,
-		ValidateRowData: func() {
-			assert.True(t, data.Title == "listicle1", "%v", data)
-		},
-		RowData: &data,
-	})
-}
-
-func TestSelectProjectionRewrite(t *testing.T) {
-
-	data := struct {
-		Title string
-		Ct    int
-	}{}
-	// We are testing when we need to project twice (1: cassandra, 2: in dataux)
-	// - the "count AS ct" alias needs to be rewritten to NOT be projected
-	//      in cassandra and or be aware of it since we are projecting again
-	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         `SELECT title, count AS ct from article WHERE title like "list%"`,
-		ExpectRowCt: 1,
-		ValidateRowData: func() {
-			assert.True(t, data.Title == "listicle1", "%v", data)
+			assert.True(t, data.Landmark == "Palo Alto", "%v", data)
 		},
 		RowData: &data,
 	})
@@ -276,36 +238,35 @@ func TestSelectOrderBy(t *testing.T) {
 	RunTestServer(t)
 
 	data := struct {
-		Title string
-		Ct    int
+		Landmark string
+		Ct       int
 	}{}
-	// Try order by on primary partition key
+	// Try order by on group by int
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         "select title, count64 AS ct FROM article ORDER BY title DESC LIMIT 1;",
+		Sql:         "select count(*) AS ct, landmark FROM bikeshare_stations GROUP BY landmark ORDER BY ct DESC LIMIT 1;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			assert.True(t, data.Title == "zarticle3", "%v", data)
-			assert.True(t, data.Ct == 100, "%v", data)
+			assert.Equal(t, "San Francisco", data.Landmark, "%v", data)
+			assert.Equal(t, 142, data.Ct, "%v", data)
 		},
 		RowData: &data,
 	})
 
-	// try order by on some other keys
-
-	// need to fix OrderBy for ints first
-	return
+	// Try order by on group by landmark
 	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         "select title, count64 AS ct FROM article ORDER BY count64 ASC LIMIT 1;",
+		Sql:         "select count(*) AS ct, landmark FROM bikeshare_stations GROUP BY landmark ORDER BY landmark ASC LIMIT 1;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			assert.True(t, data.Title == "listicle1", "%v", data)
-			assert.True(t, data.Ct == 12, "%v", data)
+			assert.Equal(t, "Mountain View", data.Landmark, "%v", data)
+			assert.Equal(t, 28, data.Ct, "%v", data)
 		},
 		RowData: &data,
 	})
 }
 
 func TestMutationInsertSimple(t *testing.T) {
+	// TODO:
+	return
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:             "select id, name from user;",
 		ExpectRowCt:     3,
@@ -334,6 +295,8 @@ func TestMutationInsertSimple(t *testing.T) {
 }
 
 func TestMutationDeleteSimple(t *testing.T) {
+	// TODO:
+	return
 	data := struct {
 		Id, Name string
 	}{}
@@ -376,6 +339,8 @@ func TestMutationDeleteSimple(t *testing.T) {
 }
 
 func TestMutationUpdateSimple(t *testing.T) {
+	// TODO:
+	return
 	data := struct {
 		Id      string
 		Name    string
