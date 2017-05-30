@@ -11,7 +11,6 @@ import (
 	u "github.com/araddon/gou"
 	"github.com/coreos/etcd/embed"
 	"github.com/coreos/pkg/capnslog"
-	"github.com/lytics/grid/grid.v2/natsunit"
 
 	// Frontend's side-effect imports
 	_ "github.com/dataux/dataux/frontends/mysqlfe"
@@ -52,8 +51,6 @@ supress_recover: true
 
 # etcd = [ ]
 # etcd server list dynamically created and injected
-
-nats  = [ "nats://127.0.0.1:9547" ]
 
 frontends [
   {
@@ -267,13 +264,6 @@ func startServer(db string) {
 
 		Conf.Etcd = []string{embed.DefaultAdvertiseClientURLs}
 
-		_, err = natsunit.StartEmbeddedNATS()
-		if err != nil {
-			panic(err.Error())
-		} else {
-			u.Debugf("started embedded nats %v", natsunit.TestURL)
-		}
-
 		planner.GridConf.EtcdServers = Conf.Etcd
 
 		ServerCtx = models.NewServerCtx(Conf)
@@ -283,12 +273,7 @@ func startServer(db string) {
 			ServerCtx.PlanGrid.Run(quit)
 		}()
 
-		for {
-			time.Sleep(time.Millisecond * 20)
-			if ServerCtx.PlanGrid.Grid.Nats() != nil {
-				break
-			}
-		}
+		time.Sleep(time.Millisecond * 20)
 
 		Schema, _ = ServerCtx.Schema(db)
 		u.Infof("starting %q schema in test", db)
@@ -300,8 +285,10 @@ func startServer(db string) {
 
 		go svr.Run()
 
+		u.Debugf("starting server")
+
 		// delay to ensure we have time to connect
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 	}
 
 	testServerOnce.Do(f)

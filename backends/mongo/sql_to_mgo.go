@@ -73,7 +73,7 @@ func (m *SqlToMgo) Columns() []string { return m.tbl.Columns() }
 // to push down as much logic into mongo as possible
 func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.Task, error) {
 
-	//u.Debugf("WalkSourceSelect %p", m)
+	u.Debugf("WalkSourceSelect %p", m)
 	p.Conn = m
 
 	if len(p.Custom) == 0 {
@@ -127,7 +127,7 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 		}
 	}
 
-	//u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
+	u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
 	if len(m.sel.OrderBy) > 0 {
 		m.sort = make([]bson.M, len(m.sel.OrderBy))
 		for i, col := range m.sel.OrderBy {
@@ -142,17 +142,17 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 				m.sort[i] = bson.M{col.As: -1}
 			}
 		}
-		var sort interface{}
-		if len(m.sort) == 1 {
-			sort = m.sort[0]
-		} else {
-			sort = m.sort
-		}
-		if len(m.filter) > 0 {
-			m.filter = bson.M{"$query": m.filter, "$orderby": sort}
-		} else {
-			m.filter = bson.M{"$query": bson.M{}, "$orderby": sort}
-		}
+		// var sort interface{}
+		// if len(m.sort) == 1 {
+		// 	sort = m.sort[0]
+		// } else {
+		// 	sort = m.sort
+		// }
+		// if len(m.filter) > 0 {
+		// 	m.filter = bson.M{"$query": m.filter, "$orderby": sort}
+		// } else {
+		// 	m.filter = bson.M{"$query": bson.M{}, "$orderby": sort}
+		// }
 	}
 
 	if m.needsPolyFill {
@@ -214,11 +214,31 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 	//u.Debugf("sqltomgo plan sql?  %#v", p.Stmt)
 	//u.Debugf("sqltomgo plan sql.Source %#v", p.Stmt.Source)
 
-	//filterBy, _ := json.Marshal(m.filter)
+	filterBy, _ := json.Marshal(m.filter)
 	//u.Infof("tbl %#v", m.tbl.Columns(), m.tbl)
-	//u.Infof("filter: %#v  \n%s", m.filter, filterBy)
-	//u.Debugf("db=%v  tbl=%v filter=%v sort=%v limit=%v skip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, req.Limit, req.Offset)
+	u.Infof("filter: %#v  \n%s", m.filter, filterBy)
+	u.Debugf("db=%v  tbl=%v filter=%v sort=%v limit=%v skip=%v", m.schema.Name, m.tbl.Name, string(filterBy), m.sort, m.sel.Limit, m.sel.Offset)
 	query := m.sess.DB(m.schema.Name).C(m.tbl.Name).Find(m.filter)
+	// if len(m.sort) > 0 {
+	// 	query = query.Sort(m.sort)
+	// }
+
+	if len(m.sel.OrderBy) > 0 {
+		sorts := make([]string, len(m.sel.OrderBy))
+		for i, col := range m.sel.OrderBy {
+			// TODO: look at any funcs?   walk these expressions?
+			switch col.Order {
+			case "ASC":
+				sorts[i] = col.As
+			case "DESC":
+				sorts[i] = fmt.Sprintf("-%s", col.As)
+			default:
+				// default sorder order = "naturalorder"
+				sorts[i] = col.As
+			}
+		}
+		query = query.Sort(sorts...)
+	}
 
 	//u.LogTraceDf(u.WARN, 16, "hello")
 	resultReader := NewResultReader(m, query, m.limit)
@@ -278,7 +298,7 @@ func (m *SqlToMgo) walkSelectList() error {
 }
 
 // Group By Clause:  Mongo is a little weird where they move the
-//    group by expressions INTO the aggregation clause
+// group by expressions INTO the aggregation clause:
 //
 //    operation(field) FROM x GROUP BY x,y,z
 //
@@ -318,8 +338,8 @@ func (m *SqlToMgo) walkGroupBy() error {
 }
 
 // aggregate expressions when used ast part of <select_list>
-//  - For Aggregates (functions) it builds appropriate underlying mongo aggregation/map-reduce
-//  - For Projections (non-functions) it does nothing, that will be done later during projection
+// - For Aggregates (functions) it builds appropriate underlying mongo aggregation/map-reduce
+// - For Projections (non-functions) it does nothing, that will be done later during projection
 func (m *SqlToMgo) walkAggs(cur expr.Node) (q bson.M, _ error) {
 	switch curNode := cur.(type) {
 	// case *expr.NumberNode:
@@ -350,7 +370,7 @@ func (m *SqlToMgo) walkAggs(cur expr.Node) (q bson.M, _ error) {
 }
 
 // Walk() an expression, and its logic to create an appropriately
-//  nested bson document for mongo queries if possible.
+// nested bson document for mongo queries if possible.
 //
 // - if can't express logic we need to allow qlbridge to poly-fill
 //

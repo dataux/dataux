@@ -12,15 +12,18 @@ import (
 	"github.com/dataux/dataux/planner"
 )
 
-// ServerCtx Server Context for the DataUX Server giving access to the shared
-//  memory objects Config, Schemas, Grid runtime
+// ServerCtx Singleton global Context for the DataUX Server giving
+// access to the shared Config, Schemas, Grid runtime
 type ServerCtx struct {
 	// The dataux server config info on schema, backends, frontends, etc
 	Config *Config
 
-	// The underlying qlbridge schema holds info about the available datasource's
+	// The underlying qlbridge registry holds info about the available datasource providers
 	Reg *datasource.Registry
-	// PlanGrid is our real-time multi-node coordination and messaging system
+
+	// PlanGrid is swapping out the qlbridge planner
+	// with a distributed version that uses Grid lib to split
+	// tasks across nodes
 	PlanGrid *planner.PlannerGrid
 
 	schemas map[string]*schema.Schema
@@ -30,7 +33,6 @@ func NewServerCtx(conf *Config) *ServerCtx {
 	svr := ServerCtx{}
 	svr.Config = conf
 	svr.Reg = datasource.DataSourcesRegistry()
-
 	return &svr
 }
 
@@ -56,7 +58,6 @@ func (m *ServerCtx) Init() error {
 
 	// Copy over the nats, etcd info from config to
 	// Planner grid
-	planner.GridConf.NatsServers = m.Config.Nats
 	planner.GridConf.EtcdServers = m.Config.Etcd
 
 	// how many worker nodes?
@@ -64,7 +65,7 @@ func (m *ServerCtx) Init() error {
 		m.Config.WorkerCt = 2
 	}
 
-	m.PlanGrid = planner.NewServerPlanner(m.Config.WorkerCt, m.Reg)
+	m.PlanGrid = planner.NewPlannerGrid(m.Config.WorkerCt, m.Reg)
 
 	return nil
 }

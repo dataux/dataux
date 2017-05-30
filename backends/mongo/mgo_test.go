@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	mongoHost           *string = flag.String("host", "localhost", "mongo Server Host Address")
+	mongoHost           *string = flag.String("host", "localhost:27017", "mongo Server Host Address")
 	mongoDb             *string = flag.String("db", "mgo_datauxtest", "mongo database to use for testing")
 	testServicesRunning bool
 )
@@ -58,8 +58,6 @@ func RunTestServer(t *testing.T) {
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
 		testmysql.RunTestServer(t)
-		quit := make(chan bool)
-		planner.RunWorkerNodes(quit, 2, testmysql.ServerCtx.Reg)
 	}
 }
 func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
@@ -291,6 +289,8 @@ func TestSelectCountStar(t *testing.T) {
 }
 
 func TestSelectDistributed(t *testing.T) {
+
+	u.Debugf("starting TestSelectDistributed")
 	data := struct {
 		Avg float64 `db:"title_avg"`
 	}{}
@@ -315,7 +315,7 @@ func TestSelectDistributed(t *testing.T) {
 	return
 
 	// TODO:  fix me, this doesn't work because our distributed group-by planner/exec
-	//  expects partial results , mgo_sql must add column count for each sum, avg
+	// expects partial results , mgo_sql must add column count for each sum, avg
 
 	found := false
 	validateQuerySpec(t, tu.QuerySpec{

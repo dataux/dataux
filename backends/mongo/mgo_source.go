@@ -31,8 +31,8 @@ func init() {
 }
 
 // Mongo Data Source implements qlbridge DataSource interfaces to mongo server
-//  - singleton shared across all sessions/connections
-//  - creates connections by mgo.Session.Clone()
+// - singleton shared across all sessions/connections
+// - creates connections by mgo.Session.Clone()
 type MongoDataSource struct {
 	db             string   // the underlying mongo database name
 	databases      []string // all available database names from this mongo instance
@@ -52,6 +52,7 @@ func NewMongoDataSource() schema.Source {
 func (m *MongoDataSource) Init() {}
 func (m *MongoDataSource) Setup(ss *schema.SchemaSource) error {
 
+	u.Debugf("Setup()")
 	if m.srcschema != nil {
 		return nil
 	}
@@ -62,12 +63,12 @@ func (m *MongoDataSource) Setup(ss *schema.SchemaSource) error {
 	}
 	m.db = strings.ToLower(ss.Name)
 
-	//u.Infof("Init:  %#v", m.srcschema.Conf)
+	u.Infof("Init:  %#v", m.srcschema.Conf)
 	if m.srcschema.Conf == nil {
 		return fmt.Errorf("Schema conf not found")
 	}
 
-	// This will return an error if the database name we are using nis not found
+	// This will return an error if the database name we are using is not found
 	if err := m.connect(); err != nil {
 		return err
 	}
@@ -160,9 +161,11 @@ func (m *MongoDataSource) connect() error {
 
 	host := chooseBackend(m.db, m.srcschema)
 
-	//u.Debugf("connecting MongoDataSource: host='%s'  conf=%#v", host, m.srcschema.Conf)
+	u.Debugf("connecting MongoDataSource: host='%s'  conf=%#v", host, m.srcschema.Conf)
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	//host = "localhost:27018"
 
 	sess, err := mgo.Dial(host)
 	if err != nil {
@@ -170,10 +173,8 @@ func (m *MongoDataSource) connect() error {
 		return err
 	}
 
-	// We depend on read-your-own-writes consistency in several places
 	sess.SetMode(mgo.Strong, true)
 
-	// Unbelievably, you have to actually enable error checking
 	sess.SetSafe(&mgo.Safe{}) // copied from the mgo package docs
 
 	sess.SetPoolLimit(1024)

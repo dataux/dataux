@@ -4,7 +4,7 @@ const (
 	MinProtocolVersion byte   = 10
 	MaxPayloadLen      int    = 1<<24 - 1
 	TimeFormat         string = "2006-01-02 15:04:05"
-	ServerVersion      string = "5.7.14-dataux-0.14"
+	ServerVersion      string = "5.7.15-dataux-0.15"
 )
 
 const (

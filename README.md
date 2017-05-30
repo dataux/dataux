@@ -2,7 +2,7 @@
 ##  Sql Query Proxy to Elasticsearch, Mongo, Kubernetes, BigTable, etc.
 
 Unify disparate data sources and files into a single Federated
-view of your data and query with SQL.
+view of your data and query with SQL without copying into datawarehouse.
 
 
 Mysql compatible federated query engine to Elasticsearch, Mongo, 
@@ -19,13 +19,15 @@ easy to add custom data sources as well as REST api sources.
 
 ## Storage Sources
 
-* [Google Big Table](https://github.com/dataux/dataux/tree/master/backends/bigtable) SQL against big-table.
+* [Google Big Table](https://github.com/dataux/dataux/tree/master/backends/bigtable) SQL against big-table [Bigtable](https://cloud.google.com/bigtable/).
 * [Elasticsearch](https://github.com/dataux/dataux/tree/master/backends/elasticsearch) Simplify access to Elasticsearch.
 * [Mongo](https://github.com/dataux/dataux/tree/master/backends/mongo) Translate SQL into mongo.
 * [Google Cloud Storage / (csv, json files)](https://github.com/dataux/dataux/tree/master/backends/files) An example of REST api backends (list of files), as well as the file contents themselves are tables.
 * [Cassandra](https://github.com/dataux/dataux/tree/master/backends/cassandra) SQL against cassandra.  Adds sql features that are missing.
 * [Lytics](https://github.com/dataux/dataux/tree/master/backends/lytics) SQL against [Lytics REST Api's](https://www.getlytics.com)
 * [Kubernetes](https://github.com/dataux/dataux/tree/master/backends/kubernetes) An example of REST api backend.
+* [Google Big Query](https://github.com/dataux/dataux/tree/master/backends/bigquery) MYSQL against worlds best analytics datawarehouse [BigQuery](https://cloud.google.com/bigquery/).
+* [Google Datastore](https://github.com/dataux/dataux/tree/master/backends/datastore) MYSQL against [Datastore](https://cloud.google.com/datastore/).
 
 
 ## Features
@@ -93,11 +95,11 @@ WHERE repository.description LIKE "database";
 Roadmap(ish)
 ------------------------------
 * Sources
-  * Cassandra
   * Big-Query
   * Big-Table
   * Json-Files
 * Writes
+  * write pub/sub:  inbound insert/update are available as pub-sub messages.
   * write propogation:  inbound insert/update gets written multiple places.
   * write lambda functions:  allow arbitray functions to get nats.io pub/sub of write events.
 

@@ -13,7 +13,7 @@ cd $GOPATH/src/github.com/bmizerany/assert && git checkout master && git pull
 cd $GOPATH/src/github.com/boltdb/bolt && git checkout master && git pull
 cd $GOPATH/src/github.com/cockroachdb/cmux && git checkout master && git pull
 
-cd $GOPATH/src/github.com/coreos/etcd && git checkout v3.1.6 && git pull
+cd $GOPATH/src/github.com/coreos/etcd && git checkout master && git pull && git checkout v3.1.6
 
 cd $GOPATH/src/github.com/coreos/go-etcd && git checkout master && git pull
 cd $GOPATH/src/github.com/coreos/go-semver && git checkout master && git pull
@@ -30,8 +30,9 @@ cd $GOPATH/src/github.com/gogo/protobuf && git checkout master && git pull
 cd $GOPATH/src/github.com/golang/protobuf && git checkout master && git pull
 cd $GOPATH/src/github.com/golang/snappy && git checkout master && git pull
 cd $GOPATH/src/github.com/google/btree && git checkout master && git pull
+cd $GOPATH/src/github.com/google/gofuzz && git checkout master && git pull
 cd $GOPATH/src/github.com/grpc-ecosystem/go-grpc-prometheus && git checkout master && git pull
-cd $GOPATH/src/github.com/grpc-ecosystem/grpc-gateway && git checkout master && git pull
+cd $GOPATH/src/github.com/grpc-ecosystem/grpc-gateway && git checkout master && git pull && git checkout 84398b94e188ee336f307779b57b3aa91af7063c # check coreos/etcd for changes glide.yaml
 
 cd $GOPATH/src/github.com/hailocab/go-hostpool && git checkout master && git pull
 cd $GOPATH/src/github.com/hashicorp/go-immutable-radix && git checkout master && git pull
@@ -62,8 +63,6 @@ cd $GOPATH/src/github.com/prometheus/common && git checkout master && git pull
 cd $GOPATH/src/github.com/prometheus/procfs && git checkout master && git pull
 cd $GOPATH/src/github.com/rcrowley/go-metrics && git checkout master && git pull
 cd $GOPATH/src/github.com/sony/sonyflake && git checkout master && git pull
-cd $GOPATH/src/github.com/sony/sonyflake && git checkout master && git pull
-cd $GOPATH/src/github.com/sony/sonyflake && git checkout master && git pull
 # this one if updated breaks older versions of etcd
 cd $GOPATH/src/github.com/ugorji/go && git checkout master && git pull
 
@@ -76,16 +75,16 @@ cd $GOPATH/src/golang.org/x/net && git checkout master && git pull
 cd $GOPATH/src/golang.org/x/oauth2 && git checkout master && git pull
 cd $GOPATH/src/google.golang.org/api && git checkout master && git pull
 cd $GOPATH/src/google.golang.org/genproto && git checkout master && git pull
-cd $GOPATH/src/google.golang.org/grpc && git checkout master && git pull
-cd $GOPATH/src/cloud.google.com/go/ && git checkout master && git pull
+cd $GOPATH/src/google.golang.org/grpc && git checkout master && git pull && git checkout v1.0.4 # check coreos/etcd for changes glide.yaml
+cd $GOPATH/src/cloud.google.com/go/ && git checkout master && git pull && git checkout v0.6.0 # needed by upstream
 cd $GOPATH/src/gopkg.in/inf.v0 && git checkout master && git pull
 # this one is a pain, don't update manually, c headers?
 #cd $GOPATH/src/gopkg.in/mgo.v2 && git checkout master && git pull
 cd $GOPATH/src/gopkg.in/yaml.v2 && git checkout master && git pull
 
 #echo "Fetch k8s.io"
-cd $GOPATH/src/k8s.io/apimachinery && git checkout master && git pull
-cd $GOPATH/src/k8s.io/client-go && git checkout master && git pull
+cd $GOPATH/src/k8s.io/apimachinery && git checkout master && git pull # && git checkout xxx # ??
+cd $GOPATH/src/k8s.io/client-go && git checkout master && git pull # && git checkout xxx # ??
 
 #go get -u -v ./...
 

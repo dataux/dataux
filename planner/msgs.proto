@@ -1,0 +1,26 @@
+syntax = "proto3";
+package planner;
+
+// protoc --go_out=. *.proto
+
+message Message {
+	string type = 1;
+	bytes msg = 2;
+}
+
+message TaskResponse {
+	string id = 1;
+	string msg = 2;
+}
+
+
+message SqlTask {
+   string id = 1;
+   bytes pb = 2;
+   string partition = 3;
+   string source = 4;
+   int32 actorCount = 5;
+   // The name of the mailbox that contains
+   // the master task process to send results to
+   string master = 6; 
+}

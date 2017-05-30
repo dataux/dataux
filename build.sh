@@ -3,6 +3,7 @@
 # run the go-build
 ./.build
 
+gcloud config set project dataux-io
 
 # cleanup local docker
 docker rm -f gcr.io/dataux-io/dataux:latest
@@ -11,16 +12,16 @@ docker rmi -f gcr.io/dataux-io/dataux:latest
 # docker rm -f gcr.io/dataux-io/dataux:v0.0.1
 # docker rmi -f gcr.io/dataux-io/dataux:v0.0.1
 
-docker rm -f gcr.io/dataux-io/dataux:v2017.03.15a
-docker rmi -f gcr.io/dataux-io/dataux:v2017.03.15a
+docker rm -f gcr.io/dataux-io/dataux:v2017.05.24a
+docker rmi -f gcr.io/dataux-io/dataux:v2017.05.24a
 
 # if you get auth issues
 #
 #  rm ~/.docker/config.json 
 #  gcloud docker --authorize-only
 
-docker build -t gcr.io/dataux-io/dataux:v2017.03.15a .
-gcloud docker -- push gcr.io/dataux-io/dataux:v2017.03.15a
+docker build -t gcr.io/dataux-io/dataux:v2017.05.24a .
+gcloud docker -- push gcr.io/dataux-io/dataux:v2017.05.24a
 
 docker build -t gcr.io/dataux-io/dataux:latest .
 gcloud docker -- push gcr.io/dataux-io/dataux:latest
