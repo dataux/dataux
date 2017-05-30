@@ -84,9 +84,10 @@ curl -Lo dataux https://github.com/dataux/dataux/releases/download/$TAG/dataux_m
 }
 
 # lets get the name of this release which is our tag
-#  aka     2016.12.03   type tag
+#  aka     v0.15.0   type tag
 export TAG=$(git describe $(git rev-list --tags --max-count=1))
 dorelease
 
+# we are going to always release a latest
 export TAG="latest"
 dorelease
