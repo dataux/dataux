@@ -105,11 +105,10 @@ func (m *ExecutorGrid) WalkSource(p *plan.Source) (exec.Task, error) {
 func (m *ExecutorGrid) WalkGroupBy(p *plan.GroupBy) (exec.Task, error) {
 
 	if m.distributed {
-		//u.Debugf("%p partial groupby distributed? %v", m, m.distributed)
+		u.Debugf("%p partial groupby distributed? %v", m, m.distributed)
 		p.Partial = true
 	}
 
-	u.Debugf("IS DISTRIBUTED!!!!")
 	return exec.NewGroupBy(m.Ctx, p), nil
 }
 func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {

@@ -68,7 +68,10 @@
 
 [[constraint]]
   name = "cloud.google.com/go"
+  # we are mostly fine on 0.6.0 only real feature that is obviously missing
+  # and not very important is the job.Statistics on bigquery
   version = "0.6.0"
+  # branch = "master"
 
 [[constraint]]
   branch = "master"
