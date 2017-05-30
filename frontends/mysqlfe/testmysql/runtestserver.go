@@ -290,8 +290,10 @@ func startServer(db string) {
 
 		go svr.Run()
 
+		u.Debugf("starting server")
+
 		// delay to ensure we have time to connect
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 	}
 
 	testServerOnce.Do(f)
