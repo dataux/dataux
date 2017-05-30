@@ -172,11 +172,16 @@ sources : [
   {
     name : bigquery
     type : bigquery
-    settings {
+    #  [bigquery-public-data:san_francisco.bikeshare_stations]
+    "table_aliases" : {
+       "bikeshare_stations" : "bigquery-public-data:san_francisco.bikeshare_stations"
+    }
+    "settings" : {
       # project will be loaded from ENV   $GCEPROJECT
-      billing_project : ""
-      data_project : "bigquery-public-data"
-      dataset : "san_francisco"
+      "test_env" : "${USER}"
+      "billing_project" : ""
+      "data_project" : "bigquery-public-data"
+      "dataset" : "san_francisco"
     }
   }
 
@@ -276,7 +281,7 @@ func startServer(db string) {
 		time.Sleep(time.Millisecond * 20)
 
 		Schema, _ = ServerCtx.Schema(db)
-		u.Infof("starting %q schema in test", db)
+		//u.Infof("starting %q schema in test", db)
 
 		svr, err := proxy.NewServer(ServerCtx)
 		if err != nil {

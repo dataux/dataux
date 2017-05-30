@@ -7,6 +7,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -16,12 +17,10 @@ import (
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
-	"github.com/araddon/qlbridge/lex"
 	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
-	"github.com/araddon/qlbridge/vm"
 )
 
 var (
@@ -71,81 +70,41 @@ func NewSqlToBQ(s *Source, t *schema.Table) *SqlToBQ {
 
 func (m *SqlToBQ) queryRewrite(original *rel.SqlSelect) error {
 
-	u.Debugf("%p  %s query:%s", m, m.tbl.Name, m.sel)
+	//u.Debugf("%p  %s query:%s", m, m.tbl.Name, m.sel)
 	m.original = original
 
 	req := original.Copy()
 	m.sel = req
 	limit := req.Limit
 	if limit == 0 {
-		limit = DefaultLimit
+		//limit = DefaultLimit
 	}
 
-	req.RewriteAsRawSelect()
-
-	for _, from := range req.From {
-		u.Infof("from: %+v", from)
-		from.Name = fmt.Sprintf("[bigquery-public-data:%s.%s]", m.s.dataset, from.Name)
-	}
-
-	if req.Where != nil {
-		u.Debugf("WHERE original vs new: \n%s\n%s", original.Where, req.Where)
-		m.whereIdents = make(map[string]bool)
-		w, err := m.walkWhereNode(req.Where.Expr)
-		if err != nil {
-			u.Warnf("Could Not evaluate Where Node %s %v", req.Where.Expr.String(), err)
-			return err
-		}
-		req.Where = nil
-		if w != nil {
-			req.Where = rel.NewSqlWhere(w)
-			u.Infof("found new Where: nil?%v  %s", req.Where == nil, req.Where)
-		}
-	}
-
-	// Obviously we aren't doing group-by
-	if len(req.GroupBy) > 0 {
-		u.Debugf(" poly-filling groupby")
-		req.GroupBy = nil
-	}
-
-	if len(req.OrderBy) > 0 {
-		u.Debugf("orderby?")
-		ob := req.OrderBy
-		req.OrderBy = make(rel.Columns, 0, len(ob))
-		for _, c := range ob {
-			if c.Expr == nil {
-				u.Warnf("nil expr orderby %#v", c)
-			} else {
-				newOrderExpr, _ := m.walkOrderBy(c.Expr)
-				if newOrderExpr != nil {
-					c.Expr = newOrderExpr
-					u.Debugf("yay can orderby %s", c)
-					req.OrderBy = append(req.OrderBy, c)
-				}
+	if len(m.schema.Conf.TableAliases) > 0 {
+		for _, from := range req.From {
+			fqn := m.schema.Conf.TableAliases[strings.ToLower(from.Name)]
+			if fqn != "" {
+				from.Name = fqn
 			}
 		}
 	}
 
-	u.Infof("%s", req)
 	return nil
 }
 
 // WalkSourceSelect An interface implemented by this connection allowing the planner
 // to push down as much logic into this source as possible
 func (m *SqlToBQ) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.Task, error) {
-	//u.Debugf("VisitSourceSelect(): %s", p.Stmt)
+	// u.Debugf("WalkSourceSelect(): %s", p.Stmt)
 	m.p = p
+	p.Complete = true // We can plan everything ourselves
 	return nil, nil
 }
 
 // WalkExecSource an interface of executor that allows this source to
 // create its own execution Task so that it can push down as much as it can
-// to bigtable.
+// to bigquery.
 func (m *SqlToBQ) WalkExecSource(p *plan.Source) (exec.Task, error) {
-
-	//u.Debugf("%p WalkExecSource():  %T nil?%v %#v", m, p, p == nil, p)
-	//u.Debugf("%p WalkExecSource()  %s", m, p.Stmt)
 
 	if p.Stmt == nil {
 		return nil, fmt.Errorf("Plan did not include Sql Statement?")
@@ -187,37 +146,7 @@ func (m *SqlToBQ) WalkExecSource(p *plan.Source) (exec.Task, error) {
 	reader := NewResultReader(m)
 	m.resp = reader
 
-	// For aggregations, group-by, or limit clauses we will need to do final
-	// aggregation here in master as the reduce step
-	if m.sel.IsAggQuery() {
-		u.Debugf("Adding aggregate/group by?")
-		gbplan := plan.NewGroupBy(m.sel)
-		gb := exec.NewGroupByFinal(m.Ctx, gbplan)
-		reader.Add(gb)
-		m.needsPolyFill = true
-	}
-
-	if m.needsWherePolyFill {
-		wp := plan.NewWhere(m.sel)
-		wt := exec.NewWhere(m.Ctx, wp)
-		reader.Add(wt)
-		m.needsPolyFill = true
-	}
-
-	// do we need poly fill Having?
-	if m.sel.Having != nil {
-		u.Infof("needs HAVING polyfill")
-	}
-
-	if m.needsOrderByPolyFill {
-		u.Infof("adding order by poly fill")
-		op := plan.NewOrder(m.sel)
-		ot := exec.NewOrder(m.Ctx, op)
-		reader.Add(ot)
-		m.needsPolyFill = true
-	}
-
-	u.Infof("%p  needsPolyFill?%v  limit:%d ", m.sel, m.needsPolyFill, m.sel.Limit)
+	// u.Debugf("%p  needsPolyFill?%v  limit:%d ", m.sel, m.needsPolyFill, m.sel.Limit)
 	if m.needsPolyFill {
 		if m.sel.Limit > 0 {
 			// Since we are poly-filling we need to over-read
@@ -401,157 +330,4 @@ func (m *SqlToBQ) Delete(key driver.Value) (int, error) {
 //  - for others we might have to do a select -> delete
 func (m *SqlToBQ) DeleteExpression(p interface{}, where expr.Node) (int, error) {
 	return 0, schema.ErrNotImplemented
-}
-
-// walkWhereNode() We are re-writing the sql select statement and need
-// to walk the ast and see if we can partially/completely translate
-// the logical filtesr into big-table filters or prefix scans
-func (m *SqlToBQ) walkWhereNode(cur expr.Node) (expr.Node, error) {
-	//u.Debugf("walkWhereNode: %s", cur)
-	switch n := cur.(type) {
-	case *expr.BinaryNode:
-		return m.walkFilterBinary(n)
-	case *expr.TriNode: // Between
-		m.needsWherePolyFill = true
-		//return fmt.Errorf("Between and other ops not implemented")
-		u.Warnf("between being polyfilled %s", n)
-	case *expr.UnaryNode:
-		m.needsWherePolyFill = true
-		u.Warnf("UnaryNode being polyfilled %s", n)
-		// Check to see if this is a boolean field?
-	case *expr.FuncNode:
-		m.needsWherePolyFill = true
-		if len(n.Args) > 0 {
-			idents := expr.FindAllIdentityField(n)
-			u.Infof("Found identities in func():    %s  idents:%v", n, idents)
-			// What can we do with this knowledge? no much right?
-		}
-		//return fmt.Errorf("Not implemented function: %s", n)
-	default:
-		m.needsWherePolyFill = true
-		u.Warnf("un-handled where clause expression type?  %T %#v", cur, n)
-		//return fmt.Errorf("Not implemented node: %s", n)
-	}
-	return nil, nil
-}
-
-func (m *SqlToBQ) walkArg(cur expr.Node) (expr.Node, error) {
-	//u.Debugf("walkArg: %s", cur)
-	switch n := cur.(type) {
-	case *expr.BinaryNode:
-		return m.walkFilterBinary(n)
-	case *expr.TriNode: // Between
-		m.needsWherePolyFill = true
-		//return fmt.Errorf("Between and other ops not implemented")
-		u.Warnf("between being polyfilled %s", n)
-	case *expr.UnaryNode:
-		m.needsWherePolyFill = true
-		u.Warnf("UnaryNode being polyfilled %s", n)
-		// Check to see if this is a boolean field?
-	case *expr.FuncNode:
-		m.needsWherePolyFill = true
-		if len(n.Args) > 0 {
-			idents := expr.FindAllIdentityField(n)
-			u.Infof("Found identities in func():    %s  idents:%v", n, idents)
-			// What can we do with this knowledge? no much right?
-			// possibly ensure not nil?
-		}
-		//return fmt.Errorf("Not implemented function: %s", n)
-	default:
-		m.needsWherePolyFill = true
-		u.Warnf("un-handled where clause expression type?  %T %#v", cur, n)
-		//return fmt.Errorf("Not implemented node: %s", n)
-	}
-	return nil, nil
-}
-
-func (m *SqlToBQ) walkFilterBinary(node *expr.BinaryNode) (expr.Node, error) {
-
-	in, isIdent := node.Args[0].(*expr.IdentityNode)
-	if !isIdent {
-		u.Warnf("Not identity node on left? %T", node.Args[0])
-		return nil, nil
-	}
-
-	_, lhIdentityName, _ := in.LeftRight()
-	col, exists := m.tbl.FieldMap[lhIdentityName]
-	if !exists {
-		// Doesn't exist in cassandra?
-		// 1) child element of a row, ie json key inside column?  need to polyfill
-		return nil, nil
-	}
-
-	u.Debugf("\nlh: %#v\nrh: %#v", node.Args[0], node.Args[1])
-	lhval, lhok := vm.Eval(nil, node.Args[0])
-	rhval, rhok := vm.Eval(nil, node.Args[1])
-	if !lhok || !rhok {
-		u.Warnf("not ok: %v  l:%v  r:%v", node, lhval, rhval)
-		return nil, fmt.Errorf("could not evaluate: %v", node.String())
-	}
-	//u.Debugf("walkBinary: %v  l:%v  r:%v  %T  %T", node, lhval, rhval, lhval, rhval)
-	switch node.Operator.T {
-	case lex.TokenLogicAnd:
-		newArgs := make([]expr.Node, 0, 2)
-		for _, arg := range node.Args {
-			nn, err := m.walkWhereNode(arg)
-			if err != nil {
-				u.Errorf("could not evaluate where nodes? %v %s", err, arg)
-				return nil, fmt.Errorf("could not evaluate: %s", arg.String())
-			}
-			if nn != nil {
-				newArgs = append(newArgs, nn)
-			}
-		}
-		if len(newArgs) == 0 {
-			return nil, nil
-		} else if len(newArgs) == 1 {
-			return newArgs[0], nil
-		}
-		// else the original expression is valid
-		return node, nil
-	case lex.TokenLogicOr:
-		// ??
-	case lex.TokenEqual, lex.TokenEqualEqual, lex.TokenNE:
-		return node, nil
-	case lex.TokenLE, lex.TokenLT, lex.TokenGE, lex.TokenGT:
-		if !col.Type.IsNumeric() {
-			return nil, fmt.Errorf("%s Operator can only act on Numeric Column: [%s]", node.Operator.T, node)
-		}
-		return node, nil
-	case lex.TokenIN:
-		//
-	case lex.TokenLike:
-		// hmmmmmmm
-		// what about byte prefix ?
-		return nil, nil
-	default:
-		u.Warnf("not implemented: %s", node)
-	}
-	return nil, nil
-}
-
-func (m *SqlToBQ) walkOrderBy(node expr.Node) (expr.Node, error) {
-	switch n := node.(type) {
-	case *expr.IdentityNode:
-		if m.canOrder(n) {
-			return node, nil
-		}
-	default:
-		m.needsOrderByPolyFill = true
-		u.Warnf("un-handled order clause expression type?  %T %#v", node, n)
-		//return fmt.Errorf("Not implemented node: %s", n)
-	}
-	return nil, nil
-}
-
-func (m *SqlToBQ) canOrder(in *expr.IdentityNode) bool {
-
-	_, lhIdentityName, _ := in.LeftRight()
-	_, exists := m.tbl.FieldMap[lhIdentityName]
-	if !exists {
-		// Doesn't exist in cassandra? possibly json path?
-		return false
-	}
-
-	return true
 }

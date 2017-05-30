@@ -108,7 +108,7 @@ func (m *ResultReader) Run() error {
 	cols := m.Req.p.Proj.Columns
 	colNames := make(map[string]int, len(cols))
 	for i, col := range cols {
-		colNames[col.Name] = i
+		colNames[col.As] = i
 		//u.Debugf("col.name=%v  col.as=%s", col.Name, col.As)
 	}
 	if len(cols) == 0 {
@@ -120,7 +120,7 @@ func (m *ResultReader) Run() error {
 		limit = m.Req.sel.Limit
 	}
 
-	u.Debugf("%p bt limit: %d sel:%s", m.Req.sel, limit, sel)
+	u.Debugf("%p bq limit: %d sel:%s", m.Req.sel, limit, sel)
 	queryStart := time.Now()
 
 	// qry := fmt.Sprintf(`SELECT name, count FROM [%s.%s]`, m.Req.s.dataset, tableID)
@@ -149,6 +149,8 @@ func (m *ResultReader) Run() error {
 		return err
 	}
 
+	// u.Debugf("Status state:%#v stats:%#v", status.State, status.Statistics)
+
 	it, err := job.Read(ctx)
 	for {
 		var row []bigquery.Value
@@ -159,23 +161,21 @@ func (m *ResultReader) Run() error {
 		if err != nil {
 			return err
 		}
-		u.Debugf("row %#v", row)
+		//u.Debugf("row %#v", row)
 
 		vals := make([]driver.Value, len(cols))
 		for i, v := range row {
-
-			col := cols[i]
-
 			switch v := v.(type) {
 			case civil.Date:
 				vals[i] = v.In(time.UTC)
 			default:
 				vals[i] = v
 			}
-			u.Debugf("%-2d col.name=%-10s prop.T %T\tprop.v=%v", i, col.Name, v, v)
+			//col := cols[i]
+			//u.Debugf("%-2d col.as=%-10s prop.T %T\tprop.v=%v", i, col.As, v, v)
 		}
 
-		//u.Debugf("%s new row ct: %v cols:%v vals:%v", r.Key(), m.Total, colNames, vals)
+		//u.Debugf("new row ct: %v cols:%v vals:%v", m.Total, colNames, vals)
 		//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
 		msg := datasource.NewSqlDriverMessageMap(uint64(m.Total), vals, colNames)
 		m.Total++
@@ -186,10 +186,8 @@ func (m *ResultReader) Run() error {
 		case outCh <- msg:
 			// continue
 		}
-		//u.Debugf("vals:  %v", row.Vals)
-
 	}
 
-	u.Infof("finished query, took: %v for %v rows", time.Now().Sub(queryStart), m.Total)
+	u.Debugf("finished query, took: %v for %v rows", time.Now().Sub(queryStart), m.Total)
 	return nil
 }

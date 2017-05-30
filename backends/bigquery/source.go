@@ -43,7 +43,7 @@ func init() {
 // Source is a BigQuery datasource, this provides Reads, Insert, Update, Delete
 // - singleton shared instance
 // - creates clients to bigquery (clients perform queries)
-// - provides schema info about bigtable table/column-families
+// - provides schema info about bigquery table/column-families
 type Source struct {
 	db               string
 	billingProject   string
@@ -81,7 +81,9 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 	m.db = strings.ToLower(ss.Name)
 	m.tablemap = make(map[string]*schema.Table)
 
-	u.Infof("Init:  %#v", m.schema.Conf)
+	// by, _ := json.MarshalIndent(m.schema.Conf, "", "  ")
+	// u.Infof("Init:  %#v\n\n%s\n", m.schema.Conf, string(by))
+
 	if m.schema.Conf == nil {
 		return fmt.Errorf("Schema conf not found")
 	}
@@ -125,6 +127,19 @@ func (m *Source) loadSchema() error {
 		}
 	}
 
+	if len(m.schema.Conf.TableAliases) > 0 {
+		if len(tablesToLoad) == 0 {
+			tablesToLoad = make(map[string]struct{}, len(m.schema.Conf.TableAliases))
+		}
+		for alias, tableToLoad := range m.schema.Conf.TableAliases {
+			u.Warnf("table alias:  %q  :  %q", alias, tableToLoad)
+			if !strings.HasPrefix(tableToLoad, "[") {
+				m.schema.Conf.TableAliases[alias] = fmt.Sprintf("[%s]", tableToLoad)
+			}
+		}
+	}
+
+	// The "dataProject" is pretty bogus, it really is BillingProject
 	client, err := bigquery.NewClient(context.Background(), m.dataProject)
 	if err != nil {
 		u.Warnf("Could not create bigquery client %v", err)
@@ -145,7 +160,7 @@ func (m *Source) loadSchema() error {
 			u.Warnf("could not read tables %v", err)
 			return err
 		}
-		//u.Debugf("table fqname:%s  id:%s", t.FullyQualifiedName(), t.TableID)
+		u.Debugf("table fqname:%s  id:%s", t.FullyQualifiedName(), t.TableID)
 		table := t.TableID
 		if len(tablesToLoad) > 0 {
 			if _, shouldLoad := tablesToLoad[table]; !shouldLoad {
@@ -157,6 +172,11 @@ func (m *Source) loadSchema() error {
 		if err != nil {
 			u.Warnf("could not read tables %v", err)
 			return err
+		}
+
+		// Allow non fully qualified names
+		if _, ok := m.schema.Conf.TableAliases[table]; !ok {
+			m.schema.Conf.TableAliases[table] = fmt.Sprintf("[%s:%s.%s]", m.dataProject, m.dataset, table)
 		}
 
 		tableNames = append(tableNames, table)
@@ -241,7 +261,7 @@ func (m *Source) DataSource() schema.Source { return m }
 func (m *Source) Tables() []string          { return m.tables }
 func (m *Source) Table(table string) (*schema.Table, error) {
 
-	u.Debugf("Table(%q)", table)
+	//u.Debugf("Table(%q)", table)
 	if m.schema == nil {
 		u.Warnf("no schema in use?")
 		return nil, fmt.Errorf("no schema in use")
@@ -262,7 +282,7 @@ func (m *Source) Table(table string) (*schema.Table, error) {
 }
 
 func (m *Source) Open(tableName string) (schema.Conn, error) {
-	u.Debugf("Open(%v)", tableName)
+	//u.Debugf("Open(%v)", tableName)
 	if m.schema == nil {
 		u.Warnf("no schema?")
 		return nil, nil

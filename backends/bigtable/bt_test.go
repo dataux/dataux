@@ -335,7 +335,7 @@ func TestSelectGroupBy(t *testing.T) {
 
 func TestSelectWhereLike(t *testing.T) {
 
-	// We are testing the LIKE clause doesn't exist in Cassandra so we are polyfillying
+	// We are testing the LIKE clause doesn't exist in BigTable so we are polyfillying
 	data := struct {
 		Title  string
 		Author string
@@ -364,9 +364,9 @@ func TestSelectProjectionRewrite(t *testing.T) {
 		Title string
 		Ct    int
 	}{}
-	// We are testing when we need to project twice (1: cassandra, 2: in dataux)
+	// We are testing when we need to project twice (1: BigTable, 2: in dataux)
 	// - the "count AS ct" alias needs to be rewritten to NOT be projected
-	//      in cassandra and or be aware of it since we are projecting again
+	//      in BigTable and or be aware of it since we are projecting again
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         `SELECT title, count AS ct from article WHERE title like "list%"`,
 		ExpectRowCt: 1,
