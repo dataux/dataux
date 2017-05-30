@@ -26,15 +26,13 @@ cd $GOPATH/src/github.com/dataux/dataux
 
 # rm -R $GOPATH/pkg  # force rebuild of all source
 
-# http://stackoverflow.com/questions/11354518/golang-application-auto-build-versioning
-local version=$(git describe --tags | tr -d '\n')
-local pubver=$(git rev-parse --short HEAD)
-
-echo "Making binaries version: $version   versionpublic:  $pubver"
-
-
 dorelease() {
-  echo "releasing $TAG"
+
+  # http://stackoverflow.com/questions/11354518/golang-application-auto-build-versioning
+  version=$(git describe --tags | tr -d '\n')
+  pubver=$(git rev-parse --short HEAD)
+
+  echo "Making binaries version: $version   versionpublic:  $pubver  tag= $TAG"
 
   # if we are re-running, lets delete it first
   github-release delete --tag $TAG
@@ -61,7 +59,7 @@ curl -Lo dataux https://github.com/dataux/dataux/releases/download/$TAG/dataux_m
 
   # create a build for the mac osx amd64 binary
   echo "Building mac dataux"
-  env GOOS=darwin GOARCH=amd64 go build
+  env GOOS=darwin GOARCH=amd64 go build -ldflags "-X github.com/dataux/dataux/version.Version=${version} -X github.com/dataux/dataux/version.VersionPublic=${pubver}"
 
   # need to move to the staic build for docker
   # GOOS=linux go build -a --ldflags '-extldflags "-static"' -tags netgo -installsuffix netgo .
@@ -88,7 +86,7 @@ curl -Lo dataux https://github.com/dataux/dataux/releases/download/$TAG/dataux_m
 # lets get the name of this release which is our tag
 #  aka     2016.12.03   type tag
 export TAG=$(git describe $(git rev-list --tags --max-count=1))
-dorelease 
+dorelease
 
 export TAG="latest"
 dorelease
