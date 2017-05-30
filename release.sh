@@ -35,11 +35,11 @@ dorelease() {
   echo "Making binaries version: $version   versionpublic:  $pubver  tag= $TAG"
 
   # if we are re-running, lets delete it first
-  github-release delete --tag $TAG
+  github-release delete --tag "$TAG"
 
   # create a release for tag
   github-release release \
-    --tag $TAG \
+    --tag "$TAG" \
     --name "Dataux $TAG release" \
     --description "
 Scripts to download and save the binary and rename to dataux
@@ -66,7 +66,7 @@ curl -Lo dataux https://github.com/dataux/dataux/releases/download/$TAG/dataux_m
 
   echo "Now uploading $TAG mac version"
   github-release upload \
-    --tag $TAG \
+    --tag "$TAG" \
     --label "Dataux mac $TAG" \
     --name "dataux_mac.$TAG" \
     --file dataux
@@ -77,7 +77,7 @@ curl -Lo dataux https://github.com/dataux/dataux/releases/download/$TAG/dataux_m
 
   echo "Now uploading $TAG linux version"
   github-release upload \
-    --tag $TAG \
+    --tag "$TAG" \
     --label "Dataux linux $TAG" \
     --name "dataux_linux.$TAG" \
     --file dataux
