@@ -7,7 +7,7 @@ import (
 	"time"
 
 	u "github.com/araddon/gou"
-	"github.com/lytics/grid/grid.v3"
+	"github.com/lytics/grid"
 )
 
 const timeout = 5 * time.Second

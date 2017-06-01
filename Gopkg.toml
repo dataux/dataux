@@ -166,7 +166,7 @@
   name = "github.com/lytics/go-lytics"
 
 [[constraint]]
-  branch = "small_mods"
+  branch = "master"
   name = "github.com/lytics/grid"
 
 [[constraint]]

@@ -12,7 +12,7 @@ import (
 
 	u "github.com/araddon/gou"
 	etcdv3 "github.com/coreos/etcd/clientv3"
-	"github.com/lytics/grid/grid.v3"
+	"github.com/lytics/grid"
 	"github.com/sony/sonyflake"
 
 	"github.com/araddon/qlbridge/datasource"

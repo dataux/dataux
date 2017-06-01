@@ -141,7 +141,7 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 			u.Errorf("Could not get mailbox %v", err)
 			return nil, err
 		}
-		txferSource := NewSource(m.Ctx, mbox.Id(), mbox.C)
+		txferSource := NewSource(m.Ctx, mbox.Name(), mbox.C)
 		localTask.Add(txferSource)
 
 		var completionTask exec.TaskRunner
@@ -157,7 +157,7 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 		} else if p.NeedsFinalProjection() {
 			projplan, err := plan.NewProjectionFinal(m.Ctx, p)
 			if err != nil {
-				u.Errorf("%p projection final error %s err=%v", m, mbox.Id(), err)
+				u.Errorf("%p projection final error %s err=%v", m, mbox.Name(), err)
 				return nil, err
 			}
 			proj := exec.NewProjectionLimit(m.Ctx, projplan)
