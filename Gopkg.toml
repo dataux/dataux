@@ -82,7 +82,7 @@
   name = "github.com/araddon/gou"
 
 [[constraint]]
-  branch = "identity_quote"
+  branch = "master"
   name = "github.com/araddon/qlbridge"
 
 [[constraint]]
