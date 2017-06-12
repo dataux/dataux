@@ -16,7 +16,7 @@ The default example dataux docker container
 includes a single table `appearances` in database `baseball`
 that is made from a single csv file stored in the container.
 
-We are going to add our own source (Lytics) via a `SQL CREATE` statement.
+We are going to add an additional source (Lytics) via a `SQL CREATE` statement.
 
 ```sh
 
