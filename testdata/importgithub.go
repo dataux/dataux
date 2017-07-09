@@ -21,10 +21,10 @@ var (
 	esGithubLoaded sync.Once
 )
 
-func LoadGithubToEsOnce(host string) {
+func LoadGithubToEsOnce(address string) {
 	esGithubLoaded.Do(func() {
 		// Load 2014 December 01, 02 full 24 hours for those days
-		LoadGithubToEs(host, 2014, 12, 1, 2)
+		LoadGithubToEs(address, 2014, 12, 1, 2)
 	})
 }
 
@@ -39,10 +39,10 @@ func (g *GithubEvent) Type() string {
 }
 
 // Create an Elasticsearch Put Mapping for customizing field mappings
-func PutGithubMappings(host string) {
+func PutGithubMappings(address string) {
 
 	for _, evType := range []string{"watch", "issues"} {
-		esUrl := fmt.Sprintf("http://%s:9200/github_%s", host, evType)
+		esUrl := fmt.Sprintf("%s/github_%s", address, evType)
 		u.Debugf("create index/mapping at %v", esUrl)
 		u.PostJson(esUrl, `
 		{
@@ -75,20 +75,25 @@ func PutGithubMappings(host string) {
 	}
 }
 
-//  Load a set of historical data from Github into Elasticsearch
+// Load a set of historical data from Github into Elasticsearch
 //
-//  LoadGithubToEs("localhost",2015,1,2,24)
-//   @host = elasticsearch host address
-//   @year = 2015   ie which year of github history
-//   @month = 01    ie month of year
-//   @daysToImport = Number of days worth of data to import
-//   @hoursToImport = number of hours of data to import
-func LoadGithubToEs(host string, year, month, daysToImport, hoursToImport int) {
+// > LoadGithubToEs("localhost:9200",2015,1,2,24)
+//
+// @address = elasticsearch host:port address
+// @year = 2015   ie which year of github history
+// @month = 01    ie month of year
+// @daysToImport = Number of days worth of data to import
+// @hoursToImport = number of hours of data to import
+func LoadGithubToEs(address string, year, month, daysToImport, hoursToImport int) {
 
-	PutGithubMappings(host)
+	if !strings.HasPrefix(strings.ToLower(address), "http") {
+		address = "http://" + address
+	}
+	PutGithubMappings(address)
 	docCt := 0
 	conn := es.NewConn()
-	conn.Domain = host
+	conn.SetFromUrl(address)
+	u.Debugf("starting ES at host=%v port=%v", conn.Domain, conn.Port)
 	indexer := conn.NewBulkIndexer(5)
 	indexer.Sender = func(buf *bytes.Buffer) error {
 		//u.Debugf("send:  %v  buffersize: %v", docCt, buf.Len())
@@ -100,27 +105,18 @@ func LoadGithubToEs(host string, year, month, daysToImport, hoursToImport int) {
 		indexer.Flush()
 	}()
 
-	//http://data.githubarchive.org/2015-01-01-15.json.g
+	// curl -v -I http://data.githubarchive.org/2015-01-01-15.json.gz
 	for day := 1; day <= daysToImport; day++ {
 		for hr := 0; hr < hoursToImport; hr++ {
 			downUrl := fmt.Sprintf("http://data.githubarchive.org/%d-%02d-%02d-%d.json.gz", year, month, day, hr)
 
 			u.Info("Starting Download ", downUrl)
-			//return
 			resp, err := http.Get(downUrl)
-			if err != nil || resp == nil {
-				panic("Could not download data")
-			}
+			exitIfErr(err)
 			defer resp.Body.Close()
-			if err != nil {
-				u.Error(err)
-				return
-			}
 			gzReader, err := gzip.NewReader(resp.Body)
 			defer gzReader.Close()
-			if err != nil {
-				panic(err)
-			}
+			exitIfErr(err)
 			r := bufio.NewReader(gzReader)
 			var ge GithubEvent
 			for {
@@ -130,30 +126,31 @@ func LoadGithubToEs(host string, year, month, daysToImport, hoursToImport int) {
 					if err == io.EOF {
 						indexer.Flush()
 						break
-					} else {
-						u.Errorf("FATAL:  could not read line? %v", err)
-						return
 					}
+					u.Errorf("could not read line? %v", err)
+					return
 				}
-				if err := json.Unmarshal(line, &ge); err == nil {
 
-					switch ge.Type() {
-					case "watch", "issues":
-						id := fmt.Sprintf("%x", md5.Sum(line))
-						err = indexer.Index("github_"+ge.Type(), "event", id, "", "", &ge.Created, line)
-						if err != nil {
-							u.Errorf("error? %v", err)
-						}
-						docCt++
-					case "push":
-						// jh := u.NewJsonHelper(line)
-						// delete(jh, "payload") // elasticsearch 2.1 hates that payload.shas alternates string/bool
-						// line, _ = json.Marshal(&jh)
+				err = json.Unmarshal(line, &ge)
+				if err != nil {
+					u.Errorf("could not read line err= %v\n%v", err, string(line))
+					continue
+				}
+
+				switch ge.Type() {
+				case "watch", "issues":
+					id := fmt.Sprintf("%x", md5.Sum(line))
+					err = indexer.Index("github_"+ge.Type(), "event", id, "", "", &ge.Created, line)
+					if err != nil {
+						u.Errorf("error? %v", err)
 					}
-
-				} else {
-					u.Errorf("ERROR? %v", string(line))
+					docCt++
+				case "push":
+					// jh := u.NewJsonHelper(line)
+					// delete(jh, "payload") // elasticsearch 2.1 hates that payload.shas alternates string/bool
+					// line, _ = json.Marshal(&jh)
 				}
+
 			}
 
 			u.Infof("finished importing %d json docs ", docCt)
@@ -161,18 +158,8 @@ func LoadGithubToEs(host string, year, month, daysToImport, hoursToImport int) {
 	}
 }
 
-func waitFor(check func() bool, timeoutSecs int) {
-	timer := time.NewTicker(100 * time.Millisecond)
-	tryct := 0
-	for _ = range timer.C {
-		if check() {
-			timer.Stop()
-			break
-		}
-		if tryct >= timeoutSecs*10 {
-			timer.Stop()
-			break
-		}
-		tryct++
+func exitIfErr(err error) {
+	if err != nil {
+		panic(err.Error())
 	}
 }

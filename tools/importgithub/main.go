@@ -11,12 +11,16 @@ import (
 
 usage:
 
-	go build && ./importgithub
+	go build
+
+	./importgithub
+
+	./importgithub --host="localhost:9201"
 
 */
 
 var (
-	eshost *string = flag.String("host", "localhost", "Elasticsearch Server Host Address")
+	eshost *string = flag.String("host", "localhost:9200", "Elasticsearch Server Host Address")
 )
 
 func init() {
