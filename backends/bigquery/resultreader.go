@@ -12,6 +12,7 @@ import (
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
+	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/value"
 )
@@ -129,7 +130,10 @@ func (m *ResultReader) Run() error {
 		u.Warnf("Could not create bigquery client billing_project=%q  err=%v", m.Req.s.billingProject, err)
 		return err
 	}
-	q := client.Query(sel.String())
+
+	bqWriter := expr.NewDialectWriter('"', '[')
+	sel.WriteDialect(bqWriter)
+	q := client.Query(bqWriter.String())
 
 	ctx := context.Background()
 	job, err := q.Run(ctx)

@@ -49,6 +49,7 @@ type Source struct {
 	billingProject   string
 	dataProject      string
 	dataset          string
+	legacySyntax     bool
 	tables           []string // Lower cased
 	tablemap         map[string]*schema.Table
 	conf             *schema.ConfigSource
@@ -106,6 +107,8 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 	if len(m.dataset) == 0 {
 		return fmt.Errorf("No 'dataset' for bigquery found in config %v", m.conf.Settings)
 	}
+
+	m.legacySyntax = m.conf.Settings.Bool("legacy_syntax")
 
 	m.loadSchema()
 	return nil

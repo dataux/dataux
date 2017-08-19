@@ -197,6 +197,18 @@ func TestSelectLimit(t *testing.T) {
 	})
 }
 
+func TestSelectEscapeSyntax(t *testing.T) {
+	data := struct {
+		Name string
+	}{}
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:             "select `name` from `bikeshare_stations` LIMIT 1;",
+		ExpectRowCt:     1,
+		ValidateRowData: func() {},
+		RowData:         &data,
+	})
+}
+
 func TestSelectGroupBy(t *testing.T) {
 	data := struct {
 		Landmark string
