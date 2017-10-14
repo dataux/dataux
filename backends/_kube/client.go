@@ -11,8 +11,10 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/api/iterator"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/pkg/api/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 // Objects returns an iterator over the objects in the bucket that match the Query q.

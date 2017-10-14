@@ -1,0 +1,152 @@
+
+# Gopkg.toml example
+#
+# Refer to https://github.com/golang/dep/blob/master/docs/Gopkg.toml.md
+# for detailed Gopkg.toml documentation.
+#
+# required = ["github.com/user/thing/cmd/thing"]
+# ignored = ["github.com/user/project/pkgX", "bitbucket.org/user/project/pkgA/pkgY"]
+#
+# [[constraint]]
+#   name = "github.com/user/project"
+#   version = "1.0.0"
+#
+# [[constraint]]
+#   name = "github.com/user/project2"
+#   branch = "dev"
+#   source = "github.com/myfork/project2"
+#
+# [[override]]
+#  name = "github.com/x/y"
+#  version = "2.4.0"
+
+required = ["github.com/googleapis/gax-go"]
+
+[[constraint]]
+  name = "cloud.google.com/go"
+  version = "0.6.0"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/araddon/dateparse"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/araddon/gou"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/araddon/qlbridge"
+
+[[constraint]]
+  name = "github.com/coreos/etcd"
+  version = "3.1.3"
+
+[[constraint]]
+  name = "github.com/coreos/pkg"
+  version = "3.0.0"
+
+[[constraint]]
+  name = "github.com/go-sql-driver/mysql"
+  version = "1.3.0"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/gocql/gocql"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/golang/protobuf"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/hailocab/go-hostpool"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/jmoiron/sqlx"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/kr/pretty"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/lytics/cloudstorage"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/lytics/confl"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/lytics/dfa"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/lytics/go-lytics"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/lytics/grid"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/mattbaird/elastigo"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/sony/sonyflake"
+
+[[constraint]]
+  name = "github.com/stretchr/testify"
+  version = "1.1.4"
+
+[[constraint]]
+  branch = "master"
+  name = "golang.org/x/net"
+
+
+[[override]]
+  #branch = "master"  
+  revision = "da06d194a00e19ce00d9011a13931c3f6f6887c7"
+  name = "github.com/googleapis/gax-go"
+
+[[constraint]]
+  #branch = "master"  
+  revision = "b53b38ad8a6435bd399ea76d0fa74f23149cca4e"
+  name = "golang.org/x/oauth2"
+
+[[constraint]]
+  #branch = "master"
+  revision = "dfa61ae24628a06502b9c2805d983b57e89399b5"
+  name = "google.golang.org/api"
+
+[[constraint]]
+  #branch = "master"
+  #version = "1.0.4"
+  revision = "708a7f9f3283aa2d4f6132d287d78683babe55c8"
+  name = "google.golang.org/grpc"
+
+[[constraint]]
+  branch = "v2"
+  name = "gopkg.in/mgo.v2"
+
+# [[constraint]]
+#   branch = "master"
+#   name = "k8s.io/apimachinery"
+
+# [[constraint]]
+#   name = "k8s.io/client-go"
+#   version = "4.0.0"
+
+# [[constraint]]
+#   branch = "master"
+#   name = "k8s.io/apimachinery"
+
+# [[constraint]]
+#   # 10/13/2017 this 4.0.0 no longer works with apimachinery master
+#   # so we are locking to newer version?
+#   name = "k8s.io/client-go"
+#   version = "4.0.0"
+#   #revision = "82aa063804cf055e16e8911250f888bc216e8b61"

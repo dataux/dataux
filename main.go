@@ -17,9 +17,15 @@ import (
 	_ "github.com/dataux/dataux/backends/cassandra"
 	_ "github.com/dataux/dataux/backends/datastore"
 	_ "github.com/dataux/dataux/backends/elasticsearch"
-	_ "github.com/dataux/dataux/backends/kubernetes"
 	_ "github.com/dataux/dataux/backends/lytics"
 	_ "github.com/dataux/dataux/backends/mongo"
+
+	// I cannot get this working right now, currently
+	// a conflict between etcd &kube dependencies that seems un-resolveable
+	//_ "github.com/dataux/dataux/backends/kubernetes"
+
+	// fake for dep
+	_ "google.golang.org/grpc"
 
 	// Frontend's side-effect imports
 	_ "github.com/dataux/dataux/frontends/mysqlfe"

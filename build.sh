@@ -14,16 +14,16 @@ docker rmi -f gcr.io/dataux-io/dataux:latest
 # docker rm -f gcr.io/dataux-io/dataux:v0.15.0
 # docker rmi -f gcr.io/dataux-io/dataux:v0.15.0
 
-docker rm -f gcr.io/dataux-io/dataux:v2017.05.29a
-docker rmi -f gcr.io/dataux-io/dataux:v2017.05.29a
+docker rm -f gcr.io/dataux-io/dataux:v0.15.1
+docker rmi -f gcr.io/dataux-io/dataux:v0.15.1
 
 # if you get auth issues
 #
 #  rm ~/.docker/config.json 
 #  gcloud docker --authorize-only
 
-docker build -t gcr.io/dataux-io/dataux:v2017.05.29a .
-gcloud docker -- push gcr.io/dataux-io/dataux:v2017.05.29a
+docker build -t gcr.io/dataux-io/dataux:v0.15.1 .
+gcloud docker -- push gcr.io/dataux-io/dataux:v0.15.1
 
 docker build -t gcr.io/dataux-io/dataux:latest .
 gcloud docker -- push gcr.io/dataux-io/dataux:latest
