@@ -10,6 +10,17 @@ bigquery clients.
 ![dataux_bigquery](https://cloud.githubusercontent.com/assets/7269/26564686/1d82180e-4499-11e7-90f5-57ee7f87310a.png)
 
 
+```sh
+# assuming you are running local, if you are instead in Google Cloud, or Google Container Engine
+# you don't need the credentials or volume mount
+docker run -e "GOOGLE_APPLICATION_CREDENTIALS=/.config/gcloud/application_default_credentials.json" \
+  -e "LOGGING=debug" \
+  --rm -it \
+  -p 4000:4000 \
+  -v ~/.config/gcloud:/.config/gcloud \
+  gcr.io/dataux-io/dataux:latest
+```
+
 ```sql
 
 # connect to dataux
