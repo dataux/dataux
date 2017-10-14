@@ -25,7 +25,7 @@ easy to add custom data sources as well as REST api sources.
 * [Google Cloud Storage / (csv, json files)](https://github.com/dataux/dataux/tree/master/backends/files) An example of REST api backends (list of files), as well as the file contents themselves are tables.
 * [Cassandra](https://github.com/dataux/dataux/tree/master/backends/cassandra) SQL against cassandra.  Adds sql features that are missing.
 * [Lytics](https://github.com/dataux/dataux/tree/master/backends/lytics) SQL against [Lytics REST Api's](https://www.getlytics.com)
-* [Kubernetes](https://github.com/dataux/dataux/tree/master/backends/kubernetes) An example of REST api backend.
+* [Kubernetes](https://github.com/dataux/dataux/tree/master/backends/_kube) An example of REST api backend.
 * [Google Big Query](https://github.com/dataux/dataux/tree/master/backends/bigquery) MYSQL against worlds best analytics datawarehouse [BigQuery](https://cloud.google.com/bigquery/).
 * [Google Datastore](https://github.com/dataux/dataux/tree/master/backends/datastore) MYSQL against [Datastore](https://cloud.google.com/datastore/).
 
@@ -43,52 +43,64 @@ easy to add custom data sources as well as REST api sources.
 * NOT Production ready.  Currently supporting a few non-critical use-cases (ad-hoc queries, support tool) in production.
 
 
-
 ## Try it Out
 This example imports a couple hours worth of historical data
 from  https://www.githubarchive.org/ into a local
-elasticsearch server for example.  Requires [nats.io](http://nats.io)
-and etcd server running local as well. Docker setup coming soon.
+elasticsearch server for example.  Requires etcd server running local as well. 
+Docker setup coming soon.
 ```sh
 
-cd tools/importgithub
-# assuming elasticsearch on localhost elase --host=myeshost
-go build && ./importgithub
-
-# using dataux.conf from root of this project
-go build
-./dataux --config=dataux.conf
+# assuming you are running local, if you are instead in Google Cloud, or Google Container Engine
+# you don't need the credentials or volume mount
+docker run -e "GOOGLE_APPLICATION_CREDENTIALS=/.config/gcloud/application_default_credentials.json" \
+  -e "LOGGING=debug" \
+  --rm -it \
+  -p 4000:4000 \
+  -v ~/.config/gcloud:/.config/gcloud \
+  gcr.io/dataux-io/dataux:latest
 
 # now that dataux is running use mysql-client to connect
-
 mysql -h 127.0.0.1 -P 4000
 ```
 now run some queries
 ```sql
-use datauxtest;
+-- we have a default CSV dataset that we have copied to the local
+-- docker drive from http://seanlahman.com/baseball-archive/statistics/ 
+
+show databases;
+
+use baseball;
 
 show tables;
 
-describe github_watch;
+describe appearances
 
-select cardinality(`actor`) AS users_who_watched, min(`repository.id`) as oldest_repo from github_watch;
+select count(*) from appearances;
 
-SELECT actor, `repository.name`, `repository.stargazers_count`, `repository.language`
-FROM github_watch where `repository.language` = "Go";
+select * from appearances limit 10;
 
-select actor, repository.name from github_watch where repository.stargazers_count BETWEEN "1000" AND 1100;
 
-SELECT actor, repository.organization AS org
-FROM github_watch 
-WHERE repository.created_at BETWEEN "2008-10-21T17:20:37Z" AND "2008-10-21T19:20:37Z";
+-- Lets add a bigquery datasource
+CREATE source `datauxtest` WITH {
+    "type":"bigquery",
+    "schema":"bqsf_bikes",
+    "table_aliases" : {
+       "bikeshare_stations" : "bigquery-public-data:san_francisco.bikeshare_stations"
+    },
+    "settings" : {
+      "billing_project" : "your-google-cloud-project",
+      "data_project" : "bigquery-public-data",
+      "dataset" : "san_francisco"
+    }
+};
 
-select actor, repository.name from github_watch where repository.name IN ("node", "docker","d3","myicons", "bootstrap") limit 100;
+use bqsf_bikes;
 
-select cardinality(`actor`) AS users_who_watched, count(*) as ct, min(`repository.id`) as oldest_repo
-FROM github_watch
-WHERE repository.description LIKE "database";
+show tables;
 
-# to add other data sources see dataux.conf example
+describe film_locations;
+
+select * from film_locations limit 10;
 
 ```
 
@@ -104,32 +116,6 @@ Roadmap(ish)
   * write lambda functions:  allow arbitray functions to get nats.io pub/sub of write events.
 
 
-
-SQL -> Mongo
-----------------------------------
-
-Mongo | SQL Query  
------ | -------
-`show collections`                                                                | `show tables;`
-na, -- runtime inspection                                                         | `describe mytable;`
-`db.accounts.find({},{created:{"$gte":"1/1/2016"}}).count();`                     | `select count(*) from accounts WHERE created > "1/1/2016";`
-`db.article.find({"year":{"$in": [2013,2014,2015] }},{}}`                         | `select * from article WHERE year IN (2015,2014,2013);`
-`db.article.find({"created":{"$gte": new Date('Aug 01, 2011'), "$lte": new Date('Aug 03, 2013') },{title:1,count:1,author:1}}` |  `SELECT title, count, author FROM article WHERE created BETWEEN todate(\"2011-08-01\") AND todate(\"2013-08-03\")
-`db.article.find({"title":{"Pattern":"^list","Options":"i"}},{title:1,count:1})`  | `SELECT title, count AS ct FROM article WHERE title like \"list%\"`
-na, not avail in mongo (polyfill in dataux)                                       |  `SELECT avg(CHAR_LENGTH(CAST(`title`, \"AS\", \"CHAR\"))) AS title_avg FROM article;`
-need to document ...                                                              | `select min(year), max(year), avg(year), sum(year) from table WHERE exists(a);`
-
-SQL -> Elasticsearch
-----------------------------------
-
-ES API | SQL Query  
------ | -------
-Aliases                 | `show tables;`
-Mapping                 | `describe mytable;`
-hits.total  for filter  | `select count(*) from table WHERE exists(a);`
-aggs min, max, avg, sum | `select min(year), max(year), avg(year), sum(year) from table WHERE exists(a);`
-filter:   terms         | `select * from table WHERE year IN (2015,2014,2013);`
-filter: gte, range      | `select * from table WHERE year BETWEEN 2012 AND 2014`
 
 
 

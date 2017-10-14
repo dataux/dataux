@@ -65,17 +65,54 @@ select * from appearances limit 10;
 
 
 
-
-
-
-Examples
+Adding A Source
 --------------------
 
 
 ```sh
+# from baseball http://seanlahman.com/baseball-archive/statistics/
+mkdir -p /tmp/baseball2
+cd /tmp/baseball2
+curl -Ls http://seanlahman.com/files/database/baseballdatabank-2017.1.zip > bball2.zip
+unzip bball2.zip
 
-# from dataux root
+mv baseball*/core/*.csv .
+
+rm bball2.zip
+rm -rf baseballdatabank-*
+
+# create a google-cloud-storage bucket
+
+gsutil mb gs://my-dataux2-bucket
+
+# sync files to cloud
+gsutil rsync -d -r /tmp/baseball2/  gs://my-dataux2-bucket/
 
 
+# connect
+mysql -h 127.0.0.1 -P4000
+
+
+docker run -e "GOOGLE_APPLICATION_CREDENTIALS=/.config/gcloud/application_default_credentials.json" \
+  -e "LOGGING=debug" \
+  --rm -it \
+  -p 4000:4000 \
+  -v ~/.config/gcloud:/.config/gcloud \
+  gcr.io/dataux-io/dataux:latest
+
+```
+
+```sql
+
+CREATE source gcsbball2 WITH {
+  "type":"cloudstore", 
+  "schema":"gcsbball", 
+  "settings" : {
+     "type": "gcs",
+     "bucket": "my-dataux-bucket",
+     "format": "csv",
+     "jwt": "/.config/gcloud/application_default_credentials.json"
+  }
+};
 
 ```

@@ -6,6 +6,16 @@ Provides SQL Access to Kubernetes Rest API's via the DataUX Mysql Proxy Service.
 
 ![mysql_kube](https://cloud.githubusercontent.com/assets/7269/20697265/96e13c10-b5ac-11e6-944b-c588c6e7570e.png)
 
+CURRENTLY BROKEN
+-----------------------------
+
+10/13/2017 can no longer get this to compile due to vendor dependency issues.
+
+https://github.com/dataux/dataux/issues/60
+
+
+
+
 Try It Out
 ----------------------------
 
