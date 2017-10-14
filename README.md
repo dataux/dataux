@@ -106,28 +106,26 @@ select * from film_locations limit 10;
 
 Roadmap(ish)
 ------------------------------
-* Sources
-  * Big-Query
-  * Big-Table
-  * Json-Files
 * Writes
   * write pub/sub:  inbound insert/update are available as pub-sub messages.
   * write propogation:  inbound insert/update gets written multiple places.
-  * write lambda functions:  allow arbitray functions to get nats.io pub/sub of write events.
-
-
+* Data Sources:   Improve them.
 
 
 
 
 **Hacking**
 
+For now, the goal is to allow this to be used for library, so the 
+`vendor` is not checked in.  use docker containers or `dep` for now.
+
 * see **tools/importgithub** for tool to import 2 days of github data for examples above.
 
 ```sh
-# to run queries below, run test data import
+# run dep ensure
+dep ensure -update -v 
 
-go get -u github.com/dataux/dataux
+
 cd $GOPATH/src/github.com/dataux/dataux/tools/importgithub
 go build
 ./importgithub  ## will import ~200k plus docs from Github archive
