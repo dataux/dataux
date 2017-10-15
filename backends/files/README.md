@@ -28,9 +28,9 @@ serializations, compressions, encryptions.
 
 **Similar To**
 
-Similar to the federated BigQuery engine that can query avro, csv files 
-or [prestodb](http://prestodb.io/).  But with focus on hacking in your own sources
-or file formats, encryption, etc.
+Similar to the [federated BigQuery engine](https://cloud.google.com/bigquery/external-data-sources) 
+that can query avro, csv files (or BigTable) or [prestodb](http://prestodb.io/).  
+But with focus on hacking in your own sources or file formats, encryption, etc.
 
 Example
 ----------------------------
@@ -89,10 +89,7 @@ gsutil mb gs://my-dataux2-bucket
 gsutil rsync -d -r /tmp/baseball2/  gs://my-dataux2-bucket/
 
 
-# connect
-mysql -h 127.0.0.1 -P4000
-
-
+# run a docker container locally, using your local credentials
 docker run -e "GOOGLE_APPLICATION_CREDENTIALS=/.config/gcloud/application_default_credentials.json" \
   -e "LOGGING=debug" \
   --rm -it \
@@ -100,10 +97,13 @@ docker run -e "GOOGLE_APPLICATION_CREDENTIALS=/.config/gcloud/application_defaul
   -v ~/.config/gcloud:/.config/gcloud \
   gcr.io/dataux-io/dataux:latest
 
+# connect to the docker container you just started
+mysql -h 127.0.0.1 -P4000
+
 ```
 
 ```sql
-
+-- Now create a new Source
 CREATE source gcsbball2 WITH {
   "type":"cloudstore", 
   "schema":"gcsbball", 
