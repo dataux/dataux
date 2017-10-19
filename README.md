@@ -194,7 +194,12 @@ as well as a daemon.  (see how minimal main.go is, to encourage your own builtin
 # ensure /vendor has correct versions
 dep ensure -update 
 
-# build docker
+# build binary
 ./.build
+
+# build docker
+
+docker build -t gcr.io/dataux-io/dataux:v0.15.1 .
+
 
 ```
