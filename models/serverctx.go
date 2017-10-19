@@ -1,11 +1,13 @@
 package models
 
 import (
+	"database/sql/driver"
 	"fmt"
 
 	u "github.com/araddon/gou"
 
 	"github.com/araddon/qlbridge/datasource"
+	"github.com/araddon/qlbridge/datasource/memdb"
 	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/schema"
 
@@ -17,16 +19,14 @@ import (
 type ServerCtx struct {
 	// The dataux server config info on schema, backends, frontends, etc
 	Config *Config
-
 	// The underlying qlbridge registry holds info about the available datasource providers
 	Reg *datasource.Registry
-
 	// PlanGrid is swapping out the qlbridge planner
 	// with a distributed version that uses Grid lib to split
 	// tasks across nodes
-	PlanGrid *planner.PlannerGrid
-
-	schemas map[string]*schema.Schema
+	PlanGrid       *planner.PlannerGrid
+	schemas        map[string]*schema.Schema
+	internalSchema *schema.Schema
 }
 
 func NewServerCtx(conf *Config) *ServerCtx {
@@ -39,6 +39,8 @@ func NewServerCtx(conf *Config) *ServerCtx {
 // Init Load all the config info for this server and start the
 // grid/messaging/coordination systems
 func (m *ServerCtx) Init() error {
+
+	m.loadInternalSchema()
 
 	if err := m.loadConfig(); err != nil {
 		return err
@@ -110,6 +112,15 @@ func (m *ServerCtx) Table(schemaName, tableName string) (*schema.Table, error) {
 		return s.Table(tableName)
 	}
 	return nil, fmt.Errorf("That schema %q not found", schemaName)
+}
+
+func (m *ServerCtx) loadInternalSchema() {
+	inrow := []driver.Value{1, "not implemented"}
+	cols := []string{"id", "worker"}
+	db, _ := memdb.NewMemDbData("workers", [][]driver.Value{inrow}, cols)
+	m.internalSchema = datasource.RegisterSchemaSource("server_schema", "server_schema", db)
+	m.Config.Sources = append(m.Config.Sources, &schema.ConfigSource{SourceType: "server_schema", Name: "server_schema"})
+	m.Config.Schemas = append(m.Config.Schemas, &schema.ConfigSchema{Name: "server_schema"})
 }
 
 func (m *ServerCtx) loadConfig() error {

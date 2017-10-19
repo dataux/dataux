@@ -33,11 +33,11 @@ func LoadConfig(conf string) (*Config, error) {
 
 type (
 	// Config for DataUX Server config made up of blocks
-	//   1) Frontend Listeners (protocols)
-	//   2) Sources (types of backends such as elasticsearch, mysql, mongo, ...)
-	//   3) Schemas:  n number of sources can create a "Virtual Schema"
-	//   4) list of server/nodes for Sources
-	//   5) nats,etcd coordinators
+	// 1) Frontend Listeners (protocols)
+	// 2) Sources (types of backends such as elasticsearch, mysql, mongo, ...)
+	// 3) Schemas:  n number of sources can create a "Virtual Schema"
+	// 4) list of server/nodes for Sources
+	// 5) etcd coordinators hosts
 	Config struct {
 		SupressRecover bool                   `json:"supress_recover"` // do we recover?
 		WorkerCt       int                    `json:"worker_ct"`       // 4 how many worker nodes on this instance
