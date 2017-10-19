@@ -178,3 +178,23 @@ Inspiration/Other works
 > flow and process primary data changes.
 
 from [Databus](https://github.com/linkedin/databus)
+
+
+Building
+--------------------------
+I plan on getting the `vendor` getting checked in soon so the build will work.  However
+I am currently trying to figure out how to organize packages to allow use as both a library
+as well as a daemon.  (see how minimal main.go is, to encourage your own builtins and datasources.)
+
+
+```sh
+
+# for just docker
+
+# ensure /vendor has correct versions
+dep ensure -update 
+
+# build docker
+./.build
+
+```
