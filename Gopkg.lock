@@ -22,7 +22,7 @@
 [[projects]]
   branch = "master"
   name = "github.com/araddon/qlbridge"
-  packages = ["datasource","datasource/files","datasource/membtree","datasource/mockcsv","datasource/mockcsvtestdata","exec","expr","expr/builtins","lex","plan","rel","schema","testutil","value","vm"]
+  packages = ["datasource","datasource/files","datasource/membtree","datasource/memdb","datasource/mockcsv","datasource/mockcsvtestdata","exec","expr","expr/builtins","lex","plan","rel","schema","testutil","value","vm"]
   revision = "bdc0d539f3580b9076e810099187fab6465e4c9b"
 
 [[projects]]
@@ -155,6 +155,24 @@
   name = "github.com/hailocab/go-hostpool"
   packages = ["."]
   revision = "e80d13ce29ede4452c43dea11e79b9bc8a15b478"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/hashicorp/go-immutable-radix"
+  packages = ["."]
+  revision = "8aac2701530899b64bdea735a1de8da899815220"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/hashicorp/go-memdb"
+  packages = ["."]
+  revision = "75ff99613d288868d8888ec87594525906815dbc"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/hashicorp/golang-lru"
+  packages = ["simplelru"]
+  revision = "0a025b7e63adc15a622f29b0b2c4c3848243bbf6"
 
 [[projects]]
   name = "github.com/jmespath/go-jmespath"
@@ -402,6 +420,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "14c053ac8d8d4e75322032e096bcf34d58f04930d39e84150fc5269ced8ab50c"
+  inputs-digest = "b2a57a2e9f8b95d45d01c3607d658e05f8d0de5585551221ef4d2e75d8fae8ce"
   solver-name = "gps-cdcl"
   solver-version = 1
