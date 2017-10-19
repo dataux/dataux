@@ -1,9 +1,13 @@
-FROM golang:1.7
-MAINTAINER Aaron Raddon <araddon@gmail.com>
+FROM golang:1.9
 
-ADD backends/files/tables/tables/appearances/appearances.csv /vol/baseball/appearances.csv
+RUN \
+  go get -u -v github.com/golang/dep/cmd/dep
 
-ADD dataux.container.conf /etc/dataux.conf
+COPY . ${GOPATH}/src/github.com/dataux/dataux/
+WORKDIR ${GOPATH}/src/github.com/dataux/dataux/
 
-ADD dataux /dataux
-ENTRYPOINT ["/dataux","--config=/etc/dataux.conf"]
+RUN \
+  dep ensure -update -v && \
+  go build
+
+ENTRYPOINT [ "./dataux" ]
