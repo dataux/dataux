@@ -32,7 +32,7 @@ type ResultReader struct {
 	cols          []string
 	Vals          [][]driver.Value
 	Total         int
-	Req           *SqlToDatstore
+	Req           *SQLToDatstore
 }
 
 // ResultReaderNext A wrapper, allowing us to implement sql/driver Next() interface
@@ -41,7 +41,7 @@ type ResultReaderNext struct {
 	*ResultReader
 }
 
-func NewResultReader(req *SqlToDatstore) *ResultReader {
+func NewResultReader(req *SQLToDatstore) *ResultReader {
 	m := &ResultReader{}
 	m.TaskBase = exec.NewTaskBase(req.Ctx)
 	m.Req = req

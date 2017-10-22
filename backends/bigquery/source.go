@@ -14,19 +14,21 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/api/iterator"
 
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 )
 
 const (
+	// DataSourceLabel is public sourcetype for bigquery.
 	DataSourceLabel = "bigquery"
 )
 
 var (
+	// ErrNoSchema is an error that no schema could be found.
 	ErrNoSchema = fmt.Errorf("No schema or configuration exists")
 
+	// SchemaRefreshInterval is time between checking for schema changes
 	SchemaRefreshInterval = time.Duration(time.Minute * 5)
 
 	// Ensure our Google BigQuery implements schema.Source interface
@@ -37,7 +39,7 @@ var (
 
 func init() {
 	// We need to register our DataSource provider here
-	datasource.Register(DataSourceLabel, &Source{})
+	schema.RegisterSourceType(DataSourceLabel, &Source{})
 }
 
 // Source is a BigQuery datasource, this provides Reads, Insert, Update, Delete
@@ -53,7 +55,7 @@ type Source struct {
 	tables           []string // Lower cased
 	tablemap         map[string]*schema.Table
 	conf             *schema.ConfigSource
-	schema           *schema.SchemaSource
+	schema           *schema.Schema
 	lastSchemaUpdate time.Time
 	mu               sync.Mutex
 	closed           bool
@@ -68,7 +70,7 @@ type Mutator struct {
 
 func (m *Source) Init() {}
 
-func (m *Source) Setup(ss *schema.SchemaSource) error {
+func (m *Source) Setup(ss *schema.Schema) error {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()

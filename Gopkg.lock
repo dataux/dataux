@@ -20,10 +20,10 @@
   revision = "33600153ea8fd3ed2d60e2e27e34d809cd0a1533"
 
 [[projects]]
-  branch = "master"
+  branch = "schema_cleanup"
   name = "github.com/araddon/qlbridge"
   packages = ["datasource","datasource/files","datasource/membtree","datasource/memdb","datasource/mockcsv","datasource/mockcsvtestdata","exec","expr","expr/builtins","lex","plan","rel","schema","testutil","value","vm"]
-  revision = "bdc0d539f3580b9076e810099187fab6465e4c9b"
+  revision = "db4545025bad75fbbf62366c950759a642cd4e8e"
 
 [[projects]]
   branch = "master"
@@ -88,8 +88,8 @@
 [[projects]]
   name = "github.com/dgrijalva/jwt-go"
   packages = ["."]
-  revision = "d2709f9f1f31ebcda9651b03077758c1f3a0018c"
-  version = "v3.0.0"
+  revision = "dbeaa9332f19a944acb5736b4456cfcc02140e29"
+  version = "v3.1.0"
 
 [[projects]]
   name = "github.com/ghodss/yaml"
@@ -107,7 +107,7 @@
   branch = "master"
   name = "github.com/gocql/gocql"
   packages = [".","internal/lru","internal/murmur","internal/streams"]
-  revision = "2416cf340d32ee20794e739fa794968858295098"
+  revision = "843f6b1d2288839f5d00f92be11cbbebd600ba51"
 
 [[projects]]
   name = "github.com/gogo/protobuf"
@@ -119,7 +119,7 @@
   branch = "master"
   name = "github.com/golang/protobuf"
   packages = ["jsonpb","proto","protoc-gen-go/descriptor","ptypes/any","ptypes/duration","ptypes/empty","ptypes/struct","ptypes/timestamp","ptypes/wrappers"]
-  revision = "130e6b02ab059e7b717a096f397c5b60111cae74"
+  revision = "1643683e1b54a9e88ad26d98f81400c8c9d9f4f9"
 
 [[projects]]
   branch = "master"
@@ -184,7 +184,7 @@
   branch = "master"
   name = "github.com/jmoiron/sqlx"
   packages = [".","reflectx"]
-  revision = "d9bd385d68c068f1fabb5057e3dedcbcbb039d0f"
+  revision = "3379e5993990b1f927fc8db926485e6f6becf2d2"
 
 [[projects]]
   name = "github.com/jonboulle/clockwork"
@@ -322,7 +322,7 @@
   branch = "master"
   name = "github.com/prometheus/procfs"
   packages = [".","xfs"]
-  revision = "e645f4e5aaa8506fc71d6edbc5c4ff02c04c46f2"
+  revision = "a6e9df898b1336106c743392c48ee0b71f5c4efa"
 
 [[projects]]
   branch = "master"
@@ -340,7 +340,7 @@
   branch = "master"
   name = "github.com/ugorji/go"
   packages = ["codec"]
-  revision = "f76f59a92f8224c695c0e2c401b9ad17e820a8f5"
+  revision = "bdcc60b419d136a85cdf2e7cbcac34b3f1cd6e57"
 
 [[projects]]
   name = "github.com/xiang90/probing"
@@ -352,13 +352,13 @@
   branch = "master"
   name = "golang.org/x/crypto"
   packages = ["bcrypt","blowfish"]
-  revision = "9419663f5a44be8b34ca85f08abc5fe1be11f8a3"
+  revision = "edd5e9b0879d13ee6970a50153d85b8fec9f7686"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/net"
   packages = ["context","context/ctxhttp","http2","http2/hpack","idna","internal/timeseries","lex/httplex","trace"]
-  revision = "a04bdaca5b32abe1c069418fb7088ae607de5bd0"
+  revision = "cd69bc3fc700721b709c3a59e16e24c67b58f6ff"
 
 [[projects]]
   name = "golang.org/x/oauth2"
@@ -369,7 +369,7 @@
   branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix"]
-  revision = "686000749eaec0b8855b8eef5336cf63899fe51d"
+  revision = "8dbc5d05d6edcc104950cc299a1ce6641235bc86"
 
 [[projects]]
   branch = "master"
@@ -420,6 +420,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "b2a57a2e9f8b95d45d01c3607d658e05f8d0de5585551221ef4d2e75d8fae8ce"
+  inputs-digest = "6d2cc6131fbab9d81ccb5d05044cbde68ca52fcd8ec80e4f38985d070966526d"
   solver-name = "gps-cdcl"
   solver-version = 1

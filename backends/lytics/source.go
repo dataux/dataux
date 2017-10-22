@@ -8,7 +8,6 @@ import (
 	u "github.com/araddon/gou"
 	lytics "github.com/lytics/go-lytics"
 
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 )
@@ -25,30 +24,30 @@ const (
 
 func init() {
 	// We need to register our DataSource provider here
-	datasource.Register(SourceType, &Source{})
+	schema.RegisterSourceType(SourceType, &Source{})
 }
 
 // Source is the Lytics data source provider
 // responsible for schema management, and connection
 // management to Lytics
 type Source struct {
-	srcschema *schema.SchemaSource
-	conf      *schema.ConfigSource
-	tables    []string // lower cased
-	tablemap  map[string]*schema.Table
-	apiKey    string
-	client    *lytics.Client
+	schema   *schema.Schema
+	conf     *schema.ConfigSource
+	tables   []string // lower cased
+	tablemap map[string]*schema.Table
+	apiKey   string
+	client   *lytics.Client
 }
 
 func (m *Source) Init() {}
 
-func (m *Source) Setup(ss *schema.SchemaSource) error {
+func (m *Source) Setup(ss *schema.Schema) error {
 
-	if m.srcschema != nil {
+	if m.schema != nil {
 		return nil
 	}
 
-	m.srcschema = ss
+	m.schema = ss
 	m.conf = ss.Conf
 	m.tablemap = make(map[string]*schema.Table)
 
@@ -64,38 +63,42 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 	}
 
 	m.client = lytics.NewLytics(m.apiKey, "", nil)
-	u.Debugf("Init() Lytics schema P=%p", m.srcschema)
+	u.Debugf("Init() Lytics schema P=%p", m.schema)
 
 	if err := m.loadSchema(); err != nil {
 		u.Errorf("could not load es tables: %v", err)
 		return err
 	}
-	if m.srcschema != nil {
-		u.Debugf("Post Init() Lytics schema P=%p tblct=%d", m.srcschema, len(m.srcschema.Tables()))
+	if m.schema != nil {
+		u.Debugf("Post Init() Lytics schema P=%p tblct=%d", m.schema, len(m.schema.Tables()))
 	}
 	return nil
 }
 
 func (m *Source) Open(schemaName string) (schema.Conn, error) {
 	u.Debugf("Open(%v)", schemaName)
-	tbl, err := m.srcschema.Table(schemaName)
+	tbl, err := m.schema.Table(schemaName)
 	if err != nil {
 		return nil, err
 	}
 	if tbl == nil {
-		u.Errorf("Could not find table for '%s'.'%s'", m.srcschema.Name, schemaName)
-		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.srcschema.Name, schemaName)
+		u.Errorf("Could not find table for '%s'.'%s'", m.schema.Name, schemaName)
+		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, schemaName)
 	}
 
 	sqlConverter := NewGenerator(tbl, m.apiKey)
 	return sqlConverter, nil
 }
 
-func (m *Source) Close() error              { return nil }
-func (m *Source) DataSource() schema.Source { return m }
+// Close this source
+func (m *Source) Close() error { return nil }
 
+//func (m *Source) DataSource() schema.Source { return m }
+
+// Tables get list of tables.
 func (m *Source) Tables() []string { return m.tables }
 
+// Table get single schema table.
 func (m *Source) Table(table string) (*schema.Table, error) {
 	//u.Debugf("get table for %s", table)
 	t := m.tablemap[table]

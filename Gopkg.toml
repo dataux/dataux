@@ -35,7 +35,7 @@ required = ["github.com/googleapis/gax-go"]
   name = "github.com/araddon/gou"
 
 [[constraint]]
-  branch = "master"
+  branch = "schema_cleanup"
   name = "github.com/araddon/qlbridge"
 
 [[constraint]]

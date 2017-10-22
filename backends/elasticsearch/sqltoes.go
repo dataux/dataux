@@ -19,6 +19,7 @@ import (
 )
 
 var (
+	// DefaultLimit is default page size limit.
 	DefaultLimit = 1000
 
 	// Implement SourcePlanner interface that allows sql statements
@@ -29,14 +30,14 @@ var (
 
 type esMap map[string]interface{}
 
-// Sql To Elasticsearch Request Object
-//   Map sql queries into Elasticsearch Json Requests
+// SqlToEs Sql To Elasticsearch Request Object
+// Map sql queries into Elasticsearch Json Requests
 type SqlToEs struct {
 	resp           *ResultReader
 	p              *plan.Source
 	tbl            *schema.Table
 	sel            *rel.SqlSelect
-	schema         *schema.SchemaSource
+	schema         *schema.Schema
 	ctx            *plan.Context
 	partition      *schema.Partition // current partition for this request
 	req            esMap             // Full request
@@ -51,21 +52,24 @@ type SqlToEs struct {
 	projections    map[string]string
 }
 
+// NewSqlToEs creates request for translating SqlToEs
 func NewSqlToEs(table *schema.Table) *SqlToEs {
 	return &SqlToEs{
 		tbl:         table,
-		schema:      table.SchemaSource,
+		schema:      table.Schema,
 		projections: make(map[string]string),
 	}
 }
 
+// Close this request
 func (m *SqlToEs) Close() error { return nil }
 
+// Host get es host
 func (m *SqlToEs) Host() string {
 	//u.Warnf("TODO:  replace hardcoded es host")
 	return chooseBackend(m.schema)
 }
-func chooseBackend(schema *schema.SchemaSource) string {
+func chooseBackend(schema *schema.Schema) string {
 	if len(schema.Conf.Nodes) == 0 {
 		if len(schema.Conf.Hosts) > 0 {
 			return schema.Conf.Hosts[0]

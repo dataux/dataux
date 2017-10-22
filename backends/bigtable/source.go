@@ -13,7 +13,6 @@ import (
 	"cloud.google.com/go/bigtable"
 	"golang.org/x/net/context"
 
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
@@ -41,7 +40,7 @@ var (
 
 func init() {
 	// We need to register our DataSource provider here
-	datasource.Register(DataSourceLabel, &Source{})
+	schema.RegisterSourceType(DataSourceLabel, &Source{})
 }
 
 func getClient(project, instance string) (*bigtable.Client, error) {
@@ -73,7 +72,7 @@ type Source struct {
 	tables           []string // Lower cased
 	tablemap         map[string]*schema.Table
 	conf             *schema.ConfigSource
-	schema           *schema.SchemaSource
+	schema           *schema.Schema
 	client           *bigtable.Client
 	ac               *bigtable.AdminClient
 	lastSchemaUpdate time.Time
@@ -90,7 +89,7 @@ type Mutator struct {
 
 func (m *Source) Init() {}
 
-func (m *Source) Setup(ss *schema.SchemaSource) error {
+func (m *Source) Setup(ss *schema.Schema) error {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()

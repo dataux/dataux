@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	// Default page limit
+	// DefaultLimit is page limit
 	DefaultLimit = 5000
 
 	// Ensure we implment appropriate interfaces
@@ -46,7 +46,7 @@ type SqlToCql struct {
 	original             *rel.SqlSelect
 	whereIdents          map[string]bool
 	stmt                 rel.SqlStatement
-	schema               *schema.SchemaSource
+	schema               *schema.Schema
 	s                    *Source
 	q                    *gocql.Query
 	cf                   *gocql.TableMetadata
@@ -61,7 +61,7 @@ type SqlToCql struct {
 func NewSqlToCql(s *Source, t *schema.Table) *SqlToCql {
 	m := &SqlToCql{
 		tbl:    t,
-		schema: t.SchemaSource,
+		schema: t.Schema,
 		s:      s,
 	}
 	return m
