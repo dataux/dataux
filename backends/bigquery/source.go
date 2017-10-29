@@ -114,7 +114,6 @@ func (m *Source) Setup(ss *schema.Schema) error {
 
 	m.loadSchema()
 	u.Infof("finished loading big-query schemas %s", m.schema.Name)
-	u.WarnT(10)
 	return nil
 }
 
