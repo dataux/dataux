@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	// implement interfaces
+	// Ensure we implement source interface
 	_ schema.Source = (*Source)(nil)
 )
 

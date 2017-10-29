@@ -23,7 +23,7 @@
   branch = "master"
   name = "github.com/araddon/qlbridge"
   packages = ["datasource","datasource/files","datasource/membtree","datasource/memdb","datasource/mockcsv","datasource/mockcsvtestdata","exec","expr","expr/builtins","lex","plan","rel","schema","testutil","value","vm"]
-  revision = "49144063212dca3d5220643d96ca3ef3e1bb09e1"
+  revision = "7cf25823e1937d2052e61de3c47e8af5fc78be09"
 
 [[projects]]
   branch = "master"

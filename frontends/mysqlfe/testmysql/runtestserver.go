@@ -9,13 +9,29 @@ import (
 	"time"
 
 	u "github.com/araddon/gou"
+	"github.com/araddon/qlbridge/schema"
 	"github.com/coreos/etcd/embed"
 	"github.com/coreos/pkg/capnslog"
 
 	// Frontend's side-effect imports
 	_ "github.com/dataux/dataux/frontends/mysqlfe"
 
-	"github.com/araddon/qlbridge/schema"
+	// Backend Side-Effect imports, ie load the providers into registry but
+	// config will determine if they get used.
+	// if you are building custom daemon, you can cherry pick sources you care about
+	_ "github.com/araddon/qlbridge/datasource/files"
+	_ "github.com/dataux/dataux/backends/bigquery"
+	_ "github.com/dataux/dataux/backends/bigtable"
+	_ "github.com/dataux/dataux/backends/cassandra"
+	_ "github.com/dataux/dataux/backends/datastore"
+	_ "github.com/dataux/dataux/backends/elasticsearch"
+	_ "github.com/dataux/dataux/backends/lytics"
+	_ "github.com/dataux/dataux/backends/mongo"
+
+	// I cannot get this working right now, currently
+	// a conflict between etcd &kube dependencies that seems un-resolveable
+	//_ "github.com/dataux/dataux/backends/kubernetes"
+
 	"github.com/dataux/dataux/models"
 	"github.com/dataux/dataux/planner"
 	"github.com/dataux/dataux/proxy"
@@ -71,7 +87,6 @@ schemas : [
       "cass", 
       "bt",
       "bigquery",
-      "kube",
       "lytics"
     ]
   }
