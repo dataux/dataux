@@ -249,6 +249,16 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 	return resultReader, nil
 }
 
+func (m *SqlToMgo) eval(arg expr.Node) (value.Value, bool) {
+	switch arg := arg.(type) {
+	case *expr.NumberNode, *expr.StringNode:
+		return vm.Eval(nil, arg)
+	case *expr.IdentityNode:
+		return value.NewStringValue(arg.Text), true
+	}
+	return nil, false
+}
+
 // Aggregations from the <select_list>
 //
 //    SELECT <select_list> FROM ... WHERE
@@ -415,20 +425,20 @@ func (m *SqlToMgo) walkNode(cur expr.Node, q *bson.M) (value.Value, error) {
 
 // Tri Nodes expressions:
 //
-//		<expression> [NOT] BETWEEN <expression> AND <expression>
+//     <expression> [NOT] BETWEEN <expression> AND <expression>
 //
 func (m *SqlToMgo) walkFilterTri(node *expr.TriNode, q *bson.M) (value.Value, error) {
 
-	//u.Infof("args: %#v", node.Args)
-	arg1val, aok := vm.Eval(nil, node.Args[0])
-	//u.Debugf("arg1? %v  ok?%v", arg1val, aok)
+	arg1val, aok := m.eval(node.Args[0])
+	if !aok {
+		return nil, fmt.Errorf("Could not evaluate args: %v", node.String())
+	}
 	arg2val, bok := vm.Eval(nil, node.Args[1])
 	arg3val, cok := vm.Eval(nil, node.Args[2])
 	//u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
-	if !aok || !bok || !cok {
+	if !bok || !cok {
 		return nil, fmt.Errorf("Could not evaluate args: %v", node.String())
 	}
-	//u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
 	switch node.Operator.T {
 	case lex.TokenBetween:
 		//u.Warnf("between? %T", arg2val.Value())
@@ -444,11 +454,10 @@ func (m *SqlToMgo) walkFilterTri(node *expr.TriNode, q *bson.M) (value.Value, er
 
 // Array Nodes expressions:
 //
-//		year IN (1990,1992)  =>
+//    year IN (1990,1992)  =>
 //
 func (m *SqlToMgo) walkArrayNode(node *expr.ArrayNode, q *bson.M) (value.Value, error) {
 
-	//q = bson.M{"range": bson.M{arg1val.ToString(): bson.M{"gte": arg2val.ToString(), "lte": arg3val.ToString()}}}
 	terms := make([]interface{}, 0, len(node.Args))
 	*q = bson.M{"$in": terms}
 	for _, arg := range node.Args {
@@ -470,18 +479,21 @@ func (m *SqlToMgo) walkArrayNode(node *expr.ArrayNode, q *bson.M) (value.Value, 
 
 // Binary Node:   operations for >, >=, <, <=, =, !=, AND, OR, Like, IN
 //
-//	x = y             =>   db.users.find({field: {"$eq": value}})
-//  x != y            =>   db.inventory.find( { qty: { $ne: 20 } } )
+//    x = y             =>   db.users.find({field: {"$eq": value}})
+//    x != y            =>   db.inventory.find( { qty: { $ne: 20 } } )
 //
-//  x like "list%"    =>   db.users.find( { user_id: /^list/ } )
-//  x like "%list%"   =>   db.users.find( { user_id: /bc/ } )
-//  x IN [a,b,c]      =>   db.users.find( { user_id: {"$in":[a,b,c] } } )
+//    x like "list%"    =>   db.users.find( { user_id: /^list/ } )
+//    x like "%list%"   =>   db.users.find( { user_id: /bc/ } )
+//    x IN [a,b,c]      =>   db.users.find( { user_id: {"$in":[a,b,c] } } )
 //
 func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Value, error) {
 
-	lhval, lhok := vm.Eval(nil, node.Args[0])
+	lhval, lhok := m.eval(node.Args[0])
+	if !lhok {
+		return nil, fmt.Errorf("Could not evaluate args: %v", node.String())
+	}
 	rhval, rhok := vm.Eval(nil, node.Args[1])
-	if !lhok || !rhok {
+	if !rhok {
 		u.Warnf("not ok: %v  l:%v  r:%v", node, lhval, rhval)
 		return nil, fmt.Errorf("could not evaluate: %v", node.String())
 	}
@@ -572,7 +584,7 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 }
 
 // Take an expression func, ensure we don't do runtime-checking (as the function)
-//   doesn't really exist, then map that function to a mongo operation
+// doesn't really exist, then map that function to a mongo operation
 //
 //    exists(fieldname)
 //    regex(fieldname,value)
@@ -632,14 +644,14 @@ func (m *SqlToMgo) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, 
 }
 
 // Take an expression func, ensure we don't do runtime-checking (as the function)
-//   doesn't really exist, then map that function to an Mongo Aggregation/MapReduce function
+// doesn't really exist, then map that function to an Mongo Aggregation/MapReduce function
 //
 //    min, max, avg, sum, cardinality, terms
 //
-//   Single Value Aggregates:
+// Single Value Aggregates:
 //       min, max, avg, sum, cardinality, count
 //
-//  MultiValue aggregats:
+// MultiValue aggregates:
 //      terms, ??
 //
 func (m *SqlToMgo) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {

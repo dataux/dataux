@@ -139,7 +139,7 @@ func (m *ServerCtx) loadConfig() error {
 
 	for _, schemaConf := range m.Config.Schemas {
 
-		u.Debugf("parse schemas: %v", schemaConf)
+		//u.Debugf("parse schemas: %v", schemaConf)
 		if _, ok := m.schemas[schemaConf.Name]; ok {
 			panic(fmt.Sprintf("duplicate schema '%s'", schemaConf.Name))
 		}
@@ -153,7 +153,6 @@ func (m *ServerCtx) loadConfig() error {
 			var sourceConf *schema.ConfigSource
 			// we must find a source conf by name
 			for _, sc := range m.Config.Sources {
-				//u.Debugf("sc: %s %#v", sourceName, sc)
 				if sc.Name == sourceName {
 					sourceConf = sc
 					break
@@ -164,7 +163,6 @@ func (m *ServerCtx) loadConfig() error {
 				return fmt.Errorf("Could not find Source Config for %v", sourceName)
 			}
 
-			u.Debugf("new Source: %s   %+v", sourceName, sourceConf)
 			childSchema := schema.NewSchema(sourceName)
 			childSchema.Conf = sourceConf
 
@@ -190,20 +188,15 @@ func (m *ServerCtx) loadConfig() error {
 				u.Warnf("could not get source %v err=%v", sourceConf.SourceType, err)
 				return err
 			}
-			//u.Debugf("after reg.Get(%q)  %#v", sourceConf.SourceType, ds)
 			if ds == nil {
 				u.Warnf("could not find source for %v  %v", sourceName, sourceConf.SourceType)
 			} else {
 				childSchema.DS = ds
-				//u.Debugf("about to Setup %#v", ds)
 				if err := childSchema.DS.Setup(childSchema); err != nil {
-					u.Errorf("Error setuping up %v  %v", sourceName, err)
+					u.Errorf("Error setting up %v  %v", sourceName, err)
 				}
 			}
-
-			//u.Debugf("s:%p  ss:%p  adding ss", sch, ss)
 			m.Reg.SchemaAddChild(schemaConf.Name, childSchema)
-			//u.Debug("after add source schema")
 		}
 	}
 
