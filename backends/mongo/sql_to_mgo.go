@@ -21,6 +21,7 @@ import (
 )
 
 var (
+	// DefaultLimit is default page size
 	DefaultLimit = 20
 
 	_ = json.Marshal
@@ -41,7 +42,7 @@ type SqlToMgo struct {
 	p              *plan.Source
 	tbl            *schema.Table
 	sel            *rel.SqlSelect
-	schema         *schema.SchemaSource
+	schema         *schema.Schema
 	sess           *mgo.Session
 	filter         bson.M
 	aggs           bson.M
@@ -59,7 +60,7 @@ type SqlToMgo struct {
 func NewSqlToMgo(table *schema.Table, sess *mgo.Session) *SqlToMgo {
 	sm := &SqlToMgo{
 		tbl:    table,
-		schema: table.SchemaSource,
+		schema: table.Schema,
 		sess:   sess,
 	}
 	//u.Debugf("new SqlToMgo %p", sm)

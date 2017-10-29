@@ -30,25 +30,17 @@ func init() {
 	builtins.LoadAllBuiltins()
 }
 
-/*
-Handler Sharded is a mysql Router to take requests
-and route, filter to backend connections
-
-* Manage pool of db clients
-* route
-*/
-
 var _ = value.ErrValue
 
-// Schema is the schema for a named database, shared
+// SchemaSharded is the schema for a named database, shared
 // across multiple nodes
 type SchemaSharded struct {
-	*schema.SchemaSource
+	*schema.Schema
 	mysqlnodes map[string]*Node
 	rule       *router.Router
 }
 
-// Handle request splitting, a single connection session
+// HandlerShardedShared Handle request splitting, a single connection session
 // not threadsafe, not shared
 type HandlerShardedShared struct {
 	conf    *models.Config
@@ -57,13 +49,14 @@ type HandlerShardedShared struct {
 	schema  *SchemaSharded
 }
 
-// Handle request splitting, a single connection session
+// HandlerSharded Handle request splitting, a single connection session
 // not threadsafe, not shared
 type HandlerSharded struct {
 	*HandlerShardedShared
 	conn *Conn
 }
 
+// NewHandlerSharded new sharded handler.
 func NewHandlerSharded(conf *models.Config) (models.Listener, error) {
 	sharedHandler := &HandlerShardedShared{
 		conf: conf,
@@ -107,10 +100,10 @@ func (m *HandlerSharded) Handle(writer models.ResultWriter, req *models.Request)
 }
 
 func (m *HandlerSharded) SchemaUse(db string) *schema.Schema {
-	schema, ok := m.schemas[db]
+	sch, ok := m.schemas[db]
 	if ok {
-		m.schema = schema
-		return schema.SchemaSource.Schema()
+		m.schema = sch
+		return sch.Schema
 	}
 
 	u.Errorf("Could not find schema for db=%s", db)

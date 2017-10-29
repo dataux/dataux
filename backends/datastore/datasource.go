@@ -18,14 +18,14 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 )
 
 const (
-	SourceLabel = "google-datastore"
+	// SourceType is the Type label for global source type registery.
+	SourceType = "google-datastore"
 )
 
 var (
@@ -40,11 +40,11 @@ var (
 
 func init() {
 	// We need to register our Source into Datasource provider here
-	datasource.Register(SourceLabel, &Source{})
+	schema.RegisterSourceType(SourceType, &Source{})
 }
 
 // Source Google Datastore Data Source, is a singleton, non-threadsafe source
-//  to a create connections/clients to datastore
+// to a create connections/clients to datastore
 type Source struct {
 	db             string
 	namespace      string
@@ -58,20 +58,23 @@ type Source struct {
 	dsCtx          context.Context
 	dsClient       *datastore.Client
 	conf           *schema.ConfigSource
-	schema         *schema.SchemaSource
+	schema         *schema.Schema
 	mu             sync.Mutex
 	closed         bool
 }
 
+// DatastoreMutator is a connection for mutation
 type DatastoreMutator struct {
 	tbl *schema.Table
 	sql rel.SqlStatement
 	ds  *Source
 }
 
+// Init init the source
 func (m *Source) Init() {}
 
-func (m *Source) Setup(ss *schema.SchemaSource) error {
+// Setup the source.
+func (m *Source) Setup(ss *schema.Schema) error {
 
 	if m.schema != nil {
 		return nil
@@ -185,7 +188,7 @@ func (m *Source) Open(tableName string) (schema.Conn, error) {
 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, tableName)
 	}
 
-	gdsSource := NewSqlToDatstore(tbl, m.dsClient, m.dsCtx)
+	gdsSource := NewSQLToDatstore(tbl, m.dsClient, m.dsCtx)
 	return gdsSource, nil
 }
 
@@ -203,7 +206,7 @@ func (m *Source) selectQuery(stmt *rel.SqlSelect) (*ResultReader, error) {
 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.schema.Name, tblName)
 	}
 
-	sqlDs := NewSqlToDatstore(tbl, m.dsClient, m.dsCtx)
+	sqlDs := NewSQLToDatstore(tbl, m.dsClient, m.dsCtx)
 	//u.Debugf("SqlToDatstore: %#v", sqlDs)
 	resp, err := sqlDs.query(stmt)
 	if err != nil {
@@ -213,8 +216,8 @@ func (m *Source) selectQuery(stmt *rel.SqlSelect) (*ResultReader, error) {
 	return resp, nil
 }
 
+// Table get table schema.
 func (m *Source) Table(table string) (*schema.Table, error) {
-	//u.Debugf("get table for %s", table)
 	return m.loadTableSchema(table, "")
 }
 

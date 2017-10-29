@@ -15,8 +15,8 @@ import (
 	"github.com/lytics/grid"
 	"github.com/sony/sonyflake"
 
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/schema"
 )
 
 var (
@@ -84,7 +84,7 @@ func NodeName2(id1, id2 uint64) string {
 // knows about the rest of the peers in the system.
 type PlannerGrid struct {
 	Conf       *Conf
-	reg        *datasource.Registry
+	reg        *schema.Registry
 	GridServer *grid.Server
 	gridClient *grid.Client
 	started    bool
@@ -94,7 +94,7 @@ type PlannerGrid struct {
 	peers      *peerList
 }
 
-func NewPlannerGrid(nodeCt int, r *datasource.Registry) *PlannerGrid {
+func NewPlannerGrid(nodeCt int, r *schema.Registry) *PlannerGrid {
 
 	nextId, _ := NextId()
 	conf := GridConf.Clone()
@@ -109,6 +109,7 @@ func NewPlannerGrid(nodeCt int, r *datasource.Registry) *PlannerGrid {
 	}
 }
 
+// Run this planner grid server.
 func (m *PlannerGrid) Run(quit chan bool) error {
 
 	logger := u.GetLogger()

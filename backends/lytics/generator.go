@@ -13,6 +13,7 @@ import (
 )
 
 var (
+	// DefaultLimit is default limit page size.
 	DefaultLimit = 1000
 
 	// Implement Push Down Planner interface, this allows
@@ -40,30 +41,33 @@ type Generator struct {
 	ql            *rel.FilterStatement
 	tbl           *schema.Table
 	sel           *rel.SqlSelect
-	schema        *schema.SchemaSource
+	schema        *schema.Schema
 	ctx           *plan.Context
 	partition     *schema.Partition // current partition for this request
 	needsPolyFill bool              // do we request that features be polyfilled?
 	apiKey        string
 }
 
+// NewGenerator create a new generator to generate lytics query from request.
 func NewGenerator(table *schema.Table, apiKey string) *Generator {
 	return &Generator{
 		tbl:    table,
-		schema: table.SchemaSource,
+		schema: table.Schema,
 		apiKey: apiKey,
 	}
 }
 
+// Close this generator
 func (m *Generator) Close() error { return nil }
 
 // WalkSourceSelect is used during planning phase, to create a plan (plan.Task)
-//  or error, and to report back any poly-fill necessary
+// or error, and to report back any poly-fill necessary
 func (m *Generator) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.Task, error) {
 	m.p = p
 	return nil, nil
 }
 
+// WalkExecSource allow this to do its own Exec planning.
 func (m *Generator) WalkExecSource(p *plan.Source) (exec.Task, error) {
 
 	if p.Stmt == nil {
