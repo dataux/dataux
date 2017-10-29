@@ -29,7 +29,6 @@ func init() {
 const (
 	// Default Max Allowed packets for connections
 	MaxAllowedPacket = 4194304
-	//MaxAllowedPacketStr = "4194304"
 )
 
 var (
@@ -43,7 +42,7 @@ var (
 )
 
 // MySql connection handler, a single connection session
-//  not threadsafe, not shared
+// not threadsafe, not shared.
 type MySqlConnCreator struct {
 	svr  *models.ServerCtx
 	conf *models.ListenerConfig
@@ -185,6 +184,13 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 			return err
 		}
 		m.schema = s.InfoSchema
+		u.Debugf("%p:%s  schema tables %v", m.schema, m.schema.Name, m.schema.Tables())
+		u.Debugf("infoschema: %#v", m.schema.InfoSchema)
+		if m.schema.InfoSchema == nil {
+			u.Errorf("wtf no infoschema ")
+		}
+	} else {
+		u.Infof("%p:%s  schema? %+v", m.schema, m.schema.Name, m.schema)
 	}
 
 	start := time.Now()

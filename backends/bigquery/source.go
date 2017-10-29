@@ -113,6 +113,8 @@ func (m *Source) Setup(ss *schema.Schema) error {
 	m.legacySyntax = m.conf.Settings.Bool("legacy_syntax")
 
 	m.loadSchema()
+	u.Infof("finished loading big-query schemas %s", m.schema.Name)
+	u.WarnT(10)
 	return nil
 }
 
@@ -137,7 +139,7 @@ func (m *Source) loadSchema() error {
 			tablesToLoad = make(map[string]struct{}, len(m.schema.Conf.TableAliases))
 		}
 		for alias, tableToLoad := range m.schema.Conf.TableAliases {
-			u.Warnf("table alias:  %q  :  %q", alias, tableToLoad)
+			u.Debugf("table alias:  %q  :  %q", alias, tableToLoad)
 			if !strings.HasPrefix(tableToLoad, "[") {
 				m.schema.Conf.TableAliases[alias] = fmt.Sprintf("[%s]", tableToLoad)
 			}

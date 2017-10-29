@@ -85,6 +85,8 @@ func (m *ServerCtx) SchemaLoader(db string) (*schema.Schema, error) {
 
 // InfoSchema Get A schema
 func (m *ServerCtx) InfoSchema() (*schema.Schema, error) {
+
+	u.Debugf("InfoSchema %d", len(m.schemas))
 	if len(m.schemas) == 0 {
 		for _, sc := range m.Config.Schemas {
 			s, ok := m.Reg.Schema(sc.Name)
@@ -95,7 +97,9 @@ func (m *ServerCtx) InfoSchema() (*schema.Schema, error) {
 		}
 		return nil, schema.ErrNotFound
 	}
+	// Find first one?
 	for _, s := range m.schemas {
+		u.Infof("using schema %#v", s)
 		return s, nil
 	}
 	panic("unreachable")
@@ -129,8 +133,8 @@ func (m *ServerCtx) loadInternalSchema() {
 	if !ok {
 		u.Errorf("could not create internal schema")
 	}
-	m.Config.Sources = append(m.Config.Sources, &schema.ConfigSource{SourceType: "server_schema", Name: "server_schema"})
-	m.Config.Schemas = append(m.Config.Schemas, &schema.ConfigSchema{Name: "server_schema"})
+	// m.Config.Sources = append(m.Config.Sources, &schema.ConfigSource{SourceType: "server_schema", Name: "server_schema"})
+	// m.Config.Schemas = append(m.Config.Schemas, &schema.ConfigSchema{Name: "server_schema"})
 }
 
 func (m *ServerCtx) loadConfig() error {
@@ -205,6 +209,8 @@ func (m *ServerCtx) loadConfig() error {
 			m.Reg.SchemaAddChild(schemaConf.Name, childSchema)
 			//u.Debug("after add source schema")
 		}
+
+		m.Reg.RefreshSchema(sch.Name)
 	}
 
 	return nil
