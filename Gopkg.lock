@@ -20,10 +20,10 @@
   revision = "33600153ea8fd3ed2d60e2e27e34d809cd0a1533"
 
 [[projects]]
-  branch = "schema_cleanup"
+  branch = "master"
   name = "github.com/araddon/qlbridge"
   packages = ["datasource","datasource/files","datasource/membtree","datasource/memdb","datasource/mockcsv","datasource/mockcsvtestdata","exec","expr","expr/builtins","lex","plan","rel","schema","testutil","value","vm"]
-  revision = "db4545025bad75fbbf62366c950759a642cd4e8e"
+  revision = "49144063212dca3d5220643d96ca3ef3e1bb09e1"
 
 [[projects]]
   branch = "master"
@@ -35,7 +35,7 @@
   branch = "master"
   name = "github.com/bitly/go-hostpool"
   packages = ["."]
-  revision = "c32c3660406ef1ea14936cc9282e174fe8508c42"
+  revision = "a3a6125de9329587178a9792dc8f4bc98e620d2d"
 
 [[projects]]
   name = "github.com/boltdb/bolt"
@@ -107,7 +107,7 @@
   branch = "master"
   name = "github.com/gocql/gocql"
   packages = [".","internal/lru","internal/murmur","internal/streams"]
-  revision = "843f6b1d2288839f5d00f92be11cbbebd600ba51"
+  revision = "f5cee644705e9593c342bfabe667720580a5289f"
 
 [[projects]]
   name = "github.com/gogo/protobuf"
@@ -244,7 +244,7 @@
   branch = "master"
   name = "github.com/lytics/grid"
   packages = [".","codec","registry","testetcd"]
-  revision = "86c1abdd8a7510b1c340fb7349b8e30a8d4385b1"
+  revision = "998be5652dfb5517cb28a7075c4bc20f4bcc4193"
 
 [[projects]]
   branch = "master"
@@ -340,7 +340,7 @@
   branch = "master"
   name = "github.com/ugorji/go"
   packages = ["codec"]
-  revision = "bdcc60b419d136a85cdf2e7cbcac34b3f1cd6e57"
+  revision = "459bba837a9de7a4d9c58fa5a1171a2a3c96d0d0"
 
 [[projects]]
   name = "github.com/xiang90/probing"
@@ -352,13 +352,13 @@
   branch = "master"
   name = "golang.org/x/crypto"
   packages = ["bcrypt","blowfish"]
-  revision = "edd5e9b0879d13ee6970a50153d85b8fec9f7686"
+  revision = "2509b142fb2b797aa7587dad548f113b2c0f20ce"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/net"
   packages = ["context","context/ctxhttp","http2","http2/hpack","idna","internal/timeseries","lex/httplex","trace"]
-  revision = "cd69bc3fc700721b709c3a59e16e24c67b58f6ff"
+  revision = "c73622c77280266305273cb545f54516ced95b93"
 
 [[projects]]
   name = "golang.org/x/oauth2"
@@ -369,13 +369,13 @@
   branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix"]
-  revision = "8dbc5d05d6edcc104950cc299a1ce6641235bc86"
+  revision = "661970f62f5897bc0cd5fdca7e087ba8a98a8fa1"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/text"
   packages = ["collate","collate/build","internal/colltab","internal/gen","internal/tag","internal/triegen","internal/ucd","language","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable"]
-  revision = "c01e4764d870b77f8abe5096ee19ad20d80e8075"
+  revision = "6eab0e8f74e86c598ec3b6fad4888e0c11482d48"
 
 [[projects]]
   name = "google.golang.org/api"
@@ -420,6 +420,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "6d2cc6131fbab9d81ccb5d05044cbde68ca52fcd8ec80e4f38985d070966526d"
+  inputs-digest = "b2a57a2e9f8b95d45d01c3607d658e05f8d0de5585551221ef4d2e75d8fae8ce"
   solver-name = "gps-cdcl"
   solver-version = 1
