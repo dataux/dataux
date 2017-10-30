@@ -381,6 +381,16 @@ func (m *SQLToDatstore) DeleteExpression(pln interface{}, where expr.Node) (int,
 	return 0, fmt.Errorf("Could not delete with that where expression: %s", where)
 }
 
+func (m *SQLToDatstore) eval(arg expr.Node) (value.Value, bool) {
+	switch arg := arg.(type) {
+	case *expr.NumberNode, *expr.StringNode:
+		return vm.Eval(nil, arg)
+	case *expr.IdentityNode:
+		return value.NewStringValue(arg.Text), true
+	}
+	return nil, false
+}
+
 // WalkWhereNode an expression, and its AND logic to create an appropriately
 // request for google datastore queries
 //
@@ -421,9 +431,9 @@ func (m *SQLToDatstore) WalkWhereNode(cur expr.Node) error {
 
 // Walk Binary Node:   convert to mostly Filters if possible
 //
-//	x = y             =>   x = y
-//  x != y            =>   there are special limits in Google Datastore, must only have one unequal filter
-//  x like "list%"    =    prefix filter in
+//    x = y             =>   x = y
+//    x != y            =>   there are special limits in Google Datastore, must only have one unequal filter
+//    x like "list%"    =    prefix filter in
 //
 // TODO:  Poly Fill features
 //  x like "%list%"
@@ -432,7 +442,7 @@ func (m *SQLToDatstore) walkFilterBinary(node *expr.BinaryNode) error {
 
 	// How do we detect if this is a prefix query?  Probably would
 	// have a column-level flag on schema?
-	lhval, lhok := vm.Eval(nil, node.Args[0])
+	lhval, lhok := m.eval(node.Args[0])
 	rhval, rhok := vm.Eval(nil, node.Args[1])
 	if !lhok || !rhok {
 		u.Warnf("not ok: %v  l:%v  r:%v", node, lhval, rhval)

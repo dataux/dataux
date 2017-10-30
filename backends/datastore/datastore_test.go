@@ -3,9 +3,11 @@ package datastore_test
 import (
 	"database/sql"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -22,54 +24,80 @@ import (
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/schema"
 
-	gds "github.com/dataux/dataux/backends/datastore"
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
 	"github.com/dataux/dataux/planner"
 	tu "github.com/dataux/dataux/testutil"
 )
 
 var (
-	ctx    context.Context
-	client *datastore.Client
-
-	DbConn = "root@tcp(127.0.0.1:13307)/datauxtest?parseTime=true"
-
-	loadTestDataOnce sync.Once
-	skip             = false
-
-	now = time.Now()
-
-	// we are too lazy to type
-	//validateQuery     = tu.ValidateQuery
-
+	ctx                 context.Context
+	client              *datastore.Client
+	DbConn              = "root@tcp(127.0.0.1:13307)/datauxtest?parseTime=true"
+	loadTestDataOnce    sync.Once
+	skip                = false
+	now                 = time.Now()
 	testServicesRunning bool
+	SchemaName                  = "datauxtest"
+	GoogleJwt           *string = flag.String("googlejwt", os.Getenv("GOOGLEJWT"), "Path to google JWT oauth token file")
+	GoogleProject       *string = flag.String("googleproject", os.Getenv("GOOGLEPROJECT"), "Google Datastore Project Id")
 )
 
 func init() {
 
 	tu.Setup()
 
-	if *gds.GoogleJwt == "" {
-		skip = true
-		u.Errorf("must have google oauth jwt")
-	}
-	if *gds.GoogleProject == "" {
-		u.Errorf("must have google cloud project")
-		skip = true
+	if GoogleJwt != nil && *GoogleJwt != "" {
+		jsonKey, err := ioutil.ReadFile(*GoogleJwt)
+		if err != nil {
+			u.Errorf("Could not open Google Auth Token JWT file %v", err)
+			skip = true
+			return
+		}
+		ctx, client = loadJWTAuth(jsonKey, *GoogleProject)
+	} else {
+		// export DATASTORE_EMULATOR_HOST="localhost:8432"
+		if addr := os.Getenv("DATASTORE_EMULATOR_HOST"); addr == "" {
+			//println("datastore_test.go setting datastore emulator")
+			os.Setenv("DATASTORE_EMULATOR_HOST", "localhost:8432")
+			u.Infof("setting datastore emulator  %v", os.Getenv("DATASTORE_EMULATOR_HOST"))
+		}
+		ctx, client = loadEmulatorClient()
 	}
 
-	jsonKey, err := ioutil.ReadFile(*gds.GoogleJwt)
+}
+
+func loadEmulatorClient() (context.Context, *datastore.Client) {
+	ctx := context.Background()
+	client, err := datastore.NewClient(ctx, "lol")
 	if err != nil {
-		u.Errorf("Could not open Google Auth Token JWT file %v", err)
-		skip = true
-		return
+		panic(fmt.Sprintf("could not create google datastore client: project:%s err=%v", err))
 	}
-	ctx, client = loadAuth(jsonKey)
+	return ctx, client
+}
+
+func loadJWTAuth(jsonKey []byte, projectId string) (context.Context, *datastore.Client) {
+	// Initialize an authorized context with Google Developers Console
+	// JSON key. Read the google package examples to learn more about
+	// different authorization flows you can use.
+	// http://godoc.org/golang.org/x/oauth2/google
+	conf, err := google.JWTConfigFromJSON(
+		jsonKey,
+		datastore.ScopeDatastore,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	ctx := context.Background()
+	client, err := datastore.NewClient(ctx, projectId, option.WithTokenSource(conf.TokenSource(ctx)))
+	if err != nil {
+		panic(err.Error())
+	}
+	return ctx, client
 }
 
 func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
-	// func BuildSqlJob(ctx *plan.Context, gs *Server) (*ExecutorGrid, error) {
 	ctx.Schema = testmysql.Schema
 	return planner.BuildSqlJob(ctx, testmysql.ServerCtx.PlanGrid)
 }
@@ -79,6 +107,9 @@ func RunTestServer(t *testing.T) func() {
 		if skip {
 			t.Skip("Skipping, provide google JWT tokens if you want to test")
 		}
+
+		loadTestData(t)
+
 		testServicesRunning = true
 		planner.GridConf.JobMaker = jobMaker
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
@@ -90,119 +121,9 @@ func RunTestServer(t *testing.T) func() {
 	}
 }
 
-const (
-	ArticleKind string = "DataUxTestArticle"
-	UserKind    string = "DataUxTestUser"
-)
-
-func articleKey(title string) *datastore.Key {
-	return datastore.NameKey(ArticleKind, title, nil)
-}
-
-func userKey(id string) *datastore.Key {
-	return datastore.NameKey(UserKind, id, nil)
-}
-
 func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
 	RunTestServer(t)
 	tu.ValidateQuerySpec(t, testSpec)
-}
-
-/*
-type Article struct {
-	Title    string
-	Author   string
-	Count    int
-	Count64  int64
-	Deleted  bool
-	Category []string
-	Created  time.Time
-	Updated  *time.Time
-	F        float64
-	Embedded struct {
-		Tag string
-		ICt int
-	}
-	Body *json.RawMessage
-}
-*/
-type Article struct {
-	*tu.Article
-}
-
-func NewArticle() Article {
-	return Article{&tu.Article{}}
-}
-
-func (m *Article) Load(props []datastore.Property) error {
-	for _, p := range props {
-		switch p.Name {
-		default:
-			u.Warnf("unmapped: %v  %T", p.Name, p.Value)
-		}
-	}
-	return nil
-}
-func (m *Article) Save() ([]datastore.Property, error) {
-	props := make([]datastore.Property, 11)
-	props[0] = datastore.Property{Name: "title", Value: m.Title}
-	props[1] = datastore.Property{Name: "author", Value: m.Author}
-	props[2] = datastore.Property{Name: "count", Value: m.Count}
-	props[3] = datastore.Property{Name: "count64", Value: m.Count64}
-	props[4] = datastore.Property{Name: "deleted", Value: m.Deleted}
-	cat, _ := json.Marshal(m.Category)
-	props[5] = datastore.Property{Name: "category", Value: cat, NoIndex: true}
-	props[6] = datastore.Property{Name: "created", Value: m.Created}
-	props[7] = datastore.Property{Name: "updated", Value: *m.Updated}
-	props[8] = datastore.Property{Name: "f", Value: m.F}
-	embed, _ := json.Marshal(m.Embedded)
-	props[9] = datastore.Property{Name: "embedded", Value: embed, NoIndex: true}
-	if m.Body != nil {
-		props[10] = datastore.Property{Name: "body", Value: []byte(*m.Body), NoIndex: true}
-	} else {
-		props[10] = datastore.Property{Name: "body", Value: []byte{}, NoIndex: true}
-	}
-
-	return props, nil
-}
-
-/*
-type User struct {
-	Id      string
-	Name    string
-	Deleted bool
-	Roles   []string
-	Created time.Time
-	Updated *time.Time
-}
-
-*/
-type User struct {
-	*tu.User
-}
-
-func (m *User) Load(props []datastore.Property) error {
-	for _, p := range props {
-		switch p.Name {
-		case "id":
-			m.Id = p.Value.(string)
-		default:
-			u.Warnf("unmapped: %v  %T", p.Name, p.Value)
-		}
-	}
-	return nil
-}
-func (m *User) Save() ([]datastore.Property, error) {
-	props := make([]datastore.Property, 6)
-	roles, _ := m.Roles.Value()
-	//u.Infof("roles: %T", roles)
-	props[0] = datastore.Property{Name: "id", Value: m.Id}                    // Indexed
-	props[1] = datastore.Property{Name: "name", Value: m.Id}                  // Indexed
-	props[2] = datastore.Property{Name: "deleted", Value: m.Deleted}          // Indexed
-	props[3] = datastore.Property{Name: "roles", Value: roles, NoIndex: true} // Not Indexed
-	props[4] = datastore.Property{Name: "created", Value: m.Created}          // Indexed
-	props[5] = datastore.Property{Name: "updated", Value: *m.Updated}         // Indexed
-	return props, nil
 }
 
 func loadTestData(t *testing.T) {
@@ -213,7 +134,7 @@ func loadTestData(t *testing.T) {
 
 		for _, article := range tu.Articles {
 			key, err := client.Put(ctx, articleKey(article.Title), &Article{article})
-			//u.Infof("key: %v", key)
+			u.Infof("key: %v", key)
 			assert.True(t, key != nil, "%v", key)
 			assert.True(t, err == nil, "must put %v", err)
 		}
@@ -240,55 +161,36 @@ func loadTestData(t *testing.T) {
 	})
 }
 
-func loadAuth(jsonKey []byte) (context.Context, *datastore.Client) {
-	// Initialize an authorized context with Google Developers Console
-	// JSON key. Read the google package examples to learn more about
-	// different authorization flows you can use.
-	// http://godoc.org/golang.org/x/oauth2/google
-	conf, err := google.JWTConfigFromJSON(
-		jsonKey,
-		datastore.ScopeDatastore,
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-	ctx := context.Background()
-	//client, err := datastore.NewClient(ctx, *gds.GoogleProject, cloud.WithTokenSource(conf.TokenSource(ctx)))
-
-	client, err := datastore.NewClient(ctx, *gds.GoogleProject, option.WithTokenSource(conf.TokenSource(ctx)))
-	if err != nil {
-		panic(err.Error())
-	}
-	return ctx, client
-}
-
 // We are testing that we can register this Google Datasource
 // as a qlbridge-Datasource
 func TestDataSourceInterface(t *testing.T) {
 
-	// By running testserver, we will load schema/config
 	RunTestServer(t)
-	loadTestData(t)
 
 	// Now make sure that the datastore source has been registered
 	// and meets api for qlbridge.DataSource
-	ds, err := datasource.OpenConn(gds.SourceLabel, ArticleKind)
-	assert.True(t, err == nil, "no error on conn: %v", err)
-	assert.True(t, ds != nil, "Found datastore")
+	ds, err := schema.OpenConn(SchemaName, ArticleKind)
+	assert.Equal(t, nil, err)
+	assert.NotEqual(t, nil, ds)
 }
 
 func TestInvalidQuery(t *testing.T) {
+
 	RunTestServer(t)
+
 	db, err := sql.Open("mysql", DbConn)
-	assert.True(t, err == nil)
+	assert.Equal(t, nil, err)
 	// It is parsing the SQL on server side (proxy) not in client
-	//  so hence that is what this is testing, making sure proxy responds gracefully
+	// so hence that is what this is testing, making sure proxy responds gracefully
 	rows, err := db.Query("select `stuff`, NOTAKEYWORD fake_tablename NOTWHERE `description` LIKE \"database\";")
-	assert.True(t, err != nil, "%v", err)
-	assert.True(t, rows == nil, "must not get rows")
+	assert.NotEqual(t, nil, err)
+	assert.True(t, nil == rows, "must not get rows")
 }
 
 func TestShowTables(t *testing.T) {
+
+	RunTestServer(t)
+
 	data := struct {
 		Table string `db:"Table"`
 	}{}
@@ -310,17 +212,14 @@ func TestShowTables(t *testing.T) {
 
 func TestBasic(t *testing.T) {
 
-	// By running testserver, we will load schema/config
 	RunTestServer(t)
-	loadTestData(t)
 
 	// This is a connection to RunTestServer, which starts on port 13307
 	dbx, err := sqlx.Connect("mysql", DbConn)
-	assert.True(t, err == nil, "%v", err)
+	assert.Equal(t, nil, err)
 	defer dbx.Close()
-	//u.Debugf("%v", testSpec.Sql)
 	rows, err := dbx.Queryx(fmt.Sprintf("select * from %s", ArticleKind))
-	assert.True(t, err == nil, "%v", err)
+	assert.Equal(t, nil, err)
 	defer rows.Close()
 
 	/*
@@ -336,7 +235,7 @@ func TestBasic(t *testing.T) {
 
 func TestDescribeTable(t *testing.T) {
 
-	loadTestData(t)
+	RunTestServer(t)
 
 	data := struct {
 		Field   string `db:"Field"`
@@ -355,22 +254,22 @@ func TestDescribeTable(t *testing.T) {
 			assert.True(t, data.Field != "", "%v", data)
 			switch data.Field {
 			case "embedded":
-				assert.True(t, data.Type == "binary", "%#v", data)
+				assert.True(t, data.Type == "text", "%#v", data)
 				describedCt++
 			case "author":
-				assert.True(t, data.Type == "string", "data: %#v", data)
+				assert.True(t, data.Type == "varchar(255)", "data: %#v", data)
 				describedCt++
 			case "created":
 				assert.True(t, data.Type == "datetime", "data: %#v", data)
 				describedCt++
 			case "category":
-				assert.True(t, data.Type == "binary", "data: %#v", data)
+				assert.True(t, data.Type == "text", "data: %#v", data)
 				describedCt++
 			case "body":
-				assert.True(t, data.Type == "binary", "data: %#v", data)
+				assert.True(t, data.Type == "text", "data: %#v", data)
 				describedCt++
 			case "deleted":
-				assert.True(t, data.Type == "bool", "data: %#v", data)
+				assert.True(t, data.Type == "tinyint", "data: %#v", data)
 				describedCt++
 			}
 		},
@@ -380,7 +279,9 @@ func TestDescribeTable(t *testing.T) {
 }
 
 func TestSimpleRowSelect(t *testing.T) {
-	loadTestData(t)
+
+	RunTestServer(t)
+
 	data := struct {
 		Title   string
 		Count   int
@@ -566,4 +467,114 @@ func TestUpdateSimple(t *testing.T) {
 		ValidateRowData: func() {},
 		ExpectRowCt:     1,
 	})
+}
+
+const (
+	ArticleKind string = "DataUxTestArticle"
+	UserKind    string = "DataUxTestUser"
+)
+
+func articleKey(title string) *datastore.Key {
+	return datastore.NameKey(ArticleKind, title, nil)
+}
+
+func userKey(id string) *datastore.Key {
+	return datastore.NameKey(UserKind, id, nil)
+}
+
+/*
+type Article struct {
+	Title    string
+	Author   string
+	Count    int
+	Count64  int64
+	Deleted  bool
+	Category []string
+	Created  time.Time
+	Updated  *time.Time
+	F        float64
+	Embedded struct {
+		Tag string
+		ICt int
+	}
+	Body *json.RawMessage
+}
+*/
+type Article struct {
+	*tu.Article
+}
+
+func NewArticle() Article {
+	return Article{&tu.Article{}}
+}
+
+func (m *Article) Load(props []datastore.Property) error {
+	for _, p := range props {
+		switch p.Name {
+		default:
+			u.Warnf("unmapped: %v  %T", p.Name, p.Value)
+		}
+	}
+	return nil
+}
+func (m *Article) Save() ([]datastore.Property, error) {
+	props := make([]datastore.Property, 11)
+	props[0] = datastore.Property{Name: "title", Value: m.Title}
+	props[1] = datastore.Property{Name: "author", Value: m.Author}
+	props[2] = datastore.Property{Name: "count", Value: m.Count}
+	props[3] = datastore.Property{Name: "count64", Value: m.Count64}
+	props[4] = datastore.Property{Name: "deleted", Value: m.Deleted}
+	cat, _ := json.Marshal(m.Category)
+	props[5] = datastore.Property{Name: "category", Value: cat, NoIndex: true}
+	props[6] = datastore.Property{Name: "created", Value: m.Created}
+	props[7] = datastore.Property{Name: "updated", Value: *m.Updated}
+	props[8] = datastore.Property{Name: "f", Value: m.F}
+	embed, _ := json.Marshal(m.Embedded)
+	props[9] = datastore.Property{Name: "embedded", Value: embed, NoIndex: true}
+	if m.Body != nil {
+		props[10] = datastore.Property{Name: "body", Value: []byte(*m.Body), NoIndex: true}
+	} else {
+		props[10] = datastore.Property{Name: "body", Value: []byte{}, NoIndex: true}
+	}
+
+	return props, nil
+}
+
+/*
+type User struct {
+	Id      string
+	Name    string
+	Deleted bool
+	Roles   []string
+	Created time.Time
+	Updated *time.Time
+}
+
+*/
+type User struct {
+	*tu.User
+}
+
+func (m *User) Load(props []datastore.Property) error {
+	for _, p := range props {
+		switch p.Name {
+		case "id":
+			m.Id = p.Value.(string)
+		default:
+			u.Warnf("unmapped: %v  %T", p.Name, p.Value)
+		}
+	}
+	return nil
+}
+func (m *User) Save() ([]datastore.Property, error) {
+	props := make([]datastore.Property, 6)
+	roles, _ := m.Roles.Value()
+	//u.Infof("roles: %T", roles)
+	props[0] = datastore.Property{Name: "id", Value: m.Id}                    // Indexed
+	props[1] = datastore.Property{Name: "name", Value: m.Id}                  // Indexed
+	props[2] = datastore.Property{Name: "deleted", Value: m.Deleted}          // Indexed
+	props[3] = datastore.Property{Name: "roles", Value: roles, NoIndex: true} // Not Indexed
+	props[4] = datastore.Property{Name: "created", Value: m.Created}          // Indexed
+	props[5] = datastore.Property{Name: "updated", Value: *m.Updated}         // Indexed
+	return props, nil
 }

@@ -10,7 +10,6 @@ import (
 
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/testutil"
-	"github.com/dataux/dataux/backends/datastore"
 )
 
 func init() {
@@ -22,8 +21,12 @@ func init() {
 
 func TestDatastoreSelectSqlDriver(t *testing.T) {
 
+	// Technically we don't need the test server
+	// but it loads schema so ....
+	RunTestServer(t)
+
 	sqlText := `select title, count, deleted, author from DataUxTestArticle WHERE author = "aaron" LIMIT 1`
-	db, err := sql.Open("qlbridge", datastore.SourceLabel)
+	db, err := sql.Open("qlbridge", "datauxtest")
 	assert.Equal(t, nil, err, "no error: %v", err)
 	assert.NotEqual(t, nil, db, "has conn: ", db)
 

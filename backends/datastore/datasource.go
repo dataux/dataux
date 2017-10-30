@@ -1,10 +1,10 @@
+// Package datastore is a source adapter for Google DataStore into
+// dataux to allow mysql querying against datastore.
 package datastore
 
 import (
-	"flag"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -29,9 +29,7 @@ const (
 )
 
 var (
-	GoogleJwt     *string = flag.String("googlejwt", os.Getenv("GOOGLEJWT"), "Path to google JWT oauth token file")
-	GoogleProject *string = flag.String("googleproject", os.Getenv("GOOGLEPROJECT"), "Google Datastore Project Id")
-
+	// ErrNoSchema no schema found for datastore
 	ErrNoSchema = fmt.Errorf("No schema or configuration exists")
 
 	// Ensure our Google Datastore implements schema.Source interface
@@ -85,14 +83,11 @@ func (m *Source) Setup(ss *schema.Schema) error {
 	m.db = strings.ToLower(ss.Name)
 	m.tables = make(map[string]*schema.Table)
 
-	m.cloudProjectId = *GoogleProject
-	m.jwtFile = *GoogleJwt
-
-	//u.Infof("Init:  %#v", m.schema.Conf)
 	if m.schema.Conf == nil {
 		return fmt.Errorf("Schema conf not found")
 	}
 	jh := u.JsonHelper(m.conf.Settings)
+
 	if pid := jh.String("projectid"); pid != "" {
 		m.cloudProjectId = pid
 	}
@@ -102,6 +97,7 @@ func (m *Source) Setup(ss *schema.Schema) error {
 
 	// This will return an error if the database name we are using is not found
 	if err := m.connect(); err != nil {
+		u.Warnf("no connection %v", err)
 		return err
 	}
 
@@ -124,10 +120,11 @@ func (m *Source) loadSchema() error {
 }
 
 func (m *Source) Close() error {
-	u.Debugf("Closing Source %p", m)
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
+	if m.closed {
+		return nil
+	}
 	m.closed = true
 	return nil
 }
@@ -138,30 +135,42 @@ func (m *Source) connect() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	jsonKey, err := ioutil.ReadFile(m.jwtFile)
-	if err != nil {
-		u.Warnf("Could not open Google Auth Token JWT file %v", err)
-		return err
+	if m.jwtFile != "" {
+		jsonKey, err := ioutil.ReadFile(m.jwtFile)
+		if err != nil {
+			u.Warnf("Could not open Google Auth Token JWT file %v", err)
+			return err
+		}
+
+		conf, err := google.JWTConfigFromJSON(
+			jsonKey,
+			datastore.ScopeDatastore,
+		)
+		if err != nil {
+			u.Warnf("could not use google datastore JWT token: %v", err)
+			return err
+		}
+		m.authConfig = conf
+
+		ctx := context.Background()
+		client, err := datastore.NewClient(ctx, m.cloudProjectId, option.WithTokenSource(conf.TokenSource(ctx)))
+		if err != nil {
+			u.Warnf("could not create google datastore client: project:%s jwt:%s  err=%v", m.cloudProjectId, m.jwtFile, err)
+			return err
+		}
+		m.dsClient = client
+		m.dsCtx = ctx
+	} else {
+		ctx := context.Background()
+		client, err := datastore.NewClient(ctx, m.cloudProjectId)
+		if err != nil {
+			u.Warnf("could not create google datastore client: project:%q err=%v", m.cloudProjectId, err)
+			return err
+		}
+		m.dsClient = client
+		m.dsCtx = ctx
 	}
 
-	conf, err := google.JWTConfigFromJSON(
-		jsonKey,
-		datastore.ScopeDatastore,
-	)
-	if err != nil {
-		u.Warnf("could not use google datastore JWT token: %v", err)
-		return err
-	}
-	m.authConfig = conf
-
-	ctx := context.Background()
-	client, err := datastore.NewClient(ctx, m.cloudProjectId, option.WithTokenSource(conf.TokenSource(ctx)))
-	if err != nil {
-		u.Warnf("could not create google datastore client: project:%s jwt:%s  err=%v", m.cloudProjectId, m.jwtFile, err)
-		return err
-	}
-	m.dsClient = client
-	m.dsCtx = ctx
 	return nil
 }
 
@@ -173,7 +182,6 @@ func (m *Source) Tables() []string {
 }
 
 func (m *Source) Open(tableName string) (schema.Conn, error) {
-	u.Debugf("Open(%v)", tableName)
 	if m.schema == nil {
 		u.Warnf("no schema?")
 		return nil, nil
@@ -194,7 +202,6 @@ func (m *Source) Open(tableName string) (schema.Conn, error) {
 
 func (m *Source) selectQuery(stmt *rel.SqlSelect) (*ResultReader, error) {
 
-	//u.Debugf("get sourceTask for %v", stmt)
 	tblName := strings.ToLower(stmt.From[0].Name)
 
 	tbl, err := m.schema.Table(tblName)
@@ -207,7 +214,6 @@ func (m *Source) selectQuery(stmt *rel.SqlSelect) (*ResultReader, error) {
 	}
 
 	sqlDs := NewSQLToDatstore(tbl, m.dsClient, m.dsCtx)
-	//u.Debugf("SqlToDatstore: %#v", sqlDs)
 	resp, err := sqlDs.query(stmt)
 	if err != nil {
 		u.Errorf("Google datastore query interpreter failed: %v", err)
@@ -283,7 +289,7 @@ func (m *Source) loadTableSchema(tableLower, tableOriginal string) (*schema.Tabl
 		return tbl, nil
 	}
 
-	u.Debugf("loadTableSchema lower:%q original:%q", tableLower, tableOriginal)
+	//u.Debugf("loadTableSchema lower:%q original:%q", tableLower, tableOriginal)
 	tbl = schema.NewTable(tableOriginal)
 	m.tables[tableLower] = tbl
 	colNames := make([]string, 0)
@@ -299,7 +305,7 @@ func (m *Source) loadTableSchema(tableLower, tableOriginal string) (*schema.Tabl
 			if tbl.HasField(colName) {
 				continue
 			}
-			//u.Debugf("%d found col: %s %T=%v", i, colName, p.Value, p.Value)
+			//u.Debugf("found col: %s %T=%v", colName, p.Value, p.Value)
 			var f *schema.Field
 			switch val := p.Value.(type) {
 			case *datastore.Key:
@@ -330,7 +336,6 @@ func (m *Source) loadTableSchema(tableLower, tableOriginal string) (*schema.Tabl
 	}
 
 	u.Infof("%p caching table schema  %q  cols=%v", m.schema, tableOriginal, colNames)
-	//m.schema.AddTable(tbl)
 	tbl.SetColumns(colNames)
 	return tbl, nil
 }

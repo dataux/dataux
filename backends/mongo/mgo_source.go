@@ -56,7 +56,6 @@ func (m *Source) Init() {}
 // Setup this source.
 func (m *Source) Setup(ss *schema.Schema) error {
 
-	u.Debugf("Setup()")
 	if m.srcschema != nil {
 		return nil
 	}
@@ -67,7 +66,6 @@ func (m *Source) Setup(ss *schema.Schema) error {
 	}
 	m.db = strings.ToLower(ss.Name)
 
-	u.Infof("Init:  %#v", m.srcschema.Conf)
 	if m.srcschema.Conf == nil {
 		return fmt.Errorf("Schema conf not found")
 	}
@@ -77,15 +75,10 @@ func (m *Source) Setup(ss *schema.Schema) error {
 		return err
 	}
 
-	if m.srcschema != nil {
-		//u.Debugf("Post Init() mongo srcschema P=%p tblct=%d", m.srcschema, len(m.srcschema.Tables()))
-	}
-
 	return m.loadSchema()
 }
 
 func (m *Source) Close() error {
-	u.Infof("Closing MongoDataSource %p", m)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.closed && m.sess != nil {
@@ -131,9 +124,7 @@ func (m *Source) Open(collectionName string) (schema.Conn, error) {
 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.srcschema.Name, collectionName)
 	}
 
-	//u.Debugf("creating sqltomgo %v", tbl.Name)
 	mgoSource := NewSqlToMgo(tbl, m.sess.Clone())
-	//u.Debugf("SqlToMgo: %T  %#v", mgoSource, mgoSource)
 	return mgoSource, nil
 }
 
