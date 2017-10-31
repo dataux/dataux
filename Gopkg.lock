@@ -23,7 +23,7 @@
   branch = "master"
   name = "github.com/araddon/qlbridge"
   packages = ["datasource","datasource/files","datasource/membtree","datasource/memdb","datasource/mockcsv","datasource/mockcsvtestdata","exec","expr","expr/builtins","lex","plan","rel","schema","testutil","value","vm"]
-  revision = "7cf25823e1937d2052e61de3c47e8af5fc78be09"
+  revision = "c4fe1e5eeb37af2626a10b2e9333fec590173c16"
 
 [[projects]]
   branch = "master"
@@ -340,7 +340,7 @@
   branch = "master"
   name = "github.com/ugorji/go"
   packages = ["codec"]
-  revision = "459bba837a9de7a4d9c58fa5a1171a2a3c96d0d0"
+  revision = "d03304bb1d83c196fd3017dca37e89a4504b3676"
 
 [[projects]]
   name = "github.com/xiang90/probing"

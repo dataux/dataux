@@ -30,6 +30,7 @@ var (
 	DbConn              = "root@tcp(127.0.0.1:13307)/datauxtest?parseTime=true"
 	loadTestDataOnce    sync.Once
 	now                 = time.Now()
+	expectedRowCt       = 105
 	testServicesRunning bool
 	cassHost            *string = flag.String("casshost", "localhost:9042", "Cassandra Host")
 	session             *gocql.Session
@@ -38,7 +39,6 @@ var (
 )
 
 func init() {
-
 	cass := os.Getenv("CASSANDRA_HOST")
 	if len(cass) > 0 {
 		*cassHost = cass
@@ -182,7 +182,7 @@ func loadTestData(t *testing.T) {
 					VALUES (?, ? , ? , ? , ? , ? , ? , ? , ? , ?)
 			`, article.ValueI()...).Exec()
 			//u.Infof("insert: %v", article.Row())
-			assert.True(t, err == nil, "must put but got err: %v", err)
+			assert.Equal(t, nil, err)
 		}
 		/*
 			// Now we are going to write the embeded?
@@ -225,7 +225,7 @@ func TestShowTables(t *testing.T) {
 		Sql:         "show tables;",
 		ExpectRowCt: 3,
 		ValidateRowData: func() {
-			//u.Infof("%+v", data)
+			u.Infof("%+v", data)
 			assert.True(t, data.Table != "", "%v", data)
 			if data.Table == strings.ToLower("article") {
 				found = true

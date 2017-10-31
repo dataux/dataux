@@ -32,22 +32,20 @@ export TESTINT=1
 */
 var (
 	testServicesRunning bool
+	localconfig         = &cloudstorage.CloudStoreContext{
+		LogggingContext: "unittest",
+		TokenSource:     cloudstorage.LocalFileSource,
+		LocalFS:         "tables/",
+		TmpDir:          "/tmp/localcache",
+	}
+	gcsIntconfig = &cloudstorage.CloudStoreContext{
+		LogggingContext: "dataux-test",
+		TokenSource:     cloudstorage.GCEDefaultOAuthToken,
+		Project:         "lytics-dev",
+		Bucket:          "lytics-dataux-tests",
+		TmpDir:          "/tmp/localcache",
+	}
 )
-
-var localconfig = &cloudstorage.CloudStoreContext{
-	LogggingContext: "unittest",
-	TokenSource:     cloudstorage.LocalFileSource,
-	LocalFS:         "tables/",
-	TmpDir:          "/tmp/localcache",
-}
-
-var gcsIntconfig = &cloudstorage.CloudStoreContext{
-	LogggingContext: "dataux-test",
-	TokenSource:     cloudstorage.GCEDefaultOAuthToken,
-	Project:         "lytics-dev",
-	Bucket:          "lytics-dataux-tests",
-	TmpDir:          "/tmp/localcache",
-}
 
 func init() {
 	u.SetupLogging("debug")
@@ -112,7 +110,6 @@ func clearStore(t *testing.T, store cloudstorage.Store) {
 }
 
 func validateQuerySpec(t testing.TB, testSpec tu.QuerySpec) {
-
 	switch tt := t.(type) {
 	case *testing.T:
 		RunTestServer(tt)
@@ -122,18 +119,18 @@ func validateQuerySpec(t testing.TB, testSpec tu.QuerySpec) {
 
 func createTestData(t *testing.T) {
 	store, err := createLocalStore()
-	assert.True(t, err == nil)
+	assert.Equal(t, nil, err)
 	//clearStore(t, store)
 	//defer clearStore(t, store)
 
-	//Create a new object and write to it.
+	// Create a new object and write to it.
 	obj, err := store.NewObject("tables/article/article1.csv")
 	if err != nil {
 		return // already created
 	}
-	assert.True(t, err == nil)
+	assert.Equal(t, nil, err)
 	f, err := obj.Open(cloudstorage.ReadWrite)
-	assert.True(t, err == nil)
+	assert.Equal(t, nil, err)
 
 	w := bufio.NewWriter(f)
 	w.WriteString(tu.Articles[0].Header())
@@ -166,15 +163,14 @@ func createTestData(t *testing.T) {
 
 	//Read the object back out of the cloud storage.
 	obj2, err := store.Get("tables/article/article1.csv")
-	assert.True(t, err == nil)
+	assert.Equal(t, nil, err)
 
 	f2, err := obj2.Open(cloudstorage.ReadOnly)
-	assert.True(t, err == nil)
+	assert.Equal(t, nil, err)
 
 	bytes, err := ioutil.ReadAll(f2)
-	assert.True(t, err == nil)
-
-	assert.True(t, tu.ArticleCsv == string(bytes), "Wanted equal got %s", bytes)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, tu.ArticleCsv, string(bytes), "Wanted equal got %s", bytes)
 }
 
 func TestShowTables(t *testing.T) {
@@ -220,11 +216,11 @@ func TestSelectFilesList(t *testing.T) {
 func TestSelectStar(t *testing.T) {
 	RunTestServer(t)
 	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
-	assert.True(t, err == nil)
+	assert.Equal(t, nil, err)
 	rows, err := db.Query("select * from article;")
-	assert.True(t, err == nil, "did not want err but got %v", err)
+	assert.Equal(t, nil, err)
 	cols, _ := rows.Columns()
-	assert.True(t, len(cols) == 7, "want 7 cols but got %v", cols)
+	assert.Equal(t, 12, len(cols), "want 12 cols but got %v", len(cols))
 	assert.True(t, rows.Next(), "must get next row but couldn't")
 	readCols := make([]interface{}, len(cols))
 	writeCols := make([]string, len(cols))
