@@ -114,16 +114,6 @@ sources : [
     }
   }
   
-  # google-datastore database config
-  {
-    name      : google_ds_test
-    type      : google-datastore
-    settings {
-      projectid : lol
-    }
-  }
-
-
   {
     name : mysql_test
     type : mysql

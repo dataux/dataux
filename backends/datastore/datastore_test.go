@@ -3,9 +3,7 @@ package datastore_test
 import (
 	"database/sql"
 	"encoding/json"
-	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -39,33 +37,20 @@ var (
 	skip                = false
 	now                 = time.Now()
 	testServicesRunning bool
-	SchemaName                  = "datauxtest"
-	GoogleJwt           *string = flag.String("googlejwt", os.Getenv("GOOGLEJWT"), "Path to google JWT oauth token file")
-	GoogleProject       *string = flag.String("googleproject", os.Getenv("GOOGLEPROJECT"), "Google Datastore Project Id")
+	SchemaName          = "datauxtest"
 )
 
 func init() {
 
 	tu.Setup()
 
-	if GoogleJwt != nil && *GoogleJwt != "" {
-		jsonKey, err := ioutil.ReadFile(*GoogleJwt)
-		if err != nil {
-			u.Errorf("Could not open Google Auth Token JWT file %v", err)
-			skip = true
-			return
-		}
-		ctx, client = loadJWTAuth(jsonKey, *GoogleProject)
-	} else {
-		// export DATASTORE_EMULATOR_HOST="localhost:8432"
-		if addr := os.Getenv("DATASTORE_EMULATOR_HOST"); addr == "" {
-			//println("datastore_test.go setting datastore emulator")
-			os.Setenv("DATASTORE_EMULATOR_HOST", "localhost:8432")
-			u.Infof("setting datastore emulator  %v", os.Getenv("DATASTORE_EMULATOR_HOST"))
-		}
-		ctx, client = loadEmulatorClient()
+	// export DATASTORE_EMULATOR_HOST="localhost:8432"
+	if addr := os.Getenv("DATASTORE_EMULATOR_HOST"); addr == "" {
+		//println("datastore_test.go setting datastore emulator")
+		os.Setenv("DATASTORE_EMULATOR_HOST", "localhost:8432")
+		u.Infof("setting datastore emulator  %v", os.Getenv("DATASTORE_EMULATOR_HOST"))
 	}
-
+	ctx, client = loadEmulatorClient()
 }
 
 func loadEmulatorClient() (context.Context, *datastore.Client) {
@@ -107,6 +92,37 @@ func RunTestServer(t *testing.T) func() {
 		if skip {
 			t.Skip("Skipping, provide google JWT tokens if you want to test")
 		}
+
+		/*
+		  # google-datastore database config
+		  {
+		    name      : google_ds_test
+		    type      : google-datastore
+		    settings {
+		      projectid : lol
+		    }
+		  }
+		*/
+
+		reg := schema.DefaultRegistry()
+		by := []byte(`{
+            "name": "google_ds_test",
+            "schema":"datauxtest",
+            "type": "google-datastore",
+             "settings" : {
+                "project": "lol"
+            }
+        }`)
+
+		conf := &schema.ConfigSource{}
+		err := json.Unmarshal(by, conf)
+		assert.Equal(t, nil, err)
+		err = reg.SchemaAddFromConfig(conf)
+		assert.Equal(t, nil, err)
+
+		s, ok := reg.Schema("datauxtest")
+		assert.Equal(t, true, ok)
+		assert.NotEqual(t, nil, s)
 
 		loadTestData(t)
 
@@ -161,9 +177,9 @@ func loadTestData(t *testing.T) {
 	})
 }
 
-// We are testing that we can register this Google Datasource
-// as a qlbridge-Datasource
-func TestDataSourceInterface(t *testing.T) {
+// We are testing that we can register this Google Datastore Source
+// as a qlbridge Source
+func TestSourceInterface(t *testing.T) {
 
 	RunTestServer(t)
 

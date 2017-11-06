@@ -91,6 +91,9 @@ func (m *Source) Setup(ss *schema.Schema) error {
 	if pid := jh.String("projectid"); pid != "" {
 		m.cloudProjectId = pid
 	}
+	if pid := jh.String("project"); pid != "" {
+		m.cloudProjectId = pid
+	}
 	if jwt := jh.String("jwt"); jwt != "" {
 		m.jwtFile = jwt
 	}
