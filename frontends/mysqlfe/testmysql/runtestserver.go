@@ -91,16 +91,6 @@ frontends [
 
 var oldConfig = `
 sources : [
- 
-  {
-    name : cass
-    type : cassandra
-    settings {
-      keyspace  "datauxtest"
-      hosts    ["localhost:9042"]
-    }
-  }
-  
   # csv-file "db" of data from http://seanlahman.com/baseball-archive/statistics/
   #  must have TESTINT=true integration test flag turned on
   {

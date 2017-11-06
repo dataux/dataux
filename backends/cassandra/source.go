@@ -37,7 +37,11 @@ func init() {
 // Create a gocql session
 func createCassSession(conf *schema.ConfigSource, keyspace string) (*gocql.Session, error) {
 
-	servers := conf.Settings.Strings("hosts")
+	servers := conf.Hosts
+	if len(servers) == 0 {
+		servers = conf.Settings.Strings("hosts")
+	}
+
 	if len(servers) == 0 {
 		return nil, fmt.Errorf("No 'hosts' for cassandra found in config %v", conf.Settings)
 	}
@@ -121,7 +125,7 @@ func (m *Source) Setup(ss *schema.Schema) error {
 	m.db = strings.ToLower(ss.Name)
 	m.tablemap = make(map[string]*schema.Table)
 
-	//u.Infof("Init:  %#v", m.schema.Conf)
+	u.Infof("Init:  %#v", m.schema.Conf)
 	if m.schema.Conf == nil {
 		return fmt.Errorf("Schema conf not found")
 	}

@@ -3,9 +3,7 @@ package cassandra_test
 import (
 	"database/sql"
 	"encoding/json"
-	"flag"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -19,6 +17,7 @@ import (
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/schema"
 
 	_ "github.com/dataux/dataux/backends/cassandra"
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
@@ -32,17 +31,12 @@ var (
 	now                 = time.Now()
 	expectedRowCt       = 105
 	testServicesRunning bool
-	cassHost            *string = flag.String("casshost", "localhost:9042", "Cassandra Host")
+	cassHost            string = "localhost:9042"
 	session             *gocql.Session
 	cassKeyspace        = "datauxtest"
-	_                   = json.RawMessage(nil)
 )
 
 func init() {
-	cass := os.Getenv("CASSANDRA_HOST")
-	if len(cass) > 0 {
-		*cassHost = cass
-	}
 	tu.Setup()
 }
 
@@ -97,6 +91,30 @@ func RunTestServer(t *testing.T) func() {
 
 		loadTestData(t)
 
+		reg := schema.DefaultRegistry()
+		by := []byte(`{
+            "name": "cass",
+            "schema":"datauxtest",
+            "type": "cassandra",
+            "hosts": ["localhost:9042"],
+            "settings": {
+                "keyspace": "datauxtest"
+            }
+        }`)
+
+		conf := &schema.ConfigSource{}
+		err := json.Unmarshal(by, conf)
+		assert.Equal(t, nil, err)
+		if len(conf.Hosts) > 0 {
+			cassHost = conf.Hosts[0]
+		}
+		err = reg.SchemaAddFromConfig(conf)
+		assert.Equal(t, nil, err)
+
+		s, ok := reg.Schema("datauxtest")
+		assert.Equal(t, true, ok)
+		assert.NotEqual(t, nil, s)
+
 		planner.GridConf.JobMaker = jobMaker
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
@@ -113,7 +131,7 @@ func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
 func loadTestData(t *testing.T) {
 	loadTestDataOnce.Do(func() {
 		u.Debugf("loading cassandra test data")
-		preKeyspace := gocql.NewCluster(*cassHost)
+		preKeyspace := gocql.NewCluster(cassHost)
 		// no keyspace
 		s1, err := preKeyspace.CreateSession()
 		assert.True(t, err == nil, "Must create cassandra session got err=%v", err)
@@ -122,7 +140,7 @@ func loadTestData(t *testing.T) {
 		err = s1.Query(cqlKeyspace).Exec()
 		assert.True(t, err == nil, "Must create cassandra keyspace got err=%v", err)
 
-		cluster := gocql.NewCluster(*cassHost)
+		cluster := gocql.NewCluster(cassHost)
 		cluster.Keyspace = cassKeyspace
 		// Error querying table schema: Undefined name key_aliases in selection clause
 		// this assumes cassandra 2.2.x ??

@@ -407,6 +407,27 @@ func (m *SqlToCql) isCassKey(name string) bool {
 	return false
 }
 
+func eval(arg expr.Node) (value.Value, bool) {
+	switch arg := arg.(type) {
+	case *expr.NumberNode, *expr.StringNode:
+		return vm.Eval(nil, arg)
+	case *expr.IdentityNode:
+		return value.NewStringValue(arg.Text), true
+	case *expr.ArrayNode:
+		sv := value.NewSliceValues(nil)
+		for _, na := range arg.Args {
+			v, ok := eval(na)
+			if ok {
+				sv.Append(v)
+			}
+		}
+		return sv, true
+	default:
+		u.Debugf("%T  %v", arg, arg)
+	}
+	return nil, false
+}
+
 // walkWhereNode() We are re-writing the sql select statement and need
 //   to walk the ast and see if we can push down this where clause
 //   completely or partially.
@@ -498,11 +519,11 @@ func (m *SqlToCql) walkFilterBinary(node *expr.BinaryNode) (expr.Node, error) {
 		return nil, nil
 	}
 
-	lhval, lhok := vm.Eval(nil, node.Args[0])
-	rhval, rhok := vm.Eval(nil, node.Args[1])
+	lhval, lhok := eval(node.Args[0])
+	rhval, rhok := eval(node.Args[1])
 	if !lhok || !rhok {
 		u.Warnf("not ok: %v  l:%v  r:%v", node, lhval, rhval)
-		return nil, fmt.Errorf("could not evaluate: %v", node.String())
+		//return nil, fmt.Errorf("could not evaluate: %v", node.String())
 	}
 	//u.Debugf("walkBinary: %v  l:%v  r:%v  %T  %T", node, lhval, rhval, lhval, rhval)
 	switch node.Operator.T {
