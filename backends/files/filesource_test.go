@@ -246,7 +246,7 @@ func TestSelectStar(t *testing.T) {
 	rows, err := db.Query("select * from article;")
 	assert.Equal(t, nil, err)
 	cols, _ := rows.Columns()
-	assert.Equal(t, 12, len(cols), "want 12 cols but got %v", len(cols))
+	assert.Equal(t, 7, len(cols), "want 7 cols but got %v", len(cols))
 	assert.True(t, rows.Next(), "must get next row but couldn't")
 	readCols := make([]interface{}, len(cols))
 	writeCols := make([]string, len(cols))
