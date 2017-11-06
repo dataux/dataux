@@ -74,7 +74,7 @@ func (m *ResultReader) buildProjection() {
 				cols = append(cols, rel.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
 			} else {
 				u.Debugf("Could not find: '%v' in %#v", col.SourceField, m.Req.tbl.FieldMap)
-				u.Warnf("%#v", col)
+				//u.Warnf("%#v", col)
 			}
 		}
 	}

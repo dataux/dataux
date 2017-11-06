@@ -26,18 +26,17 @@ import (
 )
 
 var (
-	DbConn              = "root@tcp(127.0.0.1:13307)/datauxtest?parseTime=true"
+	dbConn              = "root@tcp(127.0.0.1:13307)/datauxtest?parseTime=true"
 	loadTestDataOnce    sync.Once
 	now                 = time.Now()
 	testServicesRunning bool
 	bqTable             = "datauxtest"
 	gceProject          = os.Getenv("GCEPROJECT")
-	_                   = json.RawMessage(nil)
 )
 
 func init() {
 	if gceProject == "" {
-		panic("Must have $GCEPROJECT env")
+		panic("Must have $GCEPROJECT env there is no emulator")
 	}
 	tu.Setup()
 }
@@ -54,16 +53,31 @@ func RunTestServer(t *testing.T) func() {
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
 
-		var bqconf *schema.ConfigSource
-		for _, sc := range testmysql.Conf.Sources {
-			if sc.SourceType == "bigquery" {
-				bqconf = sc
-			}
-		}
-		if bqconf == nil {
-			panic("must have bigquery conf")
-		}
-		bqconf.Settings["billing_project"] = gceProject
+		reg := schema.DefaultRegistry()
+		by := []byte(`{
+            "name": "bigquery",
+            "schema":"datauxtest",
+            "type": "bigquery",
+            "table_aliases" : {
+                "bikeshare_stations" : "bigquery-public-data:san_francisco.bikeshare_stations"
+            },
+            "settings" : {
+              "billing_project" : "",
+              "data_project" : "bigquery-public-data",
+              "dataset" : "san_francisco"
+            }
+        }`)
+
+		conf := &schema.ConfigSource{}
+		err := json.Unmarshal(by, conf)
+		assert.Equal(t, nil, err)
+		conf.Settings["billing_project"] = gceProject
+		err = reg.SchemaAddFromConfig(conf)
+		assert.Equal(t, nil, err)
+
+		s, ok := reg.Schema("datauxtest")
+		assert.Equal(t, true, ok)
+		assert.NotEqual(t, nil, s)
 
 		testmysql.RunTestServer(t)
 	}
@@ -104,7 +118,7 @@ func TestBasic(t *testing.T) {
 	RunTestServer(t)
 
 	// This is a connection to RunTestServer, which starts on port 13307
-	dbx, err := sqlx.Connect("mysql", DbConn)
+	dbx, err := sqlx.Connect("mysql", dbConn)
 	assert.True(t, err == nil, "%v", err)
 	defer dbx.Close()
 	//u.Debugf("%v", testSpec.Sql)
@@ -210,6 +224,7 @@ func TestSelectEscapeSyntax(t *testing.T) {
 }
 
 func TestSelectGroupBy(t *testing.T) {
+	RunTestServer(t)
 	data := struct {
 		Landmark string
 		Ct       int
@@ -218,12 +233,12 @@ func TestSelectGroupBy(t *testing.T) {
 		Sql:         "select count(*) as ct, landmark from bikeshare_stations GROUP BY landmark;",
 		ExpectRowCt: 5,
 		ValidateRowData: func() {
-			//u.Infof("%v", data)
+			u.Infof("%v", data)
 			switch data.Landmark {
 			case "San Jose":
-				assert.Equal(t, 65, data.Ct, "Should have found 1? %v", data)
+				assert.Equal(t, 18, data.Ct, "Should have found 18? %v", data)
 			case "Palo Alto":
-				assert.Equal(t, 20, data.Ct, "Should have found 2? %v", data)
+				assert.Equal(t, 5, data.Ct, "Should have found 2? %v", data)
 			}
 		},
 		RowData: &data,
@@ -231,14 +246,14 @@ func TestSelectGroupBy(t *testing.T) {
 }
 
 func TestSelectWhereLike(t *testing.T) {
-
+	RunTestServer(t)
 	// We are testing the LIKE clause
 	data := struct {
 		Landmark string
 	}{}
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         `SELECT landmark from bikeshare_stations WHERE landmark like "Palo%"`,
-		ExpectRowCt: 20,
+		ExpectRowCt: 5,
 		ValidateRowData: func() {
 			assert.True(t, data.Landmark == "Palo Alto", "%v", data)
 		},
@@ -259,7 +274,7 @@ func TestSelectOrderBy(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			assert.Equal(t, "San Francisco", data.Landmark, "%v", data)
-			assert.Equal(t, 142, data.Ct, "%v", data)
+			assert.Equal(t, 37, data.Ct, "%v", data)
 		},
 		RowData: &data,
 	})
@@ -270,7 +285,7 @@ func TestSelectOrderBy(t *testing.T) {
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
 			assert.Equal(t, "Mountain View", data.Landmark, "%v", data)
-			assert.Equal(t, 28, data.Ct, "%v", data)
+			assert.Equal(t, 7, data.Ct, "%v", data)
 		},
 		RowData: &data,
 	})
@@ -413,10 +428,10 @@ func TestMutationUpdateSimple(t *testing.T) {
 
 func TestInvalidQuery(t *testing.T) {
 	RunTestServer(t)
-	db, err := sql.Open("mysql", DbConn)
-	assert.True(t, err == nil)
+	db, err := sql.Open("mysql", dbConn)
+	assert.Equal(t, nil, err)
 	// It is parsing the SQL on server side (proxy) not in client
-	//  so hence that is what this is testing, making sure proxy responds gracefully
+	// so hence that is what this is testing, making sure proxy responds gracefully
 	rows, err := db.Query("select `stuff`, NOTAKEYWORD fake_tablename NOTWHERE `description` LIKE \"database\";")
 	assert.True(t, err != nil, "%v", err)
 	assert.True(t, rows == nil, "must not get rows")

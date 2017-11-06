@@ -250,8 +250,8 @@ func (m *mySqlHandler) handleQuery(writer models.ResultWriter, sql string) (err 
 			return err
 		}
 		return m.conn.WriteOK(nil)
-	case *rel.SqlCreate:
-		// DDL?
+	case *rel.SqlCreate, *rel.SqlDrop, *rel.SqlAlter:
+		// DDL statements
 		err = job.Run()
 		job.Close()
 		if err != nil {
