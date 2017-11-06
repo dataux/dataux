@@ -292,8 +292,6 @@ func (m *Source) Close() error {
 func (m *Source) DataSource() schema.Source { return m }
 func (m *Source) Tables() []string          { return m.tables }
 func (m *Source) Table(table string) (*schema.Table, error) {
-
-	//u.Debugf("Table(%q)", table)
 	if m.schema == nil {
 		u.Warnf("no schema in use?")
 		return nil, fmt.Errorf("no schema in use")
@@ -314,7 +312,6 @@ func (m *Source) Table(table string) (*schema.Table, error) {
 }
 
 func (m *Source) Open(tableName string) (schema.Conn, error) {
-	u.Debugf("Open(%v)", tableName)
 	if m.schema == nil {
 		u.Warnf("no schema?")
 		return nil, nil

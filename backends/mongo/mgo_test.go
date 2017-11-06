@@ -2,7 +2,7 @@ package mongo_test
 
 import (
 	"database/sql"
-	"flag"
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -13,6 +13,7 @@ import (
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/schema"
 
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
 	"github.com/dataux/dataux/planner"
@@ -20,9 +21,8 @@ import (
 )
 
 var (
-	mongoHost           *string = flag.String("host", "localhost:27017", "mongo Server Host Address")
-	mongoDb             *string = flag.String("db", "mgo_datauxtest", "mongo database to use for testing")
 	testServicesRunning bool
+	mongoHosts          = []string{"localhost:37017", "localhost:37018"}
 )
 
 func init() {
@@ -33,16 +33,18 @@ func init() {
 }
 
 func loadTestData() {
-	sess, _ := mgo.Dial(*mongoHost)
-	userColl := sess.DB("mgo_datauxtest").C("user")
-	userColl.DropCollection()
-	articleColl := sess.DB("mgo_datauxtest").C("article")
-	articleColl.DropCollection()
-	for _, article := range tu.Articles {
-		articleColl.Insert(article)
-	}
-	for _, user := range tu.Users {
-		userColl.Insert(user)
+	for _, host := range mongoHosts {
+		sess, _ := mgo.Dial(host)
+		userColl := sess.DB("mgo_datauxtest").C("user")
+		userColl.DropCollection()
+		articleColl := sess.DB("mgo_datauxtest").C("article")
+		articleColl.DropCollection()
+		for _, article := range tu.Articles {
+			articleColl.Insert(article)
+		}
+		for _, user := range tu.Users {
+			userColl.Insert(user)
+		}
 	}
 }
 
@@ -58,7 +60,47 @@ func RunTestServer(t *testing.T) {
 		planner.GridConf.JobMaker = jobMaker
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
+
+		reg := schema.DefaultRegistry()
+
+		by := []byte(`{
+			"name": "mgo_datauxtest",
+			"schema":"datauxtest",
+			"type": "mongo",
+			"partitions" : [
+				{
+					"table" : "article",
+					"keys" : [ "title"],
+					"partitions" : [
+					   {
+						   "id"    : "a",
+						   "right" : "m"
+					   },
+					   {
+						   "id"    : "b",
+						   "left"  : "m"
+					   }
+					]
+				}
+			]
+		  }`)
+
+		sourceConf := &schema.ConfigSource{}
+		err := json.Unmarshal(by, sourceConf)
+		assert.Equal(t, nil, err)
+		sourceConf.Hosts = []string{mongoHosts[0]}
+		err = reg.SchemaAddFromConfig(sourceConf)
+		assert.Equal(t, nil, err)
+
+		s, ok := reg.Schema("datauxtest")
+		assert.Equal(t, true, ok)
+		assert.NotEqual(t, nil, s)
+
+		// Setup test schema
+		testmysql.Schema = s
+
 		testmysql.RunTestServer(t)
+		//reg.RemoveSchema("datauxtest")
 	}
 }
 func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
@@ -69,16 +111,17 @@ func validateQuerySpec(t *testing.T, testSpec tu.QuerySpec) {
 func TestInvalidQuery(t *testing.T) {
 	RunTestServer(t)
 	db, err := sql.Open("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
-	assert.True(t, err == nil)
+	assert.Equal(t, nil, err)
 	// It is parsing the SQL on server side (proxy)
-	//  not in client, so hence that is what this is testing, making sure
-	//  proxy responds gracefully with an error
+	// not in client, so hence that is what this is testing, making sure
+	// proxy responds gracefully with an error
 	rows, err := db.Query("select `stuff`, NOTAKEYWORD github_fork NOTWHERE `description` LIKE \"database\";")
-	assert.True(t, err != nil, "%v", err)
-	assert.True(t, rows == nil, "must not get rows")
+	assert.NotEqual(t, nil, err)
+	assert.True(t, nil == rows, "must not get rows")
 }
 
 func TestSessionVarQueries(t *testing.T) {
+	RunTestServer(t)
 
 	found := false
 	data := struct {

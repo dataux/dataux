@@ -1,0 +1,49 @@
+version: "2"
+services:
+  cass: 
+    expose:
+      - "9042"
+    image: cassandra:2
+    network_mode: "host"
+  etcd:
+    expose:
+      - "2379"
+    image: quay.io/coreos/etcd:v3.1.3
+    network_mode: "host"
+  es:
+    expose:
+      - "9200"
+    image: elasticsearch:2.3.3
+    network_mode: "host"
+  es5:
+    expose:
+      - "9201"
+    ports:
+       - "9201:9200"
+    image: elasticsearch:5.5.2
+  gcloud-bigtable:
+    command: "gcloud beta emulators bigtable start --host-port=:8600 --project=lol"
+    image: "google/cloud-sdk:latest"
+    expose:
+      - "8600"
+    network_mode: "host"
+  gcloud-datastore:
+    command: "gcloud beta emulators datastore start --host-port=:8432 --project=lol"
+    image: "google/cloud-sdk:latest"
+    expose:
+      - "8432"
+    network_mode: "host"
+  mongo:
+    command: "--smallfiles --port 37017"
+    expose:
+      - "37017"
+    image: mongo:2.6
+    network_mode: "host"
+  mongo3:
+    command: mongod --port 37018
+    expose:
+      - "37018"
+    ports:
+       - "37018:37018"
+    image: mongo:3.4.4
+    network_mode: "host"

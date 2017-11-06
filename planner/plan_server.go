@@ -115,6 +115,7 @@ func (m *PlannerGrid) Run(quit chan bool) error {
 	logger := u.GetLogger()
 
 	// Connect to etcd.
+	u.Infof("etcdservers: %v", m.Conf.EtcdServers)
 	etcd, err := etcdv3.New(etcdv3.Config{Endpoints: m.Conf.EtcdServers})
 	if err != nil {
 		u.Errorf("failed to start etcd client: %v", err)
@@ -221,7 +222,7 @@ func (m *PlannerGrid) startMailboxes() {
 			u.Warnf("wtf? %v", err)
 			break
 		} else {
-			//u.Debugf("nice, created mailboxes")
+			u.Debugf("nice, created mailboxes")
 			m.mailboxes.ready = true
 			break
 		}

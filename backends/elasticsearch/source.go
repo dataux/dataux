@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	// implement interfaces
+	// ensure Elasticsearch implement Source interfaces
 	_ schema.Source = (*Source)(nil)
 )
 

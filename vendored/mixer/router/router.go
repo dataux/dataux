@@ -65,11 +65,6 @@ func NewRouter(conf *models.Config, schema *schema.Schema) (*Router, error) {
 
 	panic("not implemented nodes")
 
-	if !includeNodeConfig(conf.Nodes, conf.Rules.Default) {
-		return nil, fmt.Errorf("default node[%s] not in the nodes list.",
-			conf.Rules.Default)
-	}
-
 	rt := new(Router)
 	rt.DB = schema.Name
 	//rt.nodes = conf.Nodes

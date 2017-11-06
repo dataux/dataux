@@ -35,7 +35,7 @@ type (
 	}
 )
 
-// LeaderCreate factory function to create the Leader
+// WorkerFactory factory function to create the Leader
 func WorkerFactory(conf *Conf, client *grid.Client, server *grid.Server) grid.MakeActor {
 	return func(actorConf []byte) (grid.Actor, error) {
 		//u.Debugf("worker create %s", string(actorConf))
@@ -88,7 +88,7 @@ func (m *SqlActor) Starting() dfa.Letter {
 
 func (m *SqlActor) runTask(t *SqlTask) error {
 
-	//u.Debugf("m.conf %#v", m.conf)
+	u.Debugf("m.conf %#v", m.conf.SchemaLoader)
 	//u.Debugf("t %#v", t)
 	p, err := plan.SelectPlanFromPbBytes(t.Pb, m.conf.SchemaLoader)
 	if err != nil {

@@ -22,7 +22,7 @@ func LoadConfigFromFile(filename string) (*Config, error) {
 }
 
 // LoadConfig load a confl formatted file from string (assumes came)
-//  from file or passed in
+// from file or passed in
 func LoadConfig(conf string) (*Config, error) {
 	var c Config
 	if _, err := confl.Decode(os.ExpandEnv(conf), &c); err != nil {
@@ -36,8 +36,7 @@ type (
 	// 1) Frontend Listeners (protocols)
 	// 2) Sources (types of backends such as elasticsearch, mysql, mongo, ...)
 	// 3) Schemas:  n number of sources can create a "Virtual Schema"
-	// 4) list of server/nodes for Sources
-	// 5) etcd coordinators hosts
+	// 4) etcd coordinators hosts
 	Config struct {
 		SupressRecover bool                   `json:"supress_recover"` // do we recover?
 		WorkerCt       int                    `json:"worker_ct"`       // 4 how many worker nodes on this instance
@@ -46,7 +45,6 @@ type (
 		Frontends      []*ListenerConfig      `json:"frontends"`       // tcp listener configs
 		Sources        []*schema.ConfigSource `json:"sources"`         // backend servers/sources (es, mysql etc)
 		Schemas        []*schema.ConfigSchema `json:"schemas"`         // Schemas, each backend has 1 schema
-		Nodes          []*schema.ConfigNode   `json:"nodes"`           // list of nodes that host sources
 		Rules          *RulesConfig           `json:"rules"`           // rules for routing
 	}
 	// ListenerConfig Frontend Listener to listen for inbound
@@ -57,7 +55,6 @@ type (
 		User     string `json:"user"`     // user to talk to backend with
 		Password string `json:"password"` // optional pwd for backend
 	}
-
 	// RulesConfig
 	RulesConfig struct {
 		Schema    string        `json:"schema"`

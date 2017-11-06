@@ -3,6 +3,7 @@ package files_test
 import (
 	"bufio"
 	"database/sql"
+	"encoding/json"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -14,6 +15,7 @@ import (
 
 	_ "github.com/araddon/qlbridge/datasource/files"
 	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/schema"
 
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
 	"github.com/dataux/dataux/planner"
@@ -64,6 +66,30 @@ func RunTestServer(t *testing.T) {
 		planner.GridConf.JobMaker = jobMaker
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
+
+		reg := schema.DefaultRegistry()
+		by := []byte(`{
+            "name": "localfiles",
+            "schema":"datauxtest",
+            "type": "cloudstore",
+             "settings" : {
+                "type": "localfs",
+                "path": "tables/",
+                "localpath": "tables/",
+                "format": "csv"
+            }
+        }`)
+
+		conf := &schema.ConfigSource{}
+		err := json.Unmarshal(by, conf)
+		assert.Equal(t, nil, err)
+		err = reg.SchemaAddFromConfig(conf)
+		assert.Equal(t, nil, err)
+
+		s, ok := reg.Schema("datauxtest")
+		assert.Equal(t, true, ok)
+		assert.NotEqual(t, nil, s)
+
 		createTestData(t)
 		testmysql.RunTestServer(t)
 	}

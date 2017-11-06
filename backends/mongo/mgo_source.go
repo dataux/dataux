@@ -152,6 +152,9 @@ func chooseBackend(source string, schema *schema.Schema) string {
 			return node.Address
 		}
 	}
+	for _, node := range schema.Conf.Hosts {
+		return node
+	}
 	return ""
 }
 
@@ -162,8 +165,6 @@ func (m *Source) connect() error {
 	u.Debugf("connecting MongoDataSource: host='%s'  conf=%#v", host, m.srcschema.Conf)
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	//host = "localhost:27018"
 
 	sess, err := mgo.Dial(host)
 	if err != nil {

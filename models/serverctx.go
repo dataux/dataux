@@ -150,38 +150,22 @@ func (m *ServerCtx) loadConfig() error {
 		// find the Source config for eached named db/source
 		for _, sourceName := range schemaConf.Sources {
 
-			var sourceConf *schema.ConfigSource
+			childSchema := schema.NewSchema(sourceName)
 			// we must find a source conf by name
 			for _, sc := range m.Config.Sources {
 				if sc.Name == sourceName {
-					sourceConf = sc
+					childSchema.Conf = sc
 					break
 				}
 			}
-			if sourceConf == nil {
+			if childSchema.Conf == nil {
 				u.Warnf("could not find source: %v", sourceName)
 				return fmt.Errorf("Could not find Source Config for %v", sourceName)
 			}
 
-			childSchema := schema.NewSchema(sourceName)
-			childSchema.Conf = sourceConf
+			//u.Infof("found sourceName: %q schema.Name=%q conf=%+v", sourceName, childSchema.Name, childSchema.Conf)
 
-			//u.Infof("found sourceName: %q schema.Name=%q conf=%+v", sourceName, childSchema.Name, sourceConf)
-
-			if len(m.Config.Nodes) == 0 {
-				for _, host := range sourceConf.Hosts {
-					nc := &schema.ConfigNode{Source: sourceName, Address: host}
-					//ss.Nodes = append(ss.Nodes, nc)
-					sourceConf.Nodes = append(sourceConf.Nodes, nc)
-				}
-			} else {
-				for _, nc := range m.Config.Nodes {
-					if nc.Source == sourceConf.Name {
-						//childSchema.Nodes = append(ss.Nodes, nc)
-						sourceConf.Nodes = append(sourceConf.Nodes, nc)
-					}
-				}
-			}
+			sourceConf := childSchema.Conf
 
 			ds, err := m.Reg.GetSource(sourceConf.SourceType)
 			if err != nil {

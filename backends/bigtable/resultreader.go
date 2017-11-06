@@ -196,7 +196,15 @@ func (m *ResultReader) Run() error {
 							//u.Errorf("could not read int %v  %v", string(v.Value), err)
 						}
 					case value.TimeType:
-						dt, err := dateparse.ParseAny(string(v.Value))
+						dv := string(v.Value)
+						// 2017-10-27 16:40:34.192944249 -0700 PDT m=-791999.995948844
+						if parts := strings.Split(dv, " m="); len(parts) == 2 {
+							dv = parts[0]
+							if len(dv) > 20 {
+								dv = dv[0 : len(dv)-4]
+							}
+						}
+						dt, err := dateparse.ParseAny(dv)
 						if err == nil {
 							vals[i] = dt
 						} else {
