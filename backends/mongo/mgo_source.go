@@ -11,33 +11,33 @@ import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 )
 
 var (
-	// implement interfaces
-	_ schema.Source = (*MongoDataSource)(nil)
+	// Ensure we implement source interface
+	_ schema.Source = (*Source)(nil)
 )
 
 const (
-	ListenerType = "mongo"
+	// SourceType for this mongo source.
+	SourceType = "mongo"
 )
 
 func init() {
 	// We need to register our DataSource provider here
-	datasource.Register("mongo", NewMongoDataSource())
+	schema.RegisterSourceType(SourceType, NewSource())
 }
 
-// Mongo Data Source implements qlbridge DataSource interfaces to mongo server
+// Source Mongo Data Source implements qlbridge DataSource interfaces to mongo server
 // - singleton shared across all sessions/connections
 // - creates connections by mgo.Session.Clone()
-type MongoDataSource struct {
+type Source struct {
 	db             string   // the underlying mongo database name
 	databases      []string // all available database names from this mongo instance
 	tables         []string // tables
-	srcschema      *schema.SchemaSource
+	srcschema      *schema.Schema
 	mu             sync.Mutex
 	sess           *mgo.Session
 	closed         bool
@@ -45,14 +45,17 @@ type MongoDataSource struct {
 	tablesNotFound map[string]string
 }
 
-func NewMongoDataSource() schema.Source {
-	return &MongoDataSource{tablesNotFound: make(map[string]string)}
+// NewSource mongo source.
+func NewSource() schema.Source {
+	return &Source{tablesNotFound: make(map[string]string)}
 }
 
-func (m *MongoDataSource) Init() {}
-func (m *MongoDataSource) Setup(ss *schema.SchemaSource) error {
+// Init initilize this source.
+func (m *Source) Init() {}
 
-	u.Debugf("Setup()")
+// Setup this source.
+func (m *Source) Setup(ss *schema.Schema) error {
+
 	if m.srcschema != nil {
 		return nil
 	}
@@ -63,7 +66,6 @@ func (m *MongoDataSource) Setup(ss *schema.SchemaSource) error {
 	}
 	m.db = strings.ToLower(ss.Name)
 
-	u.Infof("Init:  %#v", m.srcschema.Conf)
 	if m.srcschema.Conf == nil {
 		return fmt.Errorf("Schema conf not found")
 	}
@@ -73,15 +75,10 @@ func (m *MongoDataSource) Setup(ss *schema.SchemaSource) error {
 		return err
 	}
 
-	if m.srcschema != nil {
-		//u.Debugf("Post Init() mongo srcschema P=%p tblct=%d", m.srcschema, len(m.srcschema.Tables()))
-	}
-
 	return m.loadSchema()
 }
 
-func (m *MongoDataSource) Close() error {
-	u.Infof("Closing MongoDataSource %p", m)
+func (m *Source) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.closed && m.sess != nil {
@@ -94,9 +91,11 @@ func (m *MongoDataSource) Close() error {
 	return nil
 }
 
-func (m *MongoDataSource) DataSource() schema.Source { return m }
-func (m *MongoDataSource) Tables() []string          { return m.tables }
-func (m *MongoDataSource) Table(table string) (*schema.Table, error) {
+// Tables list of tables
+func (m *Source) Tables() []string { return m.tables }
+
+// Table get single table schema.
+func (m *Source) Table(table string) (*schema.Table, error) {
 	if !m.loadedSchema {
 		m.loadedSchema = true
 		return m.loadTableSchema(table)
@@ -113,7 +112,8 @@ func (m *MongoDataSource) Table(table string) (*schema.Table, error) {
 	return nil, schema.ErrNotFound
 }
 
-func (m *MongoDataSource) Open(collectionName string) (schema.Conn, error) {
+// Open connection.
+func (m *Source) Open(collectionName string) (schema.Conn, error) {
 	//u.Debugf("Open(%v)", collectionName)
 	tbl, err := m.srcschema.Table(collectionName)
 	if err != nil {
@@ -124,13 +124,11 @@ func (m *MongoDataSource) Open(collectionName string) (schema.Conn, error) {
 		return nil, fmt.Errorf("Could not find '%v'.'%v' schema", m.srcschema.Name, collectionName)
 	}
 
-	//u.Debugf("creating sqltomgo %v", tbl.Name)
 	mgoSource := NewSqlToMgo(tbl, m.sess.Clone())
-	//u.Debugf("SqlToMgo: %T  %#v", mgoSource, mgoSource)
 	return mgoSource, nil
 }
 
-func (m *MongoDataSource) loadSchema() error {
+func (m *Source) loadSchema() error {
 
 	if err := m.loadDatabases(); err != nil {
 		u.Errorf("could not load mongo databases: %v", err)
@@ -144,7 +142,7 @@ func (m *MongoDataSource) loadSchema() error {
 }
 
 // TODO:  this is horrible, should use mgo's built in gossip with mongo for cluster info
-func chooseBackend(source string, schema *schema.SchemaSource) string {
+func chooseBackend(source string, schema *schema.Schema) string {
 	//u.Infof("check backends: %v", len(schema.Nodes))
 	for _, node := range schema.Conf.Nodes {
 		//u.Debugf("check node:%q =? %+v", source, node)
@@ -154,18 +152,19 @@ func chooseBackend(source string, schema *schema.SchemaSource) string {
 			return node.Address
 		}
 	}
+	for _, node := range schema.Conf.Hosts {
+		return node
+	}
 	return ""
 }
 
-func (m *MongoDataSource) connect() error {
+func (m *Source) connect() error {
 
 	host := chooseBackend(m.db, m.srcschema)
 
 	u.Debugf("connecting MongoDataSource: host='%s'  conf=%#v", host, m.srcschema.Conf)
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	//host = "localhost:27018"
 
 	sess, err := mgo.Dial(host)
 	if err != nil {
@@ -196,7 +195,7 @@ func (m *MongoDataSource) connect() error {
 	return nil
 }
 
-func (m *MongoDataSource) loadDatabases() error {
+func (m *Source) loadDatabases() error {
 
 	dbs, err := m.sess.DatabaseNames()
 	if err != nil {
@@ -220,7 +219,7 @@ func (m *MongoDataSource) loadDatabases() error {
 }
 
 // Load only table/collection names, not full schema
-func (m *MongoDataSource) loadTableNames() error {
+func (m *Source) loadTableNames() error {
 
 	db := m.sess.DB(m.db)
 	tables, err := db.CollectionNames()
@@ -239,7 +238,7 @@ func (m *MongoDataSource) loadTableNames() error {
 	return nil
 }
 
-func (m *MongoDataSource) loadTableSchema(table string) (*schema.Table, error) {
+func (m *Source) loadTableSchema(table string) (*schema.Table, error) {
 
 	if m.srcschema == nil {
 		return nil, fmt.Errorf("no schema in use")

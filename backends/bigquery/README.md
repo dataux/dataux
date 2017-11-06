@@ -64,6 +64,10 @@ SELECT landmark from bikeshare_stations WHERE landmark like "Palo%"
 select count(*) AS ct, landmark FROM bikeshare_stations GROUP BY landmark ORDER BY ct DESC LIMIT 1;
 
 
+# Drop it when your are done if you want
+
+drop schema bq;
+
 ```
 
 

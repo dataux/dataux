@@ -15,8 +15,8 @@ import (
 	"github.com/lytics/grid"
 	"github.com/sony/sonyflake"
 
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/schema"
 )
 
 var (
@@ -84,7 +84,7 @@ func NodeName2(id1, id2 uint64) string {
 // knows about the rest of the peers in the system.
 type PlannerGrid struct {
 	Conf       *Conf
-	reg        *datasource.Registry
+	reg        *schema.Registry
 	GridServer *grid.Server
 	gridClient *grid.Client
 	started    bool
@@ -94,7 +94,7 @@ type PlannerGrid struct {
 	peers      *peerList
 }
 
-func NewPlannerGrid(nodeCt int, r *datasource.Registry) *PlannerGrid {
+func NewPlannerGrid(nodeCt int, r *schema.Registry) *PlannerGrid {
 
 	nextId, _ := NextId()
 	conf := GridConf.Clone()
@@ -109,11 +109,13 @@ func NewPlannerGrid(nodeCt int, r *datasource.Registry) *PlannerGrid {
 	}
 }
 
+// Run this planner grid server.
 func (m *PlannerGrid) Run(quit chan bool) error {
 
 	logger := u.GetLogger()
 
 	// Connect to etcd.
+	u.Infof("etcdservers: %v", m.Conf.EtcdServers)
 	etcd, err := etcdv3.New(etcdv3.Config{Endpoints: m.Conf.EtcdServers})
 	if err != nil {
 		u.Errorf("failed to start etcd client: %v", err)
@@ -220,7 +222,7 @@ func (m *PlannerGrid) startMailboxes() {
 			u.Warnf("wtf? %v", err)
 			break
 		} else {
-			//u.Debugf("nice, created mailboxes")
+			u.Debugf("nice, created mailboxes")
 			m.mailboxes.ready = true
 			break
 		}

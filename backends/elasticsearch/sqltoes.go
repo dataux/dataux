@@ -19,6 +19,7 @@ import (
 )
 
 var (
+	// DefaultLimit is default page size limit.
 	DefaultLimit = 1000
 
 	// Implement SourcePlanner interface that allows sql statements
@@ -29,14 +30,14 @@ var (
 
 type esMap map[string]interface{}
 
-// Sql To Elasticsearch Request Object
-//   Map sql queries into Elasticsearch Json Requests
+// SqlToEs Sql To Elasticsearch Request Object
+// Map sql queries into Elasticsearch Json Requests
 type SqlToEs struct {
 	resp           *ResultReader
 	p              *plan.Source
 	tbl            *schema.Table
 	sel            *rel.SqlSelect
-	schema         *schema.SchemaSource
+	schema         *schema.Schema
 	ctx            *plan.Context
 	partition      *schema.Partition // current partition for this request
 	req            esMap             // Full request
@@ -51,21 +52,24 @@ type SqlToEs struct {
 	projections    map[string]string
 }
 
+// NewSqlToEs creates request for translating SqlToEs
 func NewSqlToEs(table *schema.Table) *SqlToEs {
 	return &SqlToEs{
 		tbl:         table,
-		schema:      table.SchemaSource,
+		schema:      table.Schema,
 		projections: make(map[string]string),
 	}
 }
 
+// Close this request
 func (m *SqlToEs) Close() error { return nil }
 
+// Host get es host
 func (m *SqlToEs) Host() string {
 	//u.Warnf("TODO:  replace hardcoded es host")
 	return chooseBackend(m.schema)
 }
-func chooseBackend(schema *schema.SchemaSource) string {
+func chooseBackend(schema *schema.Schema) string {
 	if len(schema.Conf.Nodes) == 0 {
 		if len(schema.Conf.Hosts) > 0 {
 			return schema.Conf.Hosts[0]
@@ -80,6 +84,27 @@ func chooseBackend(schema *schema.SchemaSource) string {
 
 func (m *SqlToEs) Columns() []string {
 	return m.resp.Columns()
+}
+
+func eval(arg expr.Node) (value.Value, bool) {
+	switch arg := arg.(type) {
+	case *expr.NumberNode, *expr.StringNode:
+		return vm.Eval(nil, arg)
+	case *expr.IdentityNode:
+		return value.NewStringValue(arg.Text), true
+	case *expr.ArrayNode:
+		sv := value.NewSliceValues(nil)
+		for _, na := range arg.Args {
+			v, ok := eval(na)
+			if ok {
+				sv.Append(v)
+			}
+		}
+		return sv, true
+	default:
+		u.Debugf("%T  %v", arg, arg)
+	}
+	return nil, false
 }
 
 // WalkSourceSelect is used during planning phase, to create a plan (plan.Task)
@@ -172,6 +197,10 @@ func (m *SqlToEs) WalkExecSource(p *plan.Source) (exec.Task, error) {
 	}
 	if p.Stmt.Source == nil {
 		return nil, fmt.Errorf("Plan did not include Sql Select Statement?")
+	}
+	m.ctx = p.Context()
+	if m.ctx == nil {
+		u.Warnf("no context????  %#v", p)
 	}
 	if m.p == nil {
 		u.Debugf("custom? %v", p.Custom)
@@ -414,10 +443,10 @@ func (m *SqlToEs) WalkNode(cur expr.Node, q *esMap) (value.Value, error) {
 
 func (m *SqlToEs) walkFilterTri(node *expr.TriNode, q *esMap) (value.Value, error) {
 
-	arg1val, aok := vm.Eval(nil, node.Args[0])
+	arg1val, aok := eval(node.Args[0])
 	//u.Debugf("arg1? %v  ok?%v", arg1val, aok)
-	arg2val, bok := vm.Eval(nil, node.Args[1])
-	arg3val, cok := vm.Eval(nil, node.Args[2])
+	arg2val, bok := eval(node.Args[1])
+	arg3val, cok := eval(node.Args[2])
 	//u.Debugf("walkTri: %v  %v %v %v", node, arg1val, arg2val, arg3val)
 	if !aok || !bok || !cok {
 		return nil, fmt.Errorf("Could not evaluate args: %v", node.String())
@@ -437,22 +466,11 @@ func (m *SqlToEs) walkFilterTri(node *expr.TriNode, q *esMap) (value.Value, erro
 
 func (m *SqlToEs) walkFilterBinary(node *expr.BinaryNode, q *esMap) (value.Value, error) {
 
-	// var lhval, rhval interface{}
-	// switch curNode := cur.(type) {
-	// case *expr.BinaryNode, *expr.TriNode, *expr.UnaryNode, *expr.MultiArgNode, *expr.FuncNode:
-	// 	u.Warnf("not implemented: %#v", curNode)
-	// 	panic("not implemented")
-	// case *expr.IdentityNode, *expr.StringNode, *expr.NumberNode:
-	// 	u.Infof("node? %v", curNode)
-	// default:
-	// 	u.Errorf("unrecognized T:%T  %v", cur, cur)
-	// 	panic("Unrecognized node type")
-	// }
-	lhval, lhok := vm.Eval(nil, node.Args[0])
-	rhval, rhok := vm.Eval(nil, node.Args[1])
+	lhval, lhok := eval(node.Args[0])
+	rhval, rhok := eval(node.Args[1])
 	if !lhok || !rhok {
-		u.Warnf("not ok: %v  l:%v  r:%v", node, lhval, rhval)
-		return nil, fmt.Errorf("could not evaluate: %v", node.String())
+		u.Warnf("not ok: %v  l:%v  r:%v  %s", node, lhval, rhval, node)
+		//return nil, fmt.Errorf("could not evaluate: %v", node.String())
 	}
 	//u.Debugf("walkBinary: op:%q  node:%v  l:%v  r:%v  %T  %T", node.Operator.V, node, lhval, rhval, lhval, rhval)
 	switch node.Operator.T {
@@ -520,10 +538,10 @@ func (m *SqlToEs) walkFilterBinary(node *expr.BinaryNode, q *esMap) (value.Value
 			//   		"filter" : {  "terms" : { "year" : [1990,1992]}   }
 			*q = esMap{"terms": esMap{lhval.ToString(): vt.Values()}}
 		default:
-			u.Warnf("not implemented type %#v", rhval)
+			u.Warnf("not implemented type %#v  node=%v", rhval, node)
 		}
 	default:
-		u.Warnf("not implemented: %v", node.Operator)
+		u.Warnf("not implemented: %v", node)
 	}
 	if q != nil {
 		return nil, nil
@@ -636,16 +654,4 @@ func (m *SqlToEs) walkAggFunc(node *expr.FuncNode) (q esMap, _ error) {
 		return q, nil
 	}
 	return nil, fmt.Errorf("not implemented")
-}
-
-func eval(cur expr.Node) (value.Value, bool) {
-	switch curNode := cur.(type) {
-	case *expr.IdentityNode:
-		return value.NewStringValue(curNode.Text), true
-	case *expr.StringNode:
-		return value.NewStringValue(curNode.Text), true
-	default:
-		u.Errorf("unrecognized T:%T  %v", cur, cur)
-	}
-	return value.NilValueVal, false
 }

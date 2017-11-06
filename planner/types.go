@@ -1,6 +1,7 @@
 package planner
 
 import (
+	u "github.com/araddon/gou"
 	"github.com/araddon/qlbridge/plan"
 	"github.com/lytics/dfa"
 )
@@ -38,6 +39,7 @@ func (c *Conf) Clone() *Conf {
 	}
 	if c.SchemaLoader == nil {
 		//panic("need SchemaLoader")
+		u.Warnf("no schema loader?")
 	}
 	return &Conf{
 		JobMaker:       c.JobMaker,

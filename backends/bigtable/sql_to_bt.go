@@ -1,8 +1,9 @@
-// package bigtable implements a data source (backend) to allow
+// Package bigtable implements a data source (backend) to allow
 // dataux to query google bigtable
 package bigtable
 
 import (
+	"context"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 
 	"cloud.google.com/go/bigtable"
 	u "github.com/araddon/gou"
-	"golang.org/x/net/context"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	// Default page limit
+	// DefaultLimit for rows from bigtable
 	DefaultLimit = 5000
 
 	// Ensure we implment appropriate interfaces
@@ -33,6 +33,7 @@ var (
 	_ exec.ExecutorSource = (*SqlToBT)(nil)
 	_ schema.ConnMutation = (*SqlToBT)(nil)
 
+	// Timeout default
 	Timeout   = 10 * time.Second
 	globalCtx = context.Background()
 )
@@ -49,7 +50,7 @@ type SqlToBT struct {
 	original             *rel.SqlSelect
 	whereIdents          map[string]bool
 	stmt                 rel.SqlStatement
-	schema               *schema.SchemaSource
+	schema               *schema.Schema
 	s                    *Source
 	partition            *schema.Partition // current partition for this request
 	needsPolyFill        bool              // polyfill?
@@ -62,7 +63,7 @@ type SqlToBT struct {
 func NewSqlToBT(s *Source, t *schema.Table) *SqlToBT {
 	m := &SqlToBT{
 		tbl:    t,
-		schema: t.SchemaSource,
+		schema: t.Schema,
 		s:      s,
 	}
 	return m
@@ -83,7 +84,7 @@ func (m *SqlToBT) queryRewrite(original *rel.SqlSelect) error {
 	req.RewriteAsRawSelect()
 
 	if req.Where != nil {
-		u.Debugf("original vs new: \n%s\n%s", original.Where, req.Where)
+		//u.Debugf("original vs new: \n%s\n%s", original.Where, req.Where)
 		m.whereIdents = make(map[string]bool)
 		w, err := m.walkWhereNode(req.Where.Expr)
 		if err != nil {
@@ -227,7 +228,7 @@ func (m *SqlToBT) WalkExecSource(p *plan.Source) (exec.Task, error) {
 }
 
 // CreateMutator part of Mutator interface to allow data sources create a stateful
-//  mutation context for update/delete operations.
+// mutation context for update/delete operations.
 func (m *SqlToBT) CreateMutator(pc interface{}) (schema.ConnMutator, error) {
 	if ctx, ok := pc.(*plan.Context); ok && ctx != nil {
 		m.TaskBase = exec.NewTaskBase(ctx)
@@ -249,11 +250,14 @@ func (m *SqlToBT) Put(ctx context.Context, key schema.Key, val interface{}) (sch
 		return nil, fmt.Errorf("Must have parent for big-table put")
 	}
 
+	keyVal := ""
 	if key == nil {
 		u.Warnf("didn't have key?  %v", val)
 		// If we don't have a key we MUST choose one from columns via
 		// the schema ie the "primary key"
 		//return nil, fmt.Errorf("Must have key for updates in bigtable")
+	} else {
+		keyVal = fmt.Sprintf("%v", key.Key())
 	}
 
 	cols := m.tbl.Columns()
@@ -279,6 +283,9 @@ func (m *SqlToBT) Put(ctx context.Context, key schema.Key, val interface{}) (sch
 	switch valT := val.(type) {
 	case []driver.Value:
 		row = valT
+		if len(row) > 0 {
+			keyVal = fmt.Sprintf("%v", row[0])
+		}
 		//u.Debugf("row:  %v", row)
 		//u.Debugf("row len=%v   fieldlen=%v col len=%v", len(row), len(m.tbl.Fields), len(cols))
 		for _, f := range m.tbl.Fields {
@@ -349,11 +356,11 @@ func (m *SqlToBT) Put(ctx context.Context, key schema.Key, val interface{}) (sch
 		return nil, fmt.Errorf("Was not []driver.Value?  %T", val)
 	}
 
-	tbl := client.Open(m.tbl.Parent)
+	tbl := m.s.client.Open(m.tbl.Parent)
 
+	u.Infof("insert key = %s", keyVal)
+	//u.Debugf("mut: %v  row: %v   cols: %v  %d %d", m.tbl.Name, row, cols, len(row), len(cols))
 	mut := Mutation(m.tbl.Name, row, cols)
-
-	keyVal := fmt.Sprintf("%v", key.Key())
 	if err := tbl.Apply(ctx, keyVal, mut); err != nil {
 		u.Errorf("Error Applying mutation: %v", err)
 	}
@@ -361,6 +368,7 @@ func (m *SqlToBT) Put(ctx context.Context, key schema.Key, val interface{}) (sch
 	return newKey, nil
 }
 
+// Mutation function
 func Mutation(fam string, vals []driver.Value, cols []string) *bigtable.Mutation {
 	mut := bigtable.NewMutation()
 	//ts := bigtable.Now()
@@ -387,6 +395,7 @@ func Mutation(fam string, vals []driver.Value, cols []string) *bigtable.Mutation
 	return mut
 }
 
+// PutMulti write multiple rows.
 func (m *SqlToBT) PutMulti(ctx context.Context, keys []schema.Key, src interface{}) ([]schema.Key, error) {
 	return nil, schema.ErrNotImplemented
 }
@@ -398,16 +407,19 @@ func (m *SqlToBT) Delete(key driver.Value) (int, error) {
 }
 
 // DeleteExpression - delete by expression (where clause)
-//  - For where columns contained in Partition Keys we can push to bigtable
-//  - for others we might have to do a select -> delete
+// - For where columns contained in Partition Keys we can push to bigtable
+// - for others we might have to do a select -> delete
 func (m *SqlToBT) DeleteExpression(p interface{}, where expr.Node) (int, error) {
-	//u.Warnf("hm, in delete?  %v   %T", where, p)
+	u.Warnf("hm, in delete?  %v   %T", where, p)
 	pd, ok := p.(*plan.Delete)
 	if !ok {
 		return 0, plan.ErrNoPlan
 	}
 
-	btt := m.s.client.Open(pd.Stmt.Table)
+	u.Debugf("pd %v", pd.Stmt.Where)
+
+	//btt := m.s.client.Open(pd.Stmt.Table)
+	tbl := m.s.client.Open(m.tbl.Parent)
 
 	ctx, cancel := context.WithTimeout(globalCtx, Timeout)
 	defer cancel()
@@ -416,11 +428,21 @@ func (m *SqlToBT) DeleteExpression(p interface{}, where expr.Node) (int, error) 
 
 	mut := bigtable.NewMutation()
 	mut.DeleteRow()
-	err := btt.Apply(ctx, "hello", mut)
+	err := tbl.Apply(ctx, "hello", mut)
 	if err != nil {
 		return 0, err
 	}
 	return 1, nil
+}
+
+func eval(arg expr.Node) (value.Value, bool) {
+	switch arg := arg.(type) {
+	case *expr.NumberNode, *expr.StringNode:
+		return vm.Eval(nil, arg)
+	case *expr.IdentityNode:
+		return value.NewStringValue(arg.Text), true
+	}
+	return nil, false
 }
 
 // walkWhereNode() We are re-writing the sql select statement and need
@@ -501,14 +523,14 @@ func (m *SqlToBT) walkFilterBinary(node *expr.BinaryNode) (expr.Node, error) {
 	_, lhIdentityName, _ := in.LeftRight()
 	col, exists := m.tbl.FieldMap[lhIdentityName]
 	if !exists {
-		// Doesn't exist in cassandra?
+		// Doesn't exist in bigtable?
 		// 1) child element of a row, ie json key inside column?  need to polyfill
 		return nil, nil
 	}
 
-	u.Debugf("\nlh: %#v\nrh: %#v", node.Args[0], node.Args[1])
-	lhval, lhok := vm.Eval(nil, node.Args[0])
-	rhval, rhok := vm.Eval(nil, node.Args[1])
+	//u.Debugf("\nlh: %#v\nrh: %#v", node.Args[0], node.Args[1])
+	lhval, lhok := eval(node.Args[0])
+	rhval, rhok := eval(node.Args[1])
 	if !lhok || !rhok {
 		u.Warnf("not ok: %v  l:%v  r:%v", node, lhval, rhval)
 		return nil, fmt.Errorf("could not evaluate: %v", node.String())

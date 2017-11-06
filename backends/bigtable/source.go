@@ -13,7 +13,6 @@ import (
 	"cloud.google.com/go/bigtable"
 	"golang.org/x/net/context"
 
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
@@ -41,7 +40,7 @@ var (
 
 func init() {
 	// We need to register our DataSource provider here
-	datasource.Register(DataSourceLabel, &Source{})
+	schema.RegisterSourceType(DataSourceLabel, &Source{})
 }
 
 func getClient(project, instance string) (*bigtable.Client, error) {
@@ -73,7 +72,7 @@ type Source struct {
 	tables           []string // Lower cased
 	tablemap         map[string]*schema.Table
 	conf             *schema.ConfigSource
-	schema           *schema.SchemaSource
+	schema           *schema.Schema
 	client           *bigtable.Client
 	ac               *bigtable.AdminClient
 	lastSchemaUpdate time.Time
@@ -90,7 +89,7 @@ type Mutator struct {
 
 func (m *Source) Init() {}
 
-func (m *Source) Setup(ss *schema.SchemaSource) error {
+func (m *Source) Setup(ss *schema.Schema) error {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -293,8 +292,6 @@ func (m *Source) Close() error {
 func (m *Source) DataSource() schema.Source { return m }
 func (m *Source) Tables() []string          { return m.tables }
 func (m *Source) Table(table string) (*schema.Table, error) {
-
-	//u.Debugf("Table(%q)", table)
 	if m.schema == nil {
 		u.Warnf("no schema in use?")
 		return nil, fmt.Errorf("no schema in use")
@@ -315,7 +312,6 @@ func (m *Source) Table(table string) (*schema.Table, error) {
 }
 
 func (m *Source) Open(tableName string) (schema.Conn, error) {
-	u.Debugf("Open(%v)", tableName)
 	if m.schema == nil {
 		u.Warnf("no schema?")
 		return nil, nil

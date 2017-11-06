@@ -2,6 +2,7 @@ package elasticsearch_test
 
 import (
 	"database/sql"
+	"encoding/json"
 	"flag"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/schema"
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
 	"github.com/dataux/dataux/planner"
 	"github.com/dataux/dataux/testutil"
@@ -37,6 +39,26 @@ func RunTestServer(t *testing.T) func() {
 		planner.GridConf.JobMaker = jobMaker
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
+
+		reg := schema.DefaultRegistry()
+
+		by := []byte(`{
+            "name": "es_test",
+            "schema":"datauxtest",
+            "type": "elasticsearch",
+            "hosts": ["http://localhost:9200"]
+        }`)
+
+		conf := &schema.ConfigSource{}
+		err := json.Unmarshal(by, conf)
+		assert.Equal(t, nil, err)
+		err = reg.SchemaAddFromConfig(conf)
+		assert.Equal(t, nil, err)
+
+		s, ok := reg.Schema("datauxtest")
+		assert.Equal(t, true, ok)
+		assert.NotEqual(t, nil, s)
+
 		testmysql.RunTestServer(t)
 	}
 	return func() {
@@ -176,10 +198,9 @@ func TestSelectAggs(t *testing.T) {
 		Sql:         "select cardinality(`actor`) AS users_who_watched, min(`repository.id`) as oldest_repo from github_watch;",
 		ExpectRowCt: 1,
 		ValidateRowData: func() {
-			//u.Debugf("%v", data)   {765 3448}
-			assert.True(t, data.Card == 3448, "%v", data)
+			u.Debugf("%+v", data) //  {Oldest:765 Card:3406}
+			assert.True(t, data.Card == 3406, "%v", data)
 			assert.True(t, data.Oldest == 765, "%v", data)
-
 		},
 		RowData: &data,
 	})
@@ -338,7 +359,7 @@ func TestSelectWhereBetween(t *testing.T) {
 	}{}
 	validateQuerySpec(t, QuerySpec{
 		Sql:         `select actor, repository.name from github_watch where repository.stargazers_count BETWEEN "1000" AND 1100;`,
-		ExpectRowCt: 132,
+		ExpectRowCt: 131,
 		ValidateRowData: func() {
 			//u.Debugf("%#v", data)
 			assert.True(t, data.Name != "", "%v", data)
@@ -378,7 +399,7 @@ func TestSelectWhereBetween(t *testing.T) {
 			WHERE 
 				repository.stargazers_count BETWEEN 1000 AND 1100;
 		`,
-		ExpectRowCt: 132,
+		ExpectRowCt: 131,
 		ValidateRowData: func() {
 			//u.Debugf("%#v", datact)
 			assert.True(t, datact.Stars >= 1000 && datact.Stars < 1101, "%v", datact)

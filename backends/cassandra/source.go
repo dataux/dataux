@@ -11,14 +11,13 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/hailocab/go-hostpool"
 
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/rel"
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"
 )
 
 const (
-	DataSourceLabel = "cassandra"
+	SourceType = "cassandra"
 )
 
 var (
@@ -32,13 +31,17 @@ var (
 
 func init() {
 	// We need to register our DataSource provider here
-	datasource.Register(DataSourceLabel, &Source{})
+	schema.RegisterSourceType(SourceType, &Source{})
 }
 
 // Create a gocql session
 func createCassSession(conf *schema.ConfigSource, keyspace string) (*gocql.Session, error) {
 
-	servers := conf.Settings.Strings("hosts")
+	servers := conf.Hosts
+	if len(servers) == 0 {
+		servers = conf.Settings.Strings("hosts")
+	}
+
 	if len(servers) == 0 {
 		return nil, fmt.Errorf("No 'hosts' for cassandra found in config %v", conf.Settings)
 	}
@@ -92,7 +95,7 @@ type Source struct {
 	tables           []string // Lower cased
 	tablemap         map[string]*schema.Table
 	conf             *schema.ConfigSource
-	schema           *schema.SchemaSource
+	schema           *schema.Schema
 	session          *gocql.Session
 	lastSchemaUpdate time.Time
 	mu               sync.Mutex
@@ -108,7 +111,7 @@ type Mutator struct {
 
 func (m *Source) Init() {}
 
-func (m *Source) Setup(ss *schema.SchemaSource) error {
+func (m *Source) Setup(ss *schema.Schema) error {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -122,7 +125,7 @@ func (m *Source) Setup(ss *schema.SchemaSource) error {
 	m.db = strings.ToLower(ss.Name)
 	m.tablemap = make(map[string]*schema.Table)
 
-	//u.Infof("Init:  %#v", m.schema.Conf)
+	u.Infof("Init:  %#v", m.schema.Conf)
 	if m.schema.Conf == nil {
 		return fmt.Errorf("Schema conf not found")
 	}

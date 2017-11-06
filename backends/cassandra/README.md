@@ -1,7 +1,7 @@
 
 
 
-Cassandra Data source
+Cassandra Source
 --------------------------------------
 
 Provides SQL Access to Cassandra

@@ -23,27 +23,27 @@ import (
 )
 
 var (
-	// Default LIMIT on DataStore Queries
+	// DefaultLimit LIMIT on DataStore Queries
 	DefaultLimit = 1000
 
 	// ensure we implement appropriate interfaces
-	_ schema.Conn         = (*SqlToDatstore)(nil)
-	_ plan.SourcePlanner  = (*SqlToDatstore)(nil)
-	_ exec.ExecutorSource = (*SqlToDatstore)(nil)
-	_ schema.ConnMutation = (*SqlToDatstore)(nil)
+	_ schema.Conn         = (*SQLToDatstore)(nil)
+	_ plan.SourcePlanner  = (*SQLToDatstore)(nil)
+	_ exec.ExecutorSource = (*SQLToDatstore)(nil)
+	_ schema.ConnMutation = (*SQLToDatstore)(nil)
 )
 
-// SqlToDatstore transforms a Sql AST statement into a Google Datastore request
+// SQLToDatstore transforms a Sql AST statement into a Google Datastore request
 // - a dialect translator (sql -> datastore query languages)
 // - matches Task interface to operate in qlbridge exec interfaces
-type SqlToDatstore struct {
+type SQLToDatstore struct {
 	*exec.TaskBase
 	resp           *ResultReader
 	tbl            *schema.Table
 	p              *plan.Source
 	sel            *rel.SqlSelect
 	stmt           rel.SqlStatement
-	schema         *schema.SchemaSource
+	schema         *schema.Schema
 	dsCtx          context.Context
 	dsClient       *datastore.Client // Stateful client for usage in request
 	dsq            *datastore.Query  // The ds query interpreted from sql
@@ -54,12 +54,12 @@ type SqlToDatstore struct {
 
 }
 
-// NewSqlToDatastore Create a new translator to re-write a SQL AST query
+// NewSQLToDatstore Create a new translator to re-write a SQL AST query
 // into google data store
-func NewSqlToDatstore(table *schema.Table, cl *datastore.Client, ctx context.Context) *SqlToDatstore {
-	m := &SqlToDatstore{
+func NewSQLToDatstore(table *schema.Table, cl *datastore.Client, ctx context.Context) *SQLToDatstore {
+	m := &SQLToDatstore{
 		tbl:      table,
-		schema:   table.SchemaSource,
+		schema:   table.Schema,
 		dsCtx:    ctx,
 		dsClient: cl,
 	}
@@ -67,7 +67,7 @@ func NewSqlToDatstore(table *schema.Table, cl *datastore.Client, ctx context.Con
 	return m
 }
 
-func (m *SqlToDatstore) query(req *rel.SqlSelect) (*ResultReader, error) {
+func (m *SQLToDatstore) query(req *rel.SqlSelect) (*ResultReader, error) {
 
 	// Create our google data store query and we will walk
 	// our ast modifying it
@@ -124,7 +124,7 @@ func (m *SqlToDatstore) query(req *rel.SqlSelect) (*ResultReader, error) {
 	return resultReader, nil
 }
 
-func (m *SqlToDatstore) getEntity(req *rel.SqlSelect) (*Row, error) {
+func (m *SQLToDatstore) getEntity(req *rel.SqlSelect) (*Row, error) {
 
 	m.dsq = datastore.NewQuery(m.tbl.NameOriginal)
 	if req.Where != nil {
@@ -147,13 +147,16 @@ func (m *SqlToDatstore) getEntity(req *rel.SqlSelect) (*Row, error) {
 	return nil, fmt.Errorf("expected one row got %v", len(rows))
 }
 
-func (m *SqlToDatstore) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.Task, error) {
+// WalkSourceSelect part of planner interface for source.
+func (m *SQLToDatstore) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.Task, error) {
 	//u.Debugf("VisitSourceSelect(): %T  %#v", visitor, visitor)
 	m.p = p
 	return nil, nil
 }
 
-func (m *SqlToDatstore) WalkExecSource(p *plan.Source) (exec.Task, error) {
+// WalkExecSource part of planner interface allowing sources to do their own execution
+// planning.
+func (m *SQLToDatstore) WalkExecSource(p *plan.Source) (exec.Task, error) {
 
 	if p.Stmt == nil {
 		return nil, fmt.Errorf("Plan did not include Sql Statement?")
@@ -201,9 +204,8 @@ func (m *SqlToDatstore) WalkExecSource(p *plan.Source) (exec.Task, error) {
 	return reader, nil
 }
 
-// interface for SourceMutation
-//CreateMutator(stmt expr.SqlStatement) (Mutator, error)
-func (m *SqlToDatstore) CreateMutator(pc interface{}) (schema.ConnMutator, error) {
+// CreateMutator interface allowing a connection for mutation.
+func (m *SQLToDatstore) CreateMutator(pc interface{}) (schema.ConnMutator, error) {
 	if ctx, ok := pc.(*plan.Context); ok && ctx != nil {
 		m.TaskBase = exec.NewTaskBase(ctx)
 		m.stmt = ctx.Stmt
@@ -212,8 +214,8 @@ func (m *SqlToDatstore) CreateMutator(pc interface{}) (schema.ConnMutator, error
 	return nil, fmt.Errorf("Expected *plan.Context but got %T", pc)
 }
 
-// interface for Upsert.Put()
-func (m *SqlToDatstore) Put(ctx context.Context, key schema.Key, val interface{}) (schema.Key, error) {
+// Put interface for Upsert.Put()
+func (m *SQLToDatstore) Put(ctx context.Context, key schema.Key, val interface{}) (schema.Key, error) {
 
 	if key == nil {
 		u.Debugf("didn't have key?  %v", val)
@@ -357,11 +359,11 @@ func (m *SqlToDatstore) Put(ctx context.Context, key schema.Key, val interface{}
 	return newKey, nil
 }
 
-func (m *SqlToDatstore) PutMulti(ctx context.Context, keys []schema.Key, src interface{}) ([]schema.Key, error) {
+func (m *SQLToDatstore) PutMulti(ctx context.Context, keys []schema.Key, src interface{}) ([]schema.Key, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (m *SqlToDatstore) Delete(key driver.Value) (int, error) {
+func (m *SQLToDatstore) Delete(key driver.Value) (int, error) {
 	dskey := datastore.NameKey(m.tbl.NameOriginal, fmt.Sprintf("%v", key), nil)
 	u.Infof("dskey:  %s   table=%s", dskey, m.tbl.NameOriginal)
 	err := m.dsClient.Delete(m.dsCtx, dskey)
@@ -371,7 +373,7 @@ func (m *SqlToDatstore) Delete(key driver.Value) (int, error) {
 	}
 	return 1, nil
 }
-func (m *SqlToDatstore) DeleteExpression(pln interface{}, where expr.Node) (int, error) {
+func (m *SQLToDatstore) DeleteExpression(pln interface{}, where expr.Node) (int, error) {
 	delKey := datasource.KeyFromWhere(where)
 	if delKey != nil {
 		return m.Delete(delKey.Key())
@@ -379,14 +381,23 @@ func (m *SqlToDatstore) DeleteExpression(pln interface{}, where expr.Node) (int,
 	return 0, fmt.Errorf("Could not delete with that where expression: %s", where)
 }
 
-// WalkWhereNode() an expression, and its AND logic to create an appropriately
-//  request for google datastore queries
+func (m *SQLToDatstore) eval(arg expr.Node) (value.Value, bool) {
+	switch arg := arg.(type) {
+	case *expr.NumberNode, *expr.StringNode:
+		return vm.Eval(nil, arg)
+	case *expr.IdentityNode:
+		return value.NewStringValue(arg.Text), true
+	}
+	return nil, false
+}
+
+// WalkWhereNode an expression, and its AND logic to create an appropriately
+// request for google datastore queries
 //
-//  Limititations of Google Datastore
-//  - https://cloud.google.com/datastore/docs/concepts/queries#Datastore_Restrictions_on_queries
-//  - no OR filters
-//  -
-func (m *SqlToDatstore) WalkWhereNode(cur expr.Node) error {
+// Limititations of Google Datastore
+// - https://cloud.google.com/datastore/docs/concepts/queries#Datastore_Restrictions_on_queries
+// - no OR filters
+func (m *SQLToDatstore) WalkWhereNode(cur expr.Node) error {
 	//u.Debugf("WalkWhereNode: %s", cur)
 	switch curNode := cur.(type) {
 	case *expr.NumberNode, *expr.StringNode:
@@ -420,18 +431,18 @@ func (m *SqlToDatstore) WalkWhereNode(cur expr.Node) error {
 
 // Walk Binary Node:   convert to mostly Filters if possible
 //
-//	x = y             =>   x = y
-//  x != y            =>   there are special limits in Google Datastore, must only have one unequal filter
-//  x like "list%"    =    prefix filter in
+//    x = y             =>   x = y
+//    x != y            =>   there are special limits in Google Datastore, must only have one unequal filter
+//    x like "list%"    =    prefix filter in
 //
 // TODO:  Poly Fill features
 //  x like "%list%"
 //  - ancestor filters?
-func (m *SqlToDatstore) walkFilterBinary(node *expr.BinaryNode) error {
+func (m *SQLToDatstore) walkFilterBinary(node *expr.BinaryNode) error {
 
 	// How do we detect if this is a prefix query?  Probably would
 	// have a column-level flag on schema?
-	lhval, lhok := vm.Eval(nil, node.Args[0])
+	lhval, lhok := m.eval(node.Args[0])
 	rhval, rhok := vm.Eval(nil, node.Args[1])
 	if !lhok || !rhok {
 		u.Warnf("not ok: %v  l:%v  r:%v", node, lhval, rhval)
@@ -481,7 +492,7 @@ func (m *SqlToDatstore) walkFilterBinary(node *expr.BinaryNode) error {
 }
 
 /*
-func (m *SqlToDatstore) walkFilterTri(node *expr.TriNode, q *bson.M) (value.Value, error) {
+func (m *SQLToDatstore) walkFilterTri(node *expr.TriNode, q *bson.M) (value.Value, error) {
 
 	arg1val, aok := vm.Eval(nil, node.Args[0])
 	//u.Debugf("arg1? %v  ok?%v", arg1val, aok)
@@ -508,7 +519,7 @@ func (m *SqlToDatstore) walkFilterTri(node *expr.TriNode, q *bson.M) (value.Valu
 //
 //		year IN (1990,1992)  =>
 //
-func (m *SqlToDatstore) walkMultiFilter(node *expr.MultiArgNode, q *bson.M) (value.Value, error) {
+func (m *SQLToDatstore) walkMultiFilter(node *expr.MultiArgNode, q *bson.M) (value.Value, error) {
 
 	// First argument must be field name in this context
 	fldName := node.Args[0].String()
@@ -547,7 +558,7 @@ func (m *SqlToDatstore) walkMultiFilter(node *expr.MultiArgNode, q *bson.M) (val
 //    exists(fieldname)
 //    regex(fieldname,value)
 //
-func (m *SqlToDatstore) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, error) {
+func (m *SQLToDatstore) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Value, error) {
 	switch funcName := strings.ToLower(node.Name); funcName {
 	case "exists", "missing":
 		op := true
@@ -612,7 +623,7 @@ func (m *SqlToDatstore) walkFilterFunc(node *expr.FuncNode, q *bson.M) (value.Va
 //  MultiValue aggregats:
 //      terms, ??
 //
-func (m *SqlToDatstore) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {
+func (m *SQLToDatstore) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {
 	switch funcName := strings.ToLower(node.Name); funcName {
 	case "max", "min", "avg", "sum", "cardinality":
 		m.hasSingleValue = true
@@ -691,7 +702,7 @@ func eval(cur expr.Node) (value.Value, bool) {
 //
 //    SELECT <select_list> FROM ... WHERE
 //
-func (m *SqlToDatstore) WalkSelectList() error {
+func (m *SQLToDatstore) WalkSelectList() error {
 
 	m.aggs = bson.M{}
 	for i := len(m.sel.Columns) - 1; i >= 0; i-- {

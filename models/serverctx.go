@@ -6,7 +6,6 @@ import (
 
 	u "github.com/araddon/gou"
 
-	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/datasource/memdb"
 	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/schema"
@@ -20,7 +19,7 @@ type ServerCtx struct {
 	// The dataux server config info on schema, backends, frontends, etc
 	Config *Config
 	// The underlying qlbridge registry holds info about the available datasource providers
-	Reg *datasource.Registry
+	Reg *schema.Registry
 	// PlanGrid is swapping out the qlbridge planner
 	// with a distributed version that uses Grid lib to split
 	// tasks across nodes
@@ -29,10 +28,12 @@ type ServerCtx struct {
 	internalSchema *schema.Schema
 }
 
+// NewServerCtx create new server context.   Main stateful object
+// for sharing server state.
 func NewServerCtx(conf *Config) *ServerCtx {
 	svr := ServerCtx{}
 	svr.Config = conf
-	svr.Reg = datasource.DataSourcesRegistry()
+	svr.Reg = schema.DefaultRegistry()
 	return &svr
 }
 
@@ -82,7 +83,7 @@ func (m *ServerCtx) SchemaLoader(db string) (*schema.Schema, error) {
 	return s, nil
 }
 
-// Get A schema
+// InfoSchema Get A schema
 func (m *ServerCtx) InfoSchema() (*schema.Schema, error) {
 	if len(m.schemas) == 0 {
 		for _, sc := range m.Config.Schemas {
@@ -100,6 +101,7 @@ func (m *ServerCtx) InfoSchema() (*schema.Schema, error) {
 	panic("unreachable")
 }
 
+// JobMaker create job
 func (m *ServerCtx) JobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
 	//u.Debugf("jobMaker, going to do a partial plan?")
 	return planner.BuildExecutorUnPlanned(ctx, m.PlanGrid)
@@ -117,8 +119,16 @@ func (m *ServerCtx) Table(schemaName, tableName string) (*schema.Table, error) {
 func (m *ServerCtx) loadInternalSchema() {
 	inrow := []driver.Value{1, "not implemented"}
 	cols := []string{"id", "worker"}
-	db, _ := memdb.NewMemDbData("workers", [][]driver.Value{inrow}, cols)
-	m.internalSchema = datasource.RegisterSchemaSource("server_schema", "server_schema", db)
+	db, err := memdb.NewMemDbData("workers", [][]driver.Value{inrow}, cols)
+	if err != nil {
+		u.Errorf("could not create worker list store %v", err)
+	}
+	schema.RegisterSourceAsSchema("server_schema", db)
+	var ok bool
+	m.internalSchema, ok = m.Reg.Schema("server_schema")
+	if !ok {
+		u.Errorf("could not create internal schema")
+	}
 	m.Config.Sources = append(m.Config.Sources, &schema.ConfigSource{SourceType: "server_schema", Name: "server_schema"})
 	m.Config.Schemas = append(m.Config.Schemas, &schema.ConfigSchema{Name: "server_schema"})
 }
@@ -129,7 +139,7 @@ func (m *ServerCtx) loadConfig() error {
 
 	for _, schemaConf := range m.Config.Schemas {
 
-		u.Debugf("parse schemas: %v", schemaConf)
+		//u.Debugf("parse schemas: %v", schemaConf)
 		if _, ok := m.schemas[schemaConf.Name]; ok {
 			panic(fmt.Sprintf("duplicate schema '%s'", schemaConf.Name))
 		}
@@ -140,64 +150,38 @@ func (m *ServerCtx) loadConfig() error {
 		// find the Source config for eached named db/source
 		for _, sourceName := range schemaConf.Sources {
 
-			var sourceConf *schema.ConfigSource
+			childSchema := schema.NewSchema(sourceName)
 			// we must find a source conf by name
 			for _, sc := range m.Config.Sources {
-				//u.Debugf("sc: %s %#v", sourceName, sc)
 				if sc.Name == sourceName {
-					sourceConf = sc
+					childSchema.Conf = sc
 					break
 				}
 			}
-			if sourceConf == nil {
+			if childSchema.Conf == nil {
 				u.Warnf("could not find source: %v", sourceName)
 				return fmt.Errorf("Could not find Source Config for %v", sourceName)
 			}
 
-			u.Debugf("new Source: %s   %+v", sourceName, sourceConf)
-			ss := schema.NewSchemaSource(sourceName, sourceConf.SourceType)
-			ss.Conf = sourceConf
-			//u.Infof("found sourceName: %q schema.Name=%q conf=%+v", sourceName, ss.Name, sourceConf)
+			//u.Infof("found sourceName: %q schema.Name=%q conf=%+v", sourceName, childSchema.Name, childSchema.Conf)
 
-			if len(m.Config.Nodes) == 0 {
-				for _, host := range sourceConf.Hosts {
-					nc := &schema.ConfigNode{Source: sourceName, Address: host}
-					//ss.Nodes = append(ss.Nodes, nc)
-					sourceConf.Nodes = append(sourceConf.Nodes, nc)
-				}
-			} else {
-				for _, nc := range m.Config.Nodes {
-					if nc.Source == sourceConf.Name {
-						//ss.Nodes = append(ss.Nodes, nc)
-						sourceConf.Nodes = append(sourceConf.Nodes, nc)
-					}
-				}
+			sourceConf := childSchema.Conf
+
+			ds, err := m.Reg.GetSource(sourceConf.SourceType)
+			if err != nil {
+				u.Warnf("could not get source %v err=%v", sourceConf.SourceType, err)
+				return err
 			}
-
-			//u.Debugf("s:%p  ss:%p  adding ss", sch, ss)
-			sch.AddSourceSchema(ss)
-			//u.Debug("after add source schema")
-
-			ds := m.Reg.Get(sourceConf.SourceType)
-			//u.Debugf("after reg.Get(%q)  %#v", sourceConf.SourceType, ds)
 			if ds == nil {
-				//u.Warnf("could not find source for %v  %v", sourceName, sourceConf.SourceType)
+				u.Warnf("could not find source for %v  %v", sourceName, sourceConf.SourceType)
 			} else {
-				ss.DS = ds
-				ss.Partitions = sourceConf.Partitions
-				//u.Debugf("about to Setup %#v", ds)
-				if err := ss.DS.Setup(ss); err != nil {
-					u.Errorf("Error setuping up %v  %v", sourceName, err)
+				childSchema.DS = ds
+				if err := childSchema.DS.Setup(childSchema); err != nil {
+					u.Errorf("Error setting up %v  %v", sourceName, err)
 				}
-				//u.Infof("about to SourceSchemaAdd")
-				m.Reg.SourceSchemaAdd(sch.Name, ss)
-				//u.Infof("after source schema add")
 			}
+			m.Reg.SchemaAddChild(schemaConf.Name, childSchema)
 		}
-
-		// Now refresh the schema, ie load meta-data about the now
-		// defined sub-schemas
-		sch.RefreshSchema()
 	}
 
 	return nil

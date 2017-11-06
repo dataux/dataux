@@ -1,21 +1,20 @@
 package testmysql
 
 import (
+	"flag"
 	"fmt"
-	"net/url"
+	"log"
 	"os"
 	"sync"
-	"testing"
 	"time"
 
 	u "github.com/araddon/gou"
-	"github.com/coreos/etcd/embed"
-	"github.com/coreos/pkg/capnslog"
+	"github.com/araddon/qlbridge/expr/builtins"
+	"github.com/araddon/qlbridge/schema"
 
 	// Frontend's side-effect imports
 	_ "github.com/dataux/dataux/frontends/mysqlfe"
 
-	"github.com/araddon/qlbridge/schema"
 	"github.com/dataux/dataux/models"
 	"github.com/dataux/dataux/planner"
 	"github.com/dataux/dataux/proxy"
@@ -23,34 +22,64 @@ import (
 )
 
 var (
-	_              = u.EMPTY
 	testServerOnce sync.Once
 	testDBOnce     sync.Once
 	testDB         *client.DB
 	Conf           *models.Config
 	ServerCtx      *models.ServerCtx
 	Schema         *schema.Schema
+	verbose        *bool
+	setupOnce      = sync.Once{}
 )
 
 func init() {
-	u.SetupLogging("debug")
-	u.SetColorOutput()
 	conf, err := models.LoadConfig(TestConfigData)
 	if err != nil {
 		panic("must load confiig")
 	}
 	Conf = conf
 }
+
+// SchemaLoader is a function for teting only to have Schema available as global
 func SchemaLoader(name string) (*schema.Schema, error) {
+	if Schema == nil {
+		u.Errorf("no schema")
+	}
 	return Schema, nil
+}
+
+// Setup enables -vv verbose logging or sends logs to /dev/null
+// env var VERBOSELOGS=true was added to support verbose logging with alltests
+func Setup() {
+	setupOnce.Do(func() {
+
+		if flag.CommandLine.Lookup("vv") == nil {
+			verbose = flag.Bool("vv", false, "Verbose Logging?")
+		}
+
+		flag.Parse()
+		logger := u.GetLogger()
+		if logger != nil {
+			// don't re-setup
+		} else {
+			if (verbose != nil && *verbose == true) || os.Getenv("VERBOSELOGS") != "" {
+				u.SetupLogging("debug")
+				u.SetColorOutput()
+			} else {
+				// make sure logging is always non-nil
+				dn, _ := os.Open(os.DevNull)
+				u.SetLogger(log.New(dn, "", 0), "error")
+			}
+		}
+		builtins.LoadAllBuiltins()
+	})
 }
 
 var TestConfigData = `
 
-supress_recover: true
+supress_recover = true
 
-# etcd = [ ]
-# etcd server list dynamically created and injected
+etcd = [ "http://127.0.0.1:2379" ]
 
 frontends [
   {
@@ -58,191 +87,15 @@ frontends [
     address : "127.0.0.1:13307"
   }
 ]
-
-# schemas
-schemas : [
-  {
-    name : datauxtest
-    sources : [ 
-      "mgo_datauxtest", 
-      "es_test", 
-      "localfiles", 
-      "google_ds_test", 
-      "cass", 
-      "bt",
-      "bigquery",
-      "kube",
-      "lytics"
-    ]
-  }
-]
-
-# sources
-sources : [
-
-  {
-    type : mongo
-    name : mgo_datauxtest
-    # partitions describe how to break up 
-    # queries across nodes if multi-node db, this 
-    # is single node so just used for unit tests to simulate multi-node
-    partitions : [
-        {
-            table : article
-            keys : [ "title"]
-            partitions : [
-               {
-                   id    : a
-                   right : m
-               },
-               {
-                   id    : b
-                   left  : m
-               }
-            ]
-        }
-    ]
-  }
-  
-  {
-    name : cass
-    type : cassandra
-    settings {
-      keyspace  "datauxtest"
-      hosts    ["localhost:9042"]
-    }
-  }
-  
-
-  {
-    name : es_test
-    type : elasticsearch
-  }
-  
-  {
-    name     : localfiles
-    type     : cloudstore
-    settings : {
-      type             : localfs
-      path             : "tables/"
-      localpath        : "tables/"
-      format           : "csv"
-    }
-  }
-
-  # csv-file "db" of data from http://seanlahman.com/baseball-archive/statistics/
-  #  must have TESTINT=true integration test flag turned on
-  {
-    name     : baseball
-    type     : cloudstore
-    settings : {
-      type             : gcs
-      bucket           : "lytics-dataux-tests"
-      path             : "baseball/"
-      format           : "csv"
-    }
-  }
-  
-  # google-datastore database config
-  {
-    name : google_ds_test
-    type : google-datastore
-  }
-
-  {
-    name : mysql_test
-    type : mysql
-  }
-
-  {
-    name : kube
-    type : kubernetes
-  }
-
-  {
-    name : bt
-    type : bigtable
-    tables_to_load : [ "datauxtest" , "article", "user", "event" ]
-    settings {
-      instance  "bigtable0"
-      # project will be loaded from ENV   $GCEPROJECT
-    }
-  }
-
-  {
-    name : bigquery
-    type : bigquery
-    #  [bigquery-public-data:san_francisco.bikeshare_stations]
-    "table_aliases" : {
-       "bikeshare_stations" : "bigquery-public-data:san_francisco.bikeshare_stations"
-    }
-    "settings" : {
-      # project will be loaded from ENV   $GCEPROJECT
-      "test_env" : "${USER}"
-      "billing_project" : ""
-      "data_project" : "bigquery-public-data"
-      "dataset" : "san_francisco"
-    }
-  }
-
-  {
-    name : lytics
-    type : lytics
-    settings {
-
-    }
-  }
-
-]
-
-# List of nodes hosting data sources
-nodes : [
-  {
-    name    : estest1
-    source  : es_test
-    address : "http://localhost:9200"
-  },
-  {
-    name    : mgotest1
-    source  : mgo_datauxtest
-    address : "localhost"
-  },
-  {
-    name    : csvlocal1
-    source  : csvlocal
-    address : "$GOPATH/src/github.com/dataux/dataux/data"
-  },
-  {
-    name    : googleds1
-    source  : google_ds_test
-    address : "$GOOGLEJWT"
-  }
-]
-
 `
 
-func EtcdConfig() *embed.Config {
-
-	// Cleanup
-	os.RemoveAll("test.etcd")
-	os.RemoveAll(".test.etcd")
-	os.RemoveAll("/tmp/test.etcd")
-
-	embed.DefaultInitialAdvertisePeerURLs = "http://127.0.0.1:22380"
-	embed.DefaultAdvertiseClientURLs = "http://127.0.0.1:22379"
-
-	cfg := embed.NewConfig()
-
-	lpurl, _ := url.Parse("http://localhost:22380")
-	lcurl, _ := url.Parse("http://localhost:22379")
-	cfg.LPUrls = []url.URL{*lpurl}
-	cfg.LCUrls = []url.URL{*lcurl}
-
-	cfg.Dir = "/tmp/test.etcd"
-
-	return cfg
+// TestingT is an interface wrapper around *testing.T so when we import
+// this go dep, govendor don't import "testing"
+type TestingT interface {
+	Errorf(format string, args ...interface{})
 }
-func NewTestServerForDb(t *testing.T, db string) {
+
+func NewTestServerForDb(t TestingT, db string) {
 	startServer(db)
 }
 func StartServer() {
@@ -255,21 +108,8 @@ func startServer(db string) {
 			panic("Must have Conf")
 		}
 
-		capnslog.SetGlobalLogLevel(capnslog.CRITICAL)
-
-		e, err := embed.StartEtcd(EtcdConfig())
-		if err != nil {
-			panic(err.Error())
-		}
-		if e == nil {
-			panic("must have etcd server")
-		}
-		// can't defer close as this function returns immediately
-		//defer e.Close()
-
-		Conf.Etcd = []string{embed.DefaultAdvertiseClientURLs}
-
 		planner.GridConf.EtcdServers = Conf.Etcd
+		u.Infof("etcd hosts: %v", planner.GridConf.EtcdServers)
 
 		ServerCtx = models.NewServerCtx(Conf)
 		ServerCtx.Init()
@@ -299,10 +139,10 @@ func startServer(db string) {
 	testServerOnce.Do(f)
 }
 
-func NewTestServer(t *testing.T) {
+func NewTestServer(t TestingT) {
 	startServer("datauxtest")
 }
 
-func RunTestServer(t *testing.T) {
+func RunTestServer(t TestingT) {
 	startServer("datauxtest")
 }

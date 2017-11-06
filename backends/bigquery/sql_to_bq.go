@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	// Default page limit
+	// DefaultLimit ie page-size defaut
 	DefaultLimit = 5000
 
 	// Ensure we implment appropriate interfaces
@@ -49,7 +49,7 @@ type SqlToBQ struct {
 	original             *rel.SqlSelect
 	whereIdents          map[string]bool
 	stmt                 rel.SqlStatement
-	schema               *schema.SchemaSource
+	schema               *schema.Schema
 	s                    *Source
 	partition            *schema.Partition // current partition for this request
 	needsPolyFill        bool              // polyfill?
@@ -62,7 +62,7 @@ type SqlToBQ struct {
 func NewSqlToBQ(s *Source, t *schema.Table) *SqlToBQ {
 	m := &SqlToBQ{
 		tbl:    t,
-		schema: t.SchemaSource,
+		schema: t.Schema,
 		s:      s,
 	}
 	return m
