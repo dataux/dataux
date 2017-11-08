@@ -23,7 +23,7 @@
   branch = "master"
   name = "github.com/araddon/qlbridge"
   packages = ["datasource","datasource/files","datasource/membtree","datasource/memdb","datasource/mockcsv","datasource/mockcsvtestdata","exec","expr","expr/builtins","lex","plan","rel","schema","testutil","value","vm"]
-  revision = "17487d95d42fc2e0114e094c8fa4e7bfd19eae81"
+  revision = "f7c3a42db43879e67e2ce2bf23cd9dd8611f6a19"
 
 [[projects]]
   branch = "master"
@@ -59,7 +59,7 @@
   branch = "master"
   name = "github.com/gocql/gocql"
   packages = [".","internal/lru","internal/murmur","internal/streams"]
-  revision = "aa93acc8f067e9233982b9a7de370e4d64b9c33e"
+  revision = "33a5f3c1bcc2c421b3221c5858312afb141bf605"
 
 [[projects]]
   name = "github.com/gogo/protobuf"
@@ -244,7 +244,7 @@
   branch = "master"
   name = "golang.org/x/net"
   packages = ["context","context/ctxhttp","http2","http2/hpack","idna","internal/timeseries","lex/httplex","trace"]
-  revision = "01c190206fbdffa42f334f4b2bf2220f50e64920"
+  revision = "a337091b0525af65de94df2eb7e98bd9962dcbe2"
 
 [[projects]]
   name = "golang.org/x/oauth2"
@@ -255,7 +255,7 @@
   branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix"]
-  revision = "8eb05f94d449fdf134ec24630ce69ada5b469c1c"
+  revision = "75813c647272dd855bda156405bf844a5414f5bf"
 
 [[projects]]
   branch = "master"

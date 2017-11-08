@@ -488,19 +488,9 @@ func (m *SqlToMgo) walkArrayNode(node *expr.ArrayNode, q *bson.M) (value.Value, 
 //
 func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Value, error) {
 
-	lhval, lhok := m.eval(node.Args[0])
-	if !lhok {
-		return nil, fmt.Errorf("Could not evaluate args: %v", node.String())
-	}
-	rhval, rhok := vm.Eval(nil, node.Args[1])
-	if !rhok {
-		u.Warnf("not ok: %v  l:%v  r:%v", node, lhval, rhval)
-		return nil, fmt.Errorf("could not evaluate: %v", node.String())
-	}
-	//u.Debugf("walkBinary: %v  l:%v  r:%v  %T  %T", node, lhval, rhval, lhval, rhval)
+	// If we have to recurse deeper for AND, OR operators
 	switch node.Operator.T {
 	case lex.TokenLogicAnd:
-		// this doesn't yet implement x AND y AND z
 		lhq, rhq := bson.M{}, bson.M{}
 		_, err := m.walkNode(node.Args[0], &lhq)
 		_, err2 := m.walkNode(node.Args[1], &rhq)
@@ -509,8 +499,8 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 			return nil, fmt.Errorf("could not evaluate: %v", node.String())
 		}
 		*q = bson.M{"$and": []bson.M{lhq, rhq}}
+		return nil, nil
 	case lex.TokenLogicOr:
-		// this doesn't yet implement x AND y AND z
 		lhq, rhq := bson.M{}, bson.M{}
 		_, err := m.walkNode(node.Args[0], &lhq)
 		_, err2 := m.walkNode(node.Args[1], &rhq)
@@ -519,6 +509,20 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 			return nil, fmt.Errorf("could not evaluate: %v", node.String())
 		}
 		*q = bson.M{"$or": []bson.M{lhq, rhq}}
+		return nil, nil
+	}
+
+	lhval, lhok := m.eval(node.Args[0])
+	if !lhok {
+		return nil, fmt.Errorf("Could not evaluate args: %v", node.String())
+	}
+	rhval, rhok := m.eval(node.Args[1])
+	if !rhok {
+		u.Warnf("not ok: %v  l:%v  r:%v", node, lhval, rhval)
+		return nil, fmt.Errorf("could not evaluate: %v", node.String())
+	}
+	//u.Debugf("walkBinary: %v  l:%v  r:%v  %T  %T", node, lhval, rhval, lhval, rhval)
+	switch node.Operator.T {
 	case lex.TokenEqual, lex.TokenEqualEqual:
 		// The $eq expression is equivalent to { field: <value> }.
 		if lhval != nil && rhval != nil {

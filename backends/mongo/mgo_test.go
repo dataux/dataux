@@ -425,6 +425,17 @@ func TestSimpleRowSelect(t *testing.T) {
 		RowData: &data,
 	})
 
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select title, count, deleted from article WHERE count = 22 AND `author` = \"aaron\"",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			u.Infof("%v", data)
+			assert.True(t, data.Deleted == false, "Not deleted? %v", data)
+			assert.True(t, data.Title == "article1", "%v", data)
+		},
+		RowData: &data,
+	})
+
 	return
 
 	// The problem here is ??  related to the mysql/mysqlx/type etc, the values are being written
