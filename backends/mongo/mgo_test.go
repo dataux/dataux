@@ -585,62 +585,20 @@ func TestSelectAggsGroupBy(t *testing.T) {
 	})
 }
 */
-func TestSelectWhereEqual(t *testing.T) {
-	/*
-		data := struct {
-			Title   string
-			Count   int
-			Deleted bool
-			Updated time.Time
-		}{}
-		validateQuerySpec(t, tu.QuerySpec{
-			Sql: "select title, count, deleted, updated " +
-				"from article WHERE Count = 22;",
-			ExpectRowCt: 1,
-			ValidateRowData: func() {
-				//u.Infof("%v", data)
-				assert.True(t, data.Title != "", "%v", data)
-				//assert.True(t, data.Language == "Go", "%v", data)
-			},
-			RowData: &data,
-		})
-		// Test when we have compound where clause
-
-				validateQuerySpec(t, tu.QuerySpec{
-					Sql: "select `actor`, `repository.name`, `repository.stargazers_count`, `repository.language` " +
-						" from github_watch where " +
-						"`repository.language` == \"Go\" AND `repository.forks_count` > 1000;",
-					ExpectRowCt: 20,
-					ValidateRowData: func() {
-						//u.Infof("%v", data)
-						assert.True(t, data.Language == "Go", "%v", data)
-						assert.True(t, data.Stars > 1000, "must have filterd by forks: %v", data)
-						assert.True(t, data.Actor != "", "%v", data)
-					},
-					RowData: &data,
-				})
-
-			return
-			// TODO:   This isn't working yet bc the nested 3 where clauses
-			validateQuerySpec(t, tu.QuerySpec{
-				Sql: `
-				SELECT
-					actor, repository.name, repository.stargazers_count, repository.language
-				FROM github_watch
-				WHERE
-						repository.language = "Go"
-						AND repository.forks_count > 1000
-						AND repository.description NOT LIKE "docker";`,
-				ExpectRowCt: 20,
-				ValidateRowData: func() {
-					//u.Infof("%v", data)
-					assert.True(t, data.Language == "Go", "%v", data)
-					assert.True(t, data.Stars > 1000, "must have filterd by forks: %v", data)
-					assert.True(t, data.Actor != "", "%v", data)
-				},
-				RowData: &data,
-			})
-	*/
+func TestSelectWhereCompare(t *testing.T) {
+	data := struct {
+		Title   string
+		Count   int
+		Deleted bool
+	}{}
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select title, count, deleted from article WHERE `author` != `title`",
+		ExpectRowCt: 4,
+		ValidateRowData: func() {
+			u.Infof("%v", data)
+		},
+		RowData: &data,
+	})
 }
 
 func TestSelectWhereLike(t *testing.T) {

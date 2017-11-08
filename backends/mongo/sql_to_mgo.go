@@ -249,14 +249,17 @@ func (m *SqlToMgo) WalkExecSource(p *plan.Source) (exec.Task, error) {
 	return resultReader, nil
 }
 
-func (m *SqlToMgo) eval(arg expr.Node) (value.Value, bool) {
+// eval() returns
+//     value, isOk, isIdentity
+func (m *SqlToMgo) eval(arg expr.Node) (value.Value, bool, bool) {
 	switch arg := arg.(type) {
 	case *expr.NumberNode, *expr.StringNode:
-		return vm.Eval(nil, arg)
+		val, ok := vm.Eval(nil, arg)
+		return val, ok, false
 	case *expr.IdentityNode:
-		return value.NewStringValue(arg.Text), true
+		return value.NewStringValue(arg.Text), true, true
 	}
-	return nil, false
+	return nil, false, false
 }
 
 // Aggregations from the <select_list>
@@ -429,7 +432,7 @@ func (m *SqlToMgo) walkNode(cur expr.Node, q *bson.M) (value.Value, error) {
 //
 func (m *SqlToMgo) walkFilterTri(node *expr.TriNode, q *bson.M) (value.Value, error) {
 
-	arg1val, aok := m.eval(node.Args[0])
+	arg1val, aok, _ := m.eval(node.Args[0])
 	if !aok {
 		return nil, fmt.Errorf("Could not evaluate args: %v", node.String())
 	}
@@ -512,14 +515,21 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 		return nil, nil
 	}
 
-	lhval, lhok := m.eval(node.Args[0])
+	lhval, lhok, isLident := m.eval(node.Args[0])
+	rhval, rhok, isRident := m.eval(node.Args[1])
 	if !lhok {
-		return nil, fmt.Errorf("Could not evaluate args: %v", node.String())
+		return nil, fmt.Errorf("Could not evaluate left arg: %v", node.String())
 	}
-	rhval, rhok := m.eval(node.Args[1])
 	if !rhok {
 		u.Warnf("not ok: %v  l:%v  r:%v", node, lhval, rhval)
 		return nil, fmt.Errorf("could not evaluate: %v", node.String())
+	}
+	if isLident && isRident {
+		// comparison of left/right isn't mongos strong suit
+		// https://stackoverflow.com/questions/4442453/mongodb-query-condition-on-comparing-2-fields
+		// db.T.find( { $where : "this.Grade1 > this.Grade2" } );
+		*q = bson.M{"$where": fmt.Sprintf("this.%s %s this.%s", lhval.ToString(), node.Operator.V, rhval.ToString())}
+		return nil, nil
 	}
 	//u.Debugf("walkBinary: %v  l:%v  r:%v  %T  %T", node, lhval, rhval, lhval, rhval)
 	switch node.Operator.T {
