@@ -120,23 +120,7 @@ mysql -h 127.0.0.1 -P 4000
 ```
 now run some queries
 ```sql
--- we have a default CSV dataset that we have copied to the local
--- docker drive from http://seanlahman.com/baseball-archive/statistics/ 
-
-show databases;
-
-use baseball;
-
-show tables;
-
-describe appearances
-
-select count(*) from appearances;
-
-select * from appearances limit 10;
-
-
--- Lets add a bigquery datasource
+-- add a bigquery datasource
 CREATE source `datauxtest` WITH {
     "type":"bigquery",
     "schema":"bqsf_bikes",
@@ -161,7 +145,6 @@ select * from film_locations limit 10;
 ```
 
 
-
 **Hacking**
 
 For now, the goal is to allow this to be used for library, so the 
@@ -169,7 +152,7 @@ For now, the goal is to allow this to be used for library, so the
 
 ```sh
 # run dep ensure
-dep ensure -update -v 
+dep ensure -v 
 
 
 ```
