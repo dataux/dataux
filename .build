@@ -16,3 +16,4 @@ echo "Making binaries version: $version   versionpublic:  $pubver"
 go clean
 GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/dataux/dataux/version.Version=${version} -X github.com/dataux/dataux/version.VersionPublic=${pubver}"
 
+echo "Finished Binary $version"

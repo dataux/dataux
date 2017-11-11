@@ -3,12 +3,9 @@
 # STEPS TO PERFORM RELEASE
 #
 #   1)  ensure a new tag exists on github:
-#          git tag -a 2016.12.03
+#          git tag -a v0.15.1 -m 'my release note'
 #
-#   2)  update the "name" param in release below and any description
-#       these are PER RELEASE
-#
-#   3)  run release.sh
+#   2)  run release.sh
 #
 #  https://github.com/aktau/github-release
 #
@@ -24,7 +21,47 @@ export GITHUB_REPO="dataux"
 
 cd $GOPATH/src/github.com/dataux/dataux
 
-# rm -R $GOPATH/pkg  # force rebuild of all source
+# ensure before we build it is correct
+dep ensure -v
+
+dockerbuild() {
+  # build the go binaries for docker
+  ./.build
+
+  # set gcloud config to point to this project
+  # where we are hosting our docker images
+  gcloud config set project dataux-io
+
+  # cleanup local docker
+  docker rm -f gcr.io/dataux-io/dataux:latest
+  docker rmi -f gcr.io/dataux-io/dataux:latest
+
+  docker rm -f gcr.io/dataux-io/dataux:$TAG
+  docker rmi -f gcr.io/dataux-io/dataux:$TAG
+
+  docker rm -f gcr.io/dataux-io/dataux:$TAG
+  docker rmi -f gcr.io/dataux-io/dataux:$TAG
+
+  # if you get auth issues
+  #
+  #  rm ~/.docker/config.json
+  #  gcloud docker --authorize-only
+
+  docker build -t gcr.io/dataux-io/dataux:$TAG .
+  gcloud docker -- push gcr.io/dataux-io/dataux:$TAG
+
+  docker build -t gcr.io/dataux-io/dataux:latest .
+  gcloud docker -- push gcr.io/dataux-io/dataux:latest
+
+  # now lets allow anyone to read these gcr images
+  #  https://cloud.google.com/container-registry/docs/access-control
+  gsutil defacl ch -u AllUsers:R gs://artifacts.dataux-io.appspot.com
+  gsutil acl ch -r -u AllUsers:R gs://artifacts.dataux-io.appspot.com
+  #rm dataux
+}
+
+
+
 
 dorelease() {
 
@@ -87,6 +124,7 @@ curl -Lo dataux https://github.com/dataux/dataux/releases/download/$TAG/dataux_m
 #  aka     v0.15.0   type tag
 export TAG=$(git describe $(git rev-list --tags --max-count=1))
 dorelease
+dockerbuild
 
 # we are going to always release a latest
 export TAG="latest"
