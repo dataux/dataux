@@ -21,7 +21,7 @@ export GITHUB_REPO="dataux"
 
 cd $GOPATH/src/github.com/dataux/dataux
 
-# ensure before we build it is correct
+# ensure before we build it is correct package vendoring
 dep ensure -v
 
 dockerbuild() {
@@ -39,9 +39,6 @@ dockerbuild() {
   docker rm -f gcr.io/dataux-io/dataux:$TAG
   docker rmi -f gcr.io/dataux-io/dataux:$TAG
 
-  docker rm -f gcr.io/dataux-io/dataux:$TAG
-  docker rmi -f gcr.io/dataux-io/dataux:$TAG
-
   # if you get auth issues
   #
   #  rm ~/.docker/config.json
@@ -50,17 +47,15 @@ dockerbuild() {
   docker build -t gcr.io/dataux-io/dataux:$TAG .
   gcloud docker -- push gcr.io/dataux-io/dataux:$TAG
 
-  docker build -t gcr.io/dataux-io/dataux:latest .
+  docker tag gcr.io/dataux-io/dataux:$TAG gcr.io/dataux-io/dataux:latest
+  #docker build -t gcr.io/dataux-io/dataux:latest .
   gcloud docker -- push gcr.io/dataux-io/dataux:latest
 
   # now lets allow anyone to read these gcr images
   #  https://cloud.google.com/container-registry/docs/access-control
   gsutil defacl ch -u AllUsers:R gs://artifacts.dataux-io.appspot.com
   gsutil acl ch -r -u AllUsers:R gs://artifacts.dataux-io.appspot.com
-  #rm dataux
 }
-
-
 
 
 dorelease() {

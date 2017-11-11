@@ -7,7 +7,7 @@ COPY . ${GOPATH}/src/github.com/dataux/dataux/
 WORKDIR ${GOPATH}/src/github.com/dataux/dataux/
 
 RUN \
-  dep ensure -update -v && \
+  dep ensure -v && \
   go build
 
 ENTRYPOINT [ "./dataux" ]

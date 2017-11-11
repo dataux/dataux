@@ -148,7 +148,7 @@
   branch = "master"
   name = "github.com/lytics/cloudstorage"
   packages = [".","csbufio","logging"]
-  revision = "0e984e36921ebde8997acd06feb6ff3691c8a591"
+  revision = "67b93f3a5ba9c8ef82594230c740ae17f5df54e6"
 
 [[projects]]
   branch = "master"
@@ -255,7 +255,7 @@
   branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix"]
-  revision = "75813c647272dd855bda156405bf844a5414f5bf"
+  revision = "1e2299c37cc91a509f1b12369872d27be0ce98a6"
 
 [[projects]]
   branch = "master"
@@ -275,10 +275,9 @@
   version = "v1.0.0"
 
 [[projects]]
-  branch = "master"
   name = "google.golang.org/genproto"
   packages = ["googleapis/api/annotations","googleapis/bigtable/admin/v2","googleapis/bigtable/v2","googleapis/datastore/v1","googleapis/longrunning","googleapis/rpc/status","googleapis/type/latlng"]
-  revision = "11c7f9e547da6db876260ce49ea7536985904c9b"
+  revision = "b3e7c2fb04031add52c4817f53f43757ccbf9c18"
 
 [[projects]]
   name = "google.golang.org/grpc"
@@ -300,6 +299,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "d9e6ab305f997faef1b1c2f66e94dd10b00732c330595b3e47a595fcab7d81aa"
+  inputs-digest = "1831c5fbb8ac061fde511c88c506a0d71533b70ba8fb900db0618a6afc59d241"
   solver-name = "gps-cdcl"
   solver-version = 1
