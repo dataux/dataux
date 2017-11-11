@@ -229,7 +229,7 @@ func TestSelectFilesList(t *testing.T) {
 	}{}
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select file, `table`, size, partition from localfiles_files",
-		ExpectRowCt: 3,
+		ExpectRowCt: 2,
 		ValidateRowData: func() {
 			u.Infof("%v", data)
 			// assert.True(t, data.Deleted == false, "Not deleted? %v", data)

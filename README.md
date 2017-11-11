@@ -44,10 +44,66 @@ easy to add custom data sources as well as REST api sources.
 
 
 ## Try it Out
-This example imports a couple hours worth of historical data
-from  https://www.githubarchive.org/ into a local
-elasticsearch server for example.  Requires etcd server running local as well. 
-Docker setup coming soon.
+These examples are:
+1. We are going to create a CSV `database` of Baseball data from http://seanlahman.com/baseball-archive/statistics/
+2. Connect to Google BigQuery public datasets (you will need a project, but the free quota will probably keep it free).
+
+
+
+```sh
+# download files to local /tmp
+mkdir -p /tmp/baseball
+cd /tmp/baseball
+curl -Ls http://seanlahman.com/files/database/baseballdatabank-2017.1.zip > bball.zip
+unzip bball.zip
+
+mv baseball*/core/*.csv .
+rm bball.zip
+rm -rf baseballdatabank-*
+
+# run a docker container locally
+docker run -e "LOGGING=debug" --rm -it -p 4000:4000 \
+  -v /tmp/baseball:/tmp/baseball \
+  gcr.io/dataux-io/dataux:latest
+
+
+```
+In another Console open Mysql:
+```sql
+# connect to the docker container you just started
+mysql -h 127.0.0.1 -P4000
+
+
+-- Now create a new Source
+CREATE source baseball WITH {
+  "type":"cloudstore", 
+  "schema":"baseball", 
+  "settings" : {
+     "type": "localfs",
+     "format": "csv",
+     "path": "baseball/",
+     "localpath": "/tmp"
+  }
+};
+
+show databases;
+
+use baseball;
+
+show tables;
+
+describe appearances
+
+select count(*) from appearances;
+
+select * from appearances limit 10;
+
+
+```
+
+Big Query Example
+------------------------------
+
 ```sh
 
 # assuming you are running local, if you are instead in Google Cloud, or Google Container Engine
@@ -104,14 +160,6 @@ select * from film_locations limit 10;
 
 ```
 
-Roadmap(ish)
-------------------------------
-* Writes
-  * write pub/sub:  inbound insert/update are available as pub-sub messages.
-  * write propogation:  inbound insert/update gets written multiple places.
-* Data Sources:   Improve them.
-
-
 
 
 **Hacking**
@@ -119,20 +167,14 @@ Roadmap(ish)
 For now, the goal is to allow this to be used for library, so the 
 `vendor` is not checked in.  use docker containers or `dep` for now.
 
-* see **tools/importgithub** for tool to import 2 days of github data for examples above.
-
 ```sh
 # run dep ensure
 dep ensure -update -v 
 
 
-cd $GOPATH/src/github.com/dataux/dataux/tools/importgithub
-go build
-./importgithub  ## will import ~200k plus docs from Github archive
-
 ```
 
-Other Projects, Database Proxies & Multi-Data QL
+Related Projects, Database Proxies & Multi-Data QL
 -------------------------------------------------------
 * ***Data-Accessability*** Making it easier to query, access, share, and use data.   Protocol shifting (for accessibility).  Sharing/Replication between db types.
 * ***Scalability/Sharding*** Implement sharding, connection sharing

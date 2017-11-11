@@ -65,31 +65,79 @@ select * from appearances limit 10;
 
 
 
-Adding A Source
+Query CSV Files
 --------------------
-
+We are going to create a CSV `database` of Baseball data from 
+http://seanlahman.com/baseball-archive/statistics/
 
 ```sh
-# from baseball http://seanlahman.com/baseball-archive/statistics/
-mkdir -p /tmp/baseball2
-cd /tmp/baseball2
-curl -Ls http://seanlahman.com/files/database/baseballdatabank-2017.1.zip > bball2.zip
-unzip bball2.zip
+# download files to local /tmp
+mkdir -p /tmp/baseball
+cd /tmp/baseball
+curl -Ls http://seanlahman.com/files/database/baseballdatabank-2017.1.zip > bball.zip
+unzip bball.zip
 
 mv baseball*/core/*.csv .
-
-rm bball2.zip
+rm bball.zip
 rm -rf baseballdatabank-*
 
+# run a docker container locally
+docker run -e "LOGGING=debug" --rm -it -p 4000:4000 \
+  -v /tmp/baseball:/tmp/baseball \
+  gcr.io/dataux-io/dataux:latest
+
+
+```
+In another Console open Mysql:
+```sql
+# connect to the docker container you just started
+mysql -h 127.0.0.1 -P4000
+
+
+-- Now create a new Source
+CREATE source baseball WITH {
+  "type":"cloudstore", 
+  "schema":"baseball", 
+  "settings" : {
+     "type": "localfs",
+     "format": "csv",
+     "path": "baseball/",
+     "localpath": "/tmp"
+  }
+};
+
+show databases;
+
+use baseball;
+
+show tables;
+
+describe appearances
+
+select count(*) from appearances;
+
+select * from appearances limit 10;
+
+
+```
+Query CSV Files on Google Cloud Storage
+----------------------------------------------
+
+This is similar to above, but will use Google Cloud Storage instead
+of local file drives.  If you are running inside of Google Cloud the 
+performance off of Cloud Storage is amazing, much, much faster than
+you would expect.
+
+```
 # create a google-cloud-storage bucket
 
-gsutil mb gs://my-dataux2-bucket
+gsutil mb gs://my-baseball-bucket
 
 # sync files to cloud
-gsutil rsync -d -r /tmp/baseball2/  gs://my-dataux2-bucket/
+gsutil rsync -d -r /tmp/baseball  gs://my-baseball-bucket/
 
 
-# run a docker container locally, using your local credentials
+# run a docker container locally, using your local google cloud credentials
 docker run -e "GOOGLE_APPLICATION_CREDENTIALS=/.config/gcloud/application_default_credentials.json" \
   -e "LOGGING=debug" \
   --rm -it \
@@ -109,10 +157,22 @@ CREATE source gcsbball2 WITH {
   "schema":"gcsbball", 
   "settings" : {
      "type": "gcs",
-     "bucket": "my-dataux-bucket",
-     "format": "csv",
-     "jwt": "/.config/gcloud/application_default_credentials.json"
+     "project": "your-google-project",
+     "bucket": "my-baseball-bucket",
+     "format": "csv"
   }
 };
+
+show databases;
+
+use baseball;
+
+show tables;
+
+describe appearances
+
+select count(*) from appearances;
+
+select * from appearances limit 10;
 
 ```
