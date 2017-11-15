@@ -1,26 +1,46 @@
 
+MySQL access to Elasticsearch
+--------------------------------
+Elasticserch is awesome, but sometimes querying it, and integrating it into other apps it would be great to have mysql.
 
-## Try it Out
+## Example Usage
 This example imports a couple hours worth of historical data
-from  https://www.githubarchive.org/ into a local elasticsearch server for example.
+from  https://www.githubarchive.org/ into a local elasticsearch server for example querying.
+It only imports `github_issues` and `github_watch`.
 
 ```sh
+# from root of this repo, there is a docker-compose
+cd github.com/dataux/dataux
+docker-compose up
 
-cd tools/importgithub
-# assuming elasticsearch on localhost elase --host=myeshost
+cd backends/elasticsearch/importgithub
+# assuming elasticsearch on localhost else --host=myeshost
 go build && ./importgithub
 
-# using dataux.conf from root of this project
-go build
-./dataux --config=dataux.conf
+# using docker start a dataux
+docker run --rm -it --net=host -p 4000:4000 gcr.io/dataux-io/dataux:latest
 
 # now that dataux is running use mysql-client to connect
-
 mysql -h 127.0.0.1 -P 4000
 ```
 now run some queries
 ```sql
-use datauxtest;
+show databases;
+
+
+-- first create the schema
+CREATE schema github_archive IF NOT EXISTS WITH {
+  "type":"elasticsearch", 
+  "schema":"github_archive", 
+  "hosts": ["http://127.0.0.1:9200"]
+};
+
+
+-- dataux will introspect the tables
+-- to create schema for the tables
+
+show databases;
+use github_archive;
 
 show tables;
 
