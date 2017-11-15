@@ -49,15 +49,11 @@ func (m *Source) Setup(ss *schema.Schema) error {
 	m.tablemap = make(map[string]*schema.Table)
 
 	if ss.Conf != nil && len(ss.Conf.Partitions) > 0 {
-		// ??
+		// not yet implemented.  Do we need to on es?  probably
+		// not as we don't plan on poly-filling.
 	}
 
 	u.Debugf("Init() Eleasticsearch schema P=%p", m.schema)
-	if err := m.findEsNodes(); err != nil {
-		u.Errorf("could not init es: %v", err)
-		return err
-	}
-
 	if err := m.loadTableNames(); err != nil {
 		u.Errorf("could not load es tables: %v", err)
 		return err
@@ -67,8 +63,6 @@ func (m *Source) Setup(ss *schema.Schema) error {
 	}
 	return nil
 }
-
-func (m *Source) findEsNodes() error { return nil }
 
 // Open open connection to elasticsearch source.
 func (m *Source) Open(schemaName string) (schema.Conn, error) {

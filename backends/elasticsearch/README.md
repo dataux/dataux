@@ -1,7 +1,8 @@
 
 MySQL access to Elasticsearch
 --------------------------------
-Elasticserch is awesome, but sometimes querying it, and integrating it into other apps it would be great to have mysql.
+[Elasticsearch](https://www.elastic.co/) is awesome, but sometimes querying it is not, and integrating it into other apps involves custom code.  
+It would be great to have mysql and all the tools that talk MySql to be able to access it.
 
 ## Example Usage
 This example imports a couple hours worth of historical data
@@ -31,8 +32,8 @@ show databases;
 -- dataux will introspect the tables
 -- to create schema for the tables
 CREATE schema github_archive IF NOT EXISTS WITH {
-  "type":"elasticsearch", 
-  "schema":"github_archive", 
+  "type":"elasticsearch",
+  "schema":"github_archive",
   "hosts": ["http://127.0.0.1:9200"]
 };
 
@@ -66,8 +67,6 @@ WHERE repository.description LIKE "database";
 
 ```
 
-
-
 SQL -> Elasticsearch
 ----------------------------------
 
@@ -81,4 +80,16 @@ filter:   terms         | `select * from table WHERE year IN (2015,2014,2013);`
 filter: gte, range      | `select * from table WHERE year BETWEEN 2012 AND 2014`
 
 
+Configuration
+-----------------------------
+* *tables_to_load* If you do not want to load all tables.
 
+```
+CREATE schema github_archive IF NOT EXISTS WITH {
+  "type":"elasticsearch",
+  "schema":"github_archive",
+  "tables_to_load":["indexa","indexb"],
+  "hosts": ["http://127.0.0.1:9200"]
+};
+
+```
