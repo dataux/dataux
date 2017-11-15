@@ -27,24 +27,24 @@ now run some queries
 ```sql
 show databases;
 
-
--- first create the schema
+-- first register the schema
+-- dataux will introspect the tables
+-- to create schema for the tables
 CREATE schema github_archive IF NOT EXISTS WITH {
   "type":"elasticsearch", 
   "schema":"github_archive", 
   "hosts": ["http://127.0.0.1:9200"]
 };
 
-
--- dataux will introspect the tables
--- to create schema for the tables
-
+-- now a sql tour
 show databases;
 use github_archive;
 
 show tables;
 
 describe github_watch;
+
+select actor, repostory.url from github_watch limit 10;
 
 select cardinality(`actor`) AS users_who_watched, min(`repository.id`) as oldest_repo from github_watch;
 
