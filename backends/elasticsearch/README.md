@@ -11,14 +11,16 @@ It only imports `github_issues` and `github_watch`.
 
 ```sh
 # from root of this repo, there is a docker-compose
+# which has an elasticsearch server in it we will use for example.
 cd github.com/dataux/dataux
 docker-compose up
 
-cd backends/elasticsearch/importgithub
 # assuming elasticsearch on localhost else --host=myeshost
+# lets import the data into elasticsearch
+cd backends/elasticsearch/importgithub
 go build && ./importgithub
 
-# using docker start a dataux
+# using docker start a dataux server
 docker run --rm -it --net=host -p 4000:4000 gcr.io/dataux-io/dataux:latest
 
 # now that dataux is running use mysql-client to connect
