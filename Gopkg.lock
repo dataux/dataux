@@ -11,7 +11,7 @@
   branch = "master"
   name = "github.com/araddon/dateparse"
   packages = ["."]
-  revision = "ca7e753bd149dae747d76fa7d52b20b920f3a814"
+  revision = "f30ca3179c19d723d2f1f8c878fcce1089775c05"
 
 [[projects]]
   branch = "master"
@@ -23,7 +23,7 @@
   branch = "master"
   name = "github.com/araddon/qlbridge"
   packages = ["datasource","datasource/files","datasource/membtree","datasource/memdb","datasource/mockcsv","datasource/mockcsvtestdata","exec","expr","expr/builtins","lex","plan","rel","schema","testutil","value","vm"]
-  revision = "f7c3a42db43879e67e2ce2bf23cd9dd8611f6a19"
+  revision = "20c220916972cc718dd3186c14cc590eaefb4faa"
 
 [[projects]]
   branch = "master"
@@ -59,7 +59,7 @@
   branch = "master"
   name = "github.com/gocql/gocql"
   packages = [".","internal/lru","internal/murmur","internal/streams"]
-  revision = "33a5f3c1bcc2c421b3221c5858312afb141bf605"
+  revision = "1762cce65eafd098045e30ef2b7df2c289740971"
 
 [[projects]]
   name = "github.com/gogo/protobuf"
@@ -71,7 +71,7 @@
   branch = "master"
   name = "github.com/golang/protobuf"
   packages = ["proto","protoc-gen-go/descriptor","ptypes/any","ptypes/duration","ptypes/empty","ptypes/struct","ptypes/timestamp","ptypes/wrappers"]
-  revision = "1643683e1b54a9e88ad26d98f81400c8c9d9f4f9"
+  revision = "1e59b77b52bf8e4b449a57e6f79f21226d571845"
 
 [[projects]]
   branch = "master"
@@ -244,7 +244,7 @@
   branch = "master"
   name = "golang.org/x/net"
   packages = ["context","context/ctxhttp","http2","http2/hpack","idna","internal/timeseries","lex/httplex","trace"]
-  revision = "a337091b0525af65de94df2eb7e98bd9962dcbe2"
+  revision = "c7086645de248775cbf2373cf5ca4d2fa664b8c1"
 
 [[projects]]
   name = "golang.org/x/oauth2"
@@ -255,7 +255,7 @@
   branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix"]
-  revision = "1e2299c37cc91a509f1b12369872d27be0ce98a6"
+  revision = "4ff8c001ce4cc464e644b922325097228fce14d8"
 
 [[projects]]
   branch = "master"
@@ -299,6 +299,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "1831c5fbb8ac061fde511c88c506a0d71533b70ba8fb900db0618a6afc59d241"
+  inputs-digest = "bf12062bddf41477a53ce3f7faaa176b02713eaf2cdd9d229cd5a4762155f892"
   solver-name = "gps-cdcl"
   solver-version = 1
