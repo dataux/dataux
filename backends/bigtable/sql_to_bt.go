@@ -3,7 +3,6 @@
 package bigtable
 
 import (
-	"context"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
@@ -11,6 +10,7 @@ import (
 
 	"cloud.google.com/go/bigtable"
 	u "github.com/araddon/gou"
+	"golang.org/x/net/context"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/exec"
