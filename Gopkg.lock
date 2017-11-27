@@ -176,10 +176,10 @@
   revision = "6b67e16c9874a59acdeea4aab6b4008dbe80e54e"
 
 [[projects]]
-  branch = "master"
   name = "github.com/lytics/grid"
   packages = [".","codec","registry","testetcd"]
-  revision = "998be5652dfb5517cb28a7075c4bc20f4bcc4193"
+  revision = "96e9bfc4ddaefc784b47b19d2b8e137d856eb10e"
+  version = "v3.0.0"
 
 [[projects]]
   branch = "master"
@@ -257,7 +257,7 @@
   branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix"]
-  revision = "4ff8c001ce4cc464e644b922325097228fce14d8"
+  revision = "a204229cd828a74741ee7b5da9bf4794497f85ed"
 
 [[projects]]
   branch = "master"
