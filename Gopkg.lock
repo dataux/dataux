@@ -3,9 +3,9 @@
 
 [[projects]]
   name = "cloud.google.com/go"
-  packages = ["bigquery","bigtable","bigtable/internal/gax","bigtable/internal/option","civil","compute/metadata","datastore","internal","internal/atomiccache","internal/fields","internal/optional","storage"]
-  revision = "c116c7972ec94f148459a304d07a67ecbc770d4b"
-  version = "v0.6.0"
+  packages = ["bigquery","bigtable","bigtable/internal/gax","bigtable/internal/option","civil","compute/metadata","datastore","iam","internal","internal/atomiccache","internal/fields","internal/optional","internal/version","longrunning","longrunning/autogen","storage"]
+  revision = "2d3a6656c17a60b0815b7e06ab0be04eacb6e613"
+  version = "v0.16.0"
 
 [[projects]]
   branch = "master"
@@ -34,8 +34,8 @@
 [[projects]]
   name = "github.com/coreos/etcd"
   packages = ["auth/authpb","clientv3","etcdserver/api/v3rpc/rpctypes","etcdserver/etcdserverpb","mvcc/mvccpb"]
-  revision = "f1d7dd87da3e8feab4aaf675b8e29c6a5ed5f58b"
-  version = "v3.2.9"
+  revision = "694728c496e22dfa5719c78ff23cc982e15bcb2f"
+  version = "v3.2.10"
 
 [[projects]]
   name = "github.com/davecgh/go-spew"
@@ -70,7 +70,7 @@
 [[projects]]
   branch = "master"
   name = "github.com/golang/protobuf"
-  packages = ["proto","protoc-gen-go/descriptor","ptypes/any","ptypes/duration","ptypes/empty","ptypes/struct","ptypes/timestamp","ptypes/wrappers"]
+  packages = ["proto","protoc-gen-go/descriptor","ptypes","ptypes/any","ptypes/duration","ptypes/empty","ptypes/struct","ptypes/timestamp","ptypes/wrappers"]
   revision = "1e59b77b52bf8e4b449a57e6f79f21226d571845"
 
 [[projects]]
@@ -88,7 +88,8 @@
 [[projects]]
   name = "github.com/googleapis/gax-go"
   packages = ["."]
-  revision = "da06d194a00e19ce00d9011a13931c3f6f6887c7"
+  revision = "317e0006254c44a0ac427cc52a0e083ff0b9622f"
+  version = "v2.0.0"
 
 [[projects]]
   branch = "master"
@@ -247,9 +248,10 @@
   revision = "c7086645de248775cbf2373cf5ca4d2fa664b8c1"
 
 [[projects]]
+  branch = "master"
   name = "golang.org/x/oauth2"
   packages = [".","google","internal","jws","jwt"]
-  revision = "b53b38ad8a6435bd399ea76d0fa74f23149cca4e"
+  revision = "f95fa95eaa936d9d87489b15d1d18b97c1ba9c28"
 
 [[projects]]
   branch = "master"
@@ -264,9 +266,10 @@
   revision = "88f656faf3f37f690df1a32515b479415e1a6769"
 
 [[projects]]
+  branch = "master"
   name = "google.golang.org/api"
-  packages = ["bigquery/v2","gensupport","googleapi","googleapi/internal/uritemplates","googleapi/transport","internal","iterator","option","storage/v1","transport"]
-  revision = "dfa61ae24628a06502b9c2805d983b57e89399b5"
+  packages = ["bigquery/v2","gensupport","googleapi","googleapi/internal/uritemplates","googleapi/transport","internal","iterator","option","storage/v1","transport","transport/grpc","transport/http"]
+  revision = "b804618854e387dc7fdd9e50496183ddcbb4b120"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -275,14 +278,16 @@
   version = "v1.0.0"
 
 [[projects]]
+  branch = "master"
   name = "google.golang.org/genproto"
-  packages = ["googleapis/api/annotations","googleapis/bigtable/admin/v2","googleapis/bigtable/v2","googleapis/datastore/v1","googleapis/longrunning","googleapis/rpc/status","googleapis/type/latlng"]
-  revision = "b3e7c2fb04031add52c4817f53f43757ccbf9c18"
+  packages = ["googleapis/api/annotations","googleapis/bigtable/admin/v2","googleapis/bigtable/v2","googleapis/datastore/v1","googleapis/iam/v1","googleapis/longrunning","googleapis/rpc/status","googleapis/type/latlng"]
+  revision = "7f0da29060c682909f650ad8ed4e515bd74fa12a"
 
 [[projects]]
   name = "google.golang.org/grpc"
-  packages = [".","codes","credentials","credentials/oauth","grpclog","internal","metadata","naming","peer","stats","tap","transport"]
-  revision = "708a7f9f3283aa2d4f6132d287d78683babe55c8"
+  packages = [".","balancer","balancer/roundrobin","codes","connectivity","credentials","credentials/oauth","encoding","grpclb/grpc_lb_v1/messages","grpclog","health/grpc_health_v1","internal","keepalive","metadata","naming","peer","resolver","resolver/dns","resolver/passthrough","stats","status","tap","transport"]
+  revision = "5a9f7b402fe85096d2e1d0383435ee1876e863d0"
+  version = "v1.8.0"
 
 [[projects]]
   name = "gopkg.in/inf.v0"
@@ -299,6 +304,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "1831c5fbb8ac061fde511c88c506a0d71533b70ba8fb900db0618a6afc59d241"
+  inputs-digest = "27035f429675770351d8ab2e573af213ecbaed8094f9ff1f7ba2a6bec720546d"
   solver-name = "gps-cdcl"
   solver-version = 1

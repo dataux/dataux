@@ -1,7 +1,6 @@
 #! /bin/sh
 
-cd $GOPATH/src/cloud.google.com/go/ && git checkout master && git pull && git checkout v0.6.0
-cd $GOPATH/src/github.com/PuerkitoBio/purell && git checkout master && git pull
+cd $GOPATH/src/cloud.google.com/go/ && git checkout master && git pull && git checkout v0.16.0
 cd $GOPATH/src/github.com/PuerkitoBio/purell && git checkout master && git pull
 cd $GOPATH/src/github.com/araddon/dateparse && git checkout master && git pull
 cd $GOPATH/src/github.com/araddon/gou && git checkout master && git pull
@@ -14,7 +13,7 @@ cd $GOPATH/src/github.com/bitly/go-hostpool && git checkout master && git pull
 cd $GOPATH/src/github.com/boltdb/bolt && git checkout master && git pull
 cd $GOPATH/src/github.com/cockroachdb/cmux && git checkout master && git pull
 
-cd $GOPATH/src/github.com/coreos/etcd && git checkout master && git pull && git checkout v3.1.3
+cd $GOPATH/src/github.com/coreos/etcd && git checkout master && git pull && git checkout v3.2.10
 
 cd $GOPATH/src/github.com/coreos/go-semver && git checkout master && git pull
 cd $GOPATH/src/github.com/coreos/go-systemd  && git checkout master && git pull
@@ -32,7 +31,7 @@ cd $GOPATH/src/github.com/golang/snappy && git checkout master && git pull
 cd $GOPATH/src/github.com/google/btree && git checkout master && git pull
 cd $GOPATH/src/github.com/google/gofuzz && git checkout master && git pull
 cd $GOPATH/src/github.com/grpc-ecosystem/go-grpc-prometheus && git checkout master && git pull
-cd $GOPATH/src/github.com/grpc-ecosystem/grpc-gateway && git checkout master && git pull && git checkout 84398b94e188ee336f307779b57b3aa91af7063c # check coreos/etcd for changes glide.yaml
+cd $GOPATH/src/github.com/grpc-ecosystem/grpc-gateway && git checkout master && git pull ##&& git checkout 84398b94e188ee336f307779b57b3aa91af7063c # check coreos/etcd for changes glide.yaml
 
 cd $GOPATH/src/github.com/hailocab/go-hostpool && git checkout master && git pull
 cd $GOPATH/src/github.com/hashicorp/go-immutable-radix && git checkout master && git pull
@@ -69,13 +68,13 @@ cd $GOPATH/src/github.com/ugorji/go && git checkout master && git pull
 #cd $GOPATH/src/github.com/uxiang90/probing && git checkout master && git pull
 
 
-cd $GOPATH/src/github.com/googleapis/gax-go && git checkout master && git pull && git checkout da06d194a00e19ce00d9011a13931c3f6f6887c7
+cd $GOPATH/src/github.com/googleapis/gax-go && git checkout master && git pull ##&& git checkout da06d194a00e19ce00d9011a13931c3f6f6887c7
 cd $GOPATH/src/golang.org/x/crypto && git checkout master && git pull
 cd $GOPATH/src/golang.org/x/net && git checkout master && git pull
 cd $GOPATH/src/golang.org/x/oauth2 && git checkout master && git pull
-cd $GOPATH/src/google.golang.org/api && git checkout master && git pull  && git checkout dfa61ae24628a06502b9c2805d983b57e89399b5
+cd $GOPATH/src/google.golang.org/api && git checkout master && git pull  #&& git checkout dfa61ae24628a06502b9c2805d983b57e89399b5
 cd $GOPATH/src/google.golang.org/genproto && git checkout master && git pull
-cd $GOPATH/src/google.golang.org/grpc && git checkout master && git pull && git checkout v1.0.4 # check coreos/etcd for changes glide.yaml
+cd $GOPATH/src/google.golang.org/grpc && git checkout master && git pull #&& git checkout v1.0.4 # check coreos/etcd for changes glide.yaml
 
 cd $GOPATH/src/gopkg.in/inf.v0 && git checkout master && git pull
 # this one is a pain, don't update manually, c headers?
@@ -83,10 +82,10 @@ cd $GOPATH/src/gopkg.in/inf.v0 && git checkout master && git pull
 cd $GOPATH/src/gopkg.in/yaml.v2 && git checkout master && git pull
 
 #echo "Fetch k8s.io"
-cd $GOPATH/src/k8s.io/apimachinery && git checkout master && git pull # && git checkout xxx # ??
-cd $GOPATH/src/k8s.io/client-go && git checkout master && git pull # && git checkout xxx # ??
-cd $GOPATH/src/k8s.io/api && git checkout master && git pull # && git checkout xxx # ??
-cd $GOPATH/src/k8s.io/kube-openapi && git checkout master && git pull # && git checkout xxx # ??
+# cd $GOPATH/src/k8s.io/apimachinery && git checkout master && git pull # && git checkout xxx # ??
+# cd $GOPATH/src/k8s.io/client-go && git checkout master && git pull # && git checkout xxx # ??
+# cd $GOPATH/src/k8s.io/api && git checkout master && git pull # && git checkout xxx # ??
+# cd $GOPATH/src/k8s.io/kube-openapi && git checkout master && git pull # && git checkout xxx # ??
 
 #go get -u -v ./...
 
