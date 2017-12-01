@@ -532,7 +532,7 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 		// comparison of left/right isn't mongos strong suit
 		// https://stackoverflow.com/questions/4442453/mongodb-query-condition-on-comparing-2-fields
 		// db.T.find( { $where : "this.Grade1 > this.Grade2" } );
-		u.Infof("identents?  %v %v  %v", lhval, rhval, node)
+		// u.Infof("identents?  %v %v  %v", lhval, rhval, node)
 		*q = bson.M{"$where": fmt.Sprintf("this.%s %s this.%s", lhval.ToString(), node.Operator.V, rhval.ToString())}
 		return nil, nil
 	}
@@ -542,7 +542,7 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 		// The $eq expression is equivalent to { field: <value> }.
 		if lhval != nil && rhval != nil {
 			*q = bson.M{lhval.ToString(): rhval.Value()}
-			u.Infof("m=%#v type=%v", q, rhval.Type())
+			// u.Infof("m=%#v type=%v", q, rhval.Type())
 			return nil, nil
 		}
 		if lhval != nil || rhval != nil {
