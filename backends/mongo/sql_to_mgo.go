@@ -257,6 +257,9 @@ func (m *SqlToMgo) eval(arg expr.Node) (value.Value, bool, bool) {
 		val, ok := vm.Eval(nil, arg)
 		return val, ok, false
 	case *expr.IdentityNode:
+		if arg.IsBooleanIdentity() {
+			return value.NewBoolValue(arg.Bool()), true, false
+		}
 		return value.NewStringValue(arg.Text), true, true
 	}
 	return nil, false, false
@@ -518,6 +521,7 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 	lhval, lhok, isLident := m.eval(node.Args[0])
 	rhval, rhok, isRident := m.eval(node.Args[1])
 	if !lhok {
+		u.Warnf("not ok: %v  l:%v  r:%v", node, lhval, rhval)
 		return nil, fmt.Errorf("Could not evaluate left arg: %v", node.String())
 	}
 	if !rhok {
@@ -528,6 +532,7 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 		// comparison of left/right isn't mongos strong suit
 		// https://stackoverflow.com/questions/4442453/mongodb-query-condition-on-comparing-2-fields
 		// db.T.find( { $where : "this.Grade1 > this.Grade2" } );
+		u.Infof("identents?  %v %v  %v", lhval, rhval, node)
 		*q = bson.M{"$where": fmt.Sprintf("this.%s %s this.%s", lhval.ToString(), node.Operator.V, rhval.ToString())}
 		return nil, nil
 	}
@@ -537,7 +542,7 @@ func (m *SqlToMgo) walkFilterBinary(node *expr.BinaryNode, q *bson.M) (value.Val
 		// The $eq expression is equivalent to { field: <value> }.
 		if lhval != nil && rhval != nil {
 			*q = bson.M{lhval.ToString(): rhval.Value()}
-			//u.Infof("m=%#v type=%v", q, rhval.Type())
+			u.Infof("m=%#v type=%v", q, rhval.Type())
 			return nil, nil
 		}
 		if lhval != nil || rhval != nil {
@@ -736,6 +741,9 @@ func (m *SqlToMgo) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {
 func eval(cur expr.Node) (value.Value, bool) {
 	switch curNode := cur.(type) {
 	case *expr.IdentityNode:
+		if curNode.IsBooleanIdentity() {
+			return value.NewBoolValue(curNode.Bool()), true
+		}
 		return value.NewStringValue(curNode.Text), true
 	case *expr.StringNode:
 		return value.NewStringValue(curNode.Text), true

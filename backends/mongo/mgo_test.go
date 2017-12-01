@@ -414,6 +414,16 @@ func TestSimpleRowSelect(t *testing.T) {
 		Deleted bool
 		//Category *datasource.StringArray
 	}{}
+
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select title, count, deleted from article WHERE deleted = true ",
+		ExpectRowCt: 3,
+		ValidateRowData: func() {
+			assert.Equal(t, true, data.Deleted)
+		},
+		RowData: &data,
+	})
+
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select title, count, deleted from article WHERE `author` = \"aaron\" ",
 		ExpectRowCt: 1,
