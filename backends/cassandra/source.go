@@ -208,7 +208,7 @@ func (m *Source) loadSchema() error {
 						f = schema.NewFieldBase(colName, value.StringsType, 256, "[]string")
 					case gocql.TypeInt, gocql.TypeBigInt, gocql.TypeTinyInt:
 						f = schema.NewFieldBase(colName, value.SliceValueType, 256, "[]int")
-						f.NativeType = value.IntType
+						f.NativeType = uint32(value.IntType)
 					default:
 						u.Warnf("SET TYPE CASSANDRA Not handled very well?!  %v  \n%v", nt.Type(), nt.NativeType.Type())
 					}
@@ -230,13 +230,13 @@ func (m *Source) loadSchema() error {
 				switch col.Type.Type() {
 				case gocql.TypeVarchar, gocql.TypeText:
 					f = schema.NewFieldBase(colName, value.MapStringType, 256, "map[string]string")
-					f.NativeType = value.MapStringType
+					f.NativeType = uint32(value.MapStringType)
 				case gocql.TypeInt, gocql.TypeBigInt, gocql.TypeTinyInt:
 					f = schema.NewFieldBase(colName, value.MapIntType, 256, "map[string]string")
-					f.NativeType = value.MapStringType
+					f.NativeType = uint32(value.MapStringType)
 				case gocql.TypeTimestamp, gocql.TypeTime, gocql.TypeDate:
 					f = schema.NewFieldBase(colName, value.MapTimeType, 256, "map[string]time")
-					f.NativeType = value.MapTimeType
+					f.NativeType = uint32(value.MapTimeType)
 				}
 				u.Warnf("MAP TYPE CASSANDRA Not handled very well?!")
 			default:

@@ -292,7 +292,7 @@ func (m *SqlToCql) Put(ctx context.Context, key schema.Key, val interface{}) (sc
 						case string, []byte, int, int64, bool, time.Time:
 							curRow[i] = val
 						case []value.Value:
-							switch f.Type {
+							switch f.ValueType() {
 							case value.StringsType:
 								vals := make([]string, len(val))
 								for si, sv := range val {
@@ -551,7 +551,7 @@ func (m *SqlToCql) walkFilterBinary(node *expr.BinaryNode) (expr.Node, error) {
 	case lex.TokenEqual, lex.TokenEqualEqual, lex.TokenNE:
 		return node, nil
 	case lex.TokenLE, lex.TokenLT, lex.TokenGE, lex.TokenGT:
-		if !col.Type.IsNumeric() {
+		if !col.ValueType().IsNumeric() {
 			return nil, fmt.Errorf("%s Operator can only act on Numeric Column: [%s]", node.Operator.T, node)
 		}
 		return node, nil

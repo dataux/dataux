@@ -33,6 +33,7 @@ var (
 	_ exec.ExecutorSource = (*SqlToBQ)(nil)
 	_ schema.ConnMutation = (*SqlToBQ)(nil)
 
+	// Timeout default for BigQuery queries
 	Timeout   = 10 * time.Second
 	globalCtx = context.Background()
 )
@@ -85,6 +86,7 @@ func (m *SqlToBQ) queryRewrite(original *rel.SqlSelect) error {
 			fqn := m.schema.Conf.TableAliases[strings.ToLower(from.Name)]
 			if fqn != "" {
 				from.Name = fqn
+				u.Warnf("got a from: %q", fqn)
 			}
 		}
 	}
@@ -225,7 +227,7 @@ func (m *SqlToBQ) Put(ctx context.Context, key schema.Key, val interface{}) (sch
 						case string, []byte, int, int64, bool, time.Time:
 							row.vals[f.Name] = val
 						case []value.Value:
-							switch f.Type {
+							switch f.ValueType() {
 							case value.StringsType:
 								vals := make([]string, len(val))
 								for si, sv := range val {

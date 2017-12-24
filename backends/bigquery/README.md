@@ -27,15 +27,15 @@ docker run -e "GOOGLE_APPLICATION_CREDENTIALS=/.config/gcloud/application_defaul
 mysql -h 127.0.0.1 -P4000
 
 
--- Create a new schema = "bq" with one source being
--- a bigquery public dataset is used
--- you must provide your billing account
+-- Create a new schema = "bq" with one source
+-- a bigquery public dataset is the only source/tables
+-- replace BIGQUERY_PROJECT with your billing account project
 
 CREATE source `BIGQUERY_PROJECT` WITH {
     "type":"bigquery",
     "schema":"bq",
     "table_aliases" : {
-       "bikeshare_stations" : "bigquery-public-data:san_francisco.bikeshare_stations"
+       "bikeshare_stations" : "bigquery-public-data.san_francisco.bikeshare_stations"
     },
     "settings" {
       "billing_project" : "BIGQUERY_PROJECT",

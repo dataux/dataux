@@ -11,7 +11,7 @@
   branch = "master"
   name = "github.com/araddon/dateparse"
   packages = ["."]
-  revision = "f30ca3179c19d723d2f1f8c878fcce1089775c05"
+  revision = "626fadf64d2a5b300fe00da84d09e25e7f19424e"
 
 [[projects]]
   branch = "master"
@@ -23,7 +23,7 @@
   branch = "master"
   name = "github.com/araddon/qlbridge"
   packages = ["datasource","datasource/files","datasource/membtree","datasource/memdb","datasource/mockcsv","datasource/mockcsvtestdata","exec","expr","expr/builtins","lex","plan","rel","schema","testutil","value","vm"]
-  revision = "20c220916972cc718dd3186c14cc590eaefb4faa"
+  revision = "f2f719f1c875e117e05d43554a66d85c2acfbd3d"
 
 [[projects]]
   branch = "master"
@@ -34,8 +34,8 @@
 [[projects]]
   name = "github.com/coreos/etcd"
   packages = ["auth/authpb","clientv3","etcdserver/api/v3rpc/rpctypes","etcdserver/etcdserverpb","mvcc/mvccpb"]
-  revision = "694728c496e22dfa5719c78ff23cc982e15bcb2f"
-  version = "v3.2.10"
+  revision = "b19dae00651b890498bcca38ac2cc3cad471281e"
+  version = "v3.2.12"
 
 [[projects]]
   name = "github.com/davecgh/go-spew"
@@ -59,7 +59,7 @@
   branch = "master"
   name = "github.com/gocql/gocql"
   packages = [".","internal/lru","internal/murmur","internal/streams"]
-  revision = "1762cce65eafd098045e30ef2b7df2c289740971"
+  revision = "56a164ee9f3135e9cfe725a6d25939f24cb2d044"
 
 [[projects]]
   name = "github.com/gogo/protobuf"
@@ -125,7 +125,7 @@
   branch = "master"
   name = "github.com/jmoiron/sqlx"
   packages = [".","reflectx"]
-  revision = "3379e5993990b1f927fc8db926485e6f6becf2d2"
+  revision = "de8647470aafe4854c976707c431dbe1eb2822c6"
 
 [[projects]]
   branch = "master"
@@ -245,31 +245,31 @@
   branch = "master"
   name = "golang.org/x/net"
   packages = ["context","context/ctxhttp","http2","http2/hpack","idna","internal/timeseries","lex/httplex","trace"]
-  revision = "c7086645de248775cbf2373cf5ca4d2fa664b8c1"
+  revision = "d866cfc389cec985d6fda2859936a575a55a3ab6"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/oauth2"
   packages = [".","google","internal","jws","jwt"]
-  revision = "f95fa95eaa936d9d87489b15d1d18b97c1ba9c28"
+  revision = "0448841f0cbe9d174c6c1cedd177f583337b8e2c"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix"]
-  revision = "a204229cd828a74741ee7b5da9bf4794497f85ed"
+  revision = "83801418e1b59fb1880e363299581ee543af32ca"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/text"
   packages = ["collate","collate/build","internal/colltab","internal/gen","internal/tag","internal/triegen","internal/ucd","language","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable"]
-  revision = "88f656faf3f37f690df1a32515b479415e1a6769"
+  revision = "eb22672bea55af56d225d4e35405f4d2e9f062a0"
 
 [[projects]]
   branch = "master"
   name = "google.golang.org/api"
   packages = ["bigquery/v2","gensupport","googleapi","googleapi/internal/uritemplates","googleapi/transport","internal","iterator","option","storage/v1","transport","transport/grpc","transport/http"]
-  revision = "b804618854e387dc7fdd9e50496183ddcbb4b120"
+  revision = "272e2963aad1a56aba54e1167c47abff8d37ac08"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -280,14 +280,14 @@
 [[projects]]
   branch = "master"
   name = "google.golang.org/genproto"
-  packages = ["googleapis/api/annotations","googleapis/bigtable/admin/v2","googleapis/bigtable/v2","googleapis/datastore/v1","googleapis/iam/v1","googleapis/longrunning","googleapis/rpc/status","googleapis/type/latlng"]
-  revision = "7f0da29060c682909f650ad8ed4e515bd74fa12a"
+  packages = ["googleapis/api/annotations","googleapis/bigtable/admin/v2","googleapis/bigtable/v2","googleapis/datastore/v1","googleapis/iam/v1","googleapis/longrunning","googleapis/rpc/status","googleapis/type/latlng","protobuf/field_mask"]
+  revision = "a8101f21cf983e773d0c1133ebc5424792003214"
 
 [[projects]]
   name = "google.golang.org/grpc"
   packages = [".","balancer","balancer/roundrobin","codes","connectivity","credentials","credentials/oauth","encoding","grpclb/grpc_lb_v1/messages","grpclog","health/grpc_health_v1","internal","keepalive","metadata","naming","peer","resolver","resolver/dns","resolver/passthrough","stats","status","tap","transport"]
-  revision = "5a9f7b402fe85096d2e1d0383435ee1876e863d0"
-  version = "v1.8.0"
+  revision = "e687fa4e6424368ece6e4fe727cea2c806a0fcb4"
+  version = "v1.8.2"
 
 [[projects]]
   name = "gopkg.in/inf.v0"

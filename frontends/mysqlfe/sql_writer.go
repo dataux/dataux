@@ -91,7 +91,7 @@ func typeToMysql(f *schema.Field) string {
 	// char(60)
 	// varchar(255)
 	// text
-	switch f.Type {
+	switch f.ValueType() {
 	case value.IntType:
 		if f.Length == 64 {
 			return "bigint"
@@ -134,7 +134,7 @@ func fieldDescribe(proj *rel.Projection, f *schema.Field) []driver.Value {
 			typeToMysql(f),
 			null,
 			f.Key,
-			f.DefaultValue,
+			string(f.DefVal),
 			f.Description,
 		}
 	}
@@ -149,7 +149,7 @@ func fieldDescribe(proj *rel.Projection, f *schema.Field) []driver.Value {
 		"", // collation
 		null,
 		f.Key,
-		f.DefaultValue,
+		string(f.DefVal),
 		f.Extra,
 		privileges,
 		f.Description,
@@ -178,7 +178,7 @@ func TableCreate(tbl *schema.Table) (string, error) {
 func writeField(w *bytes.Buffer, fld *schema.Field) {
 	fmt.Fprintf(w, "`%s` ", fld.Name)
 	deflen := fld.Length
-	switch fld.Type {
+	switch fld.ValueType() {
 	case value.BoolType:
 		fmt.Fprint(w, "tinyint(1) DEFAULT NULL")
 	case value.IntType:

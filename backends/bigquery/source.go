@@ -139,7 +139,7 @@ func (m *Source) loadSchema() error {
 		for alias, tableToLoad := range m.schema.Conf.TableAliases {
 			u.Warnf("table alias:  %q  :  %q", alias, tableToLoad)
 			if !strings.HasPrefix(tableToLoad, "[") {
-				m.schema.Conf.TableAliases[alias] = fmt.Sprintf("[%s]", tableToLoad)
+				m.schema.Conf.TableAliases[alias] = fmt.Sprintf("%s", tableToLoad)
 			}
 		}
 	}

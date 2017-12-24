@@ -62,7 +62,7 @@ func (m *ResultReader) buildProjection() {
 	if sql.Star {
 		// Select Each field, grab fields from Table Schema
 		for _, fld := range m.Req.tbl.Fields {
-			cols = append(cols, rel.NewResultColumn(fld.Name, len(cols), nil, fld.Type))
+			cols = append(cols, rel.NewResultColumn(fld.Name, len(cols), nil, fld.ValueType()))
 		}
 	} else if sql.CountStar() {
 		// Count *
@@ -71,7 +71,7 @@ func (m *ResultReader) buildProjection() {
 		for _, col := range m.Req.sel.Columns {
 			if fld, ok := m.Req.tbl.FieldMap[col.SourceField]; ok {
 				//u.Debugf("column: %#v", col)
-				cols = append(cols, rel.NewResultColumn(col.SourceField, len(cols), col, fld.Type))
+				cols = append(cols, rel.NewResultColumn(col.SourceField, len(cols), col, fld.ValueType()))
 			} else {
 				u.Debugf("Could not find: '%v' in %#v", col.SourceField, m.Req.tbl.FieldMap)
 				u.Warnf("%#v", col)

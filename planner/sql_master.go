@@ -86,7 +86,7 @@ func (m *sqlMasterTask) init() error {
 					}
 				} else if f.Tbl.PartitionCt > 0 {
 					m.partitions = make([]string, f.Tbl.PartitionCt)
-					m.actorCt = f.Tbl.PartitionCt
+					m.actorCt = int(f.Tbl.PartitionCt)
 					for i := 0; i < m.actorCt; i++ {
 						//u.Warnf("Found Partitions for %q = %#v", f.Tbl.Name, i)
 						m.partitions[i] = fmt.Sprintf("%d", i)

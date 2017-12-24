@@ -261,6 +261,9 @@ func (m *SqlToMgo) eval(arg expr.Node) (value.Value, bool, bool) {
 			return value.NewBoolValue(arg.Bool()), true, false
 		}
 		return value.NewStringValue(arg.Text), true, true
+	case *expr.ArrayNode:
+		val, ok := vm.Eval(nil, arg)
+		return val, ok, false
 	}
 	return nil, false, false
 }

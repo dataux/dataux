@@ -59,7 +59,7 @@ func RunTestServer(t *testing.T) func() {
             "schema":"datauxtest",
             "type": "bigquery",
             "table_aliases" : {
-                "bikeshare_stations" : "bigquery-public-data:san_francisco.bikeshare_stations"
+                "bikeshare_stations" : "bigquery-public-data.san_francisco.bikeshare_stations"
             },
             "settings" : {
               "billing_project" : "",
