@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	// BuiltIn Default Conf, used for testing but real runtime swaps this out
+	// GridConf BuiltIn Default Conf, used for testing but real runtime swaps this out
 	// for a real config
 	GridConf = &Conf{
 		GridName:    "dataux",
@@ -50,6 +50,8 @@ func setupLogging() {
 	u.DiscardStandardLogger() // Discard non-sanctioned spammers
 }
 
+// NextIdUnsafe create a unique id from sonyflake, unsafe because we ignore
+// errors.
 func NextIdUnsafe() uint64 {
 	uv, err := NextId()
 	if err != nil {
@@ -58,10 +60,12 @@ func NextIdUnsafe() uint64 {
 	return uv
 }
 
+// NextId() get id, error
 func NextId() (uint64, error) {
 	return sf.NextID()
 }
 
+// NodeName given a unique id create name
 func NodeName(id uint64) string {
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -78,10 +82,9 @@ func NodeName2(id1, id2 uint64) string {
 	return fmt.Sprintf("%s-%d-%d", hostname, id1, id2)
 }
 
-// PlannerGrid Is a singleton service context per process that
-// manages access to registry, and other singleton resources.
-// It starts the workers, grid processes, watch to ensure it
-// knows about the rest of the peers in the system.
+// PlannerGrid Is a singleton service context per process that manages access
+// to registry, and other singleton resources. It starts the workers,
+// grid processes, watch to ensure it knows about the rest of the peers in the system.
 type PlannerGrid struct {
 	Conf       *Conf
 	reg        *schema.Registry

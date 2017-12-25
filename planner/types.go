@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	// States
+	// DFA States
 	Starting = dfa.State("starting")
 	Running  = dfa.State("running")
 	Exiting  = dfa.State("exiting")
@@ -18,7 +18,7 @@ var (
 	Exit     = dfa.Letter("exit")
 )
 
-type JobMaker func(ctx *plan.Context) (*ExecutorGrid, error)
+type JobMaker func(ctx *plan.Context) (*GridTask, error)
 
 type Conf struct {
 	JobMaker       JobMaker

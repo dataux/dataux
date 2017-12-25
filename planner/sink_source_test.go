@@ -16,7 +16,6 @@ import (
 	"github.com/araddon/qlbridge/schema"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/lytics/grid"
-	"github.com/lytics/grid/testetcd"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -44,8 +43,7 @@ func (a *emptyActor) Act(c context.Context) {
 
 func TestSink(t *testing.T) {
 
-	etcdc, cleanup, server, client := bootstrapTest(t)
-	defer cleanup()
+	etcdc, server, client := bootstrapTest(t)
 	assert.NotEqual(t, nil, etcdc)
 	assert.NotEqual(t, nil, server)
 	assert.NotEqual(t, nil, client)
@@ -94,7 +92,7 @@ func TestSink(t *testing.T) {
 	assert.NotEqual(t, nil, source)
 
 	// get some test data
-	conn, err := td.MockSchema.Open("users")
+	conn, err := td.MockSchema.OpenConn("users")
 	assert.Equal(t, nil, err)
 
 	//iter := conn.(schema.ConnScanner)
@@ -139,9 +137,14 @@ func TestSink(t *testing.T) {
 	time.Sleep(time.Millisecond * 500)
 }
 
-func bootstrapTest(t testing.TB) (*clientv3.Client, testetcd.Cleanup, *grid.Server, *grid.Client) {
+func bootstrapTest(t testing.TB) (*clientv3.Client, *grid.Server, *grid.Client) {
 	// Start etcd.
-	etcd, cleanup := testetcd.StartAndConnect(t)
+	u.Infof("etcdservers: %v", GridConf.EtcdServers)
+	etcd, err := clientv3.New(clientv3.Config{Endpoints: GridConf.EtcdServers})
+	if err != nil {
+		u.Errorf("failed to start etcd client: %v", err)
+		panic(err.Error())
+	}
 
 	var logger *log.Logger = log.New(os.Stderr, "testing: ", log.LstdFlags)
 
@@ -167,5 +170,5 @@ func bootstrapTest(t testing.TB) (*clientv3.Client, testetcd.Cleanup, *grid.Serv
 	client, err := grid.NewClient(etcd, grid.ClientCfg{Namespace: "testing", Logger: logger})
 	assert.Equal(t, nil, err)
 
-	return etcd, cleanup, server, client
+	return etcd, server, client
 }

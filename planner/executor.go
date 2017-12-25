@@ -12,18 +12,16 @@ import (
 )
 
 var (
-	// ensure it meets interfaces
-	_ exec.Executor = (*ExecutorGrid)(nil)
-
-	_ = u.EMPTY
+	// ensure GridTask meets Executor interface
+	_ exec.Executor = (*GridTask)(nil)
 )
 
 // Build a Sql Job which may be a Grid/Distributed job
-func BuildSqlJob(ctx *plan.Context, pg *PlannerGrid) (*ExecutorGrid, error) {
+func BuildSqlJob(ctx *plan.Context, pg *PlannerGrid) (*GridTask, error) {
 	sqlPlanner := plan.NewPlanner(ctx)
 	baseJob := exec.NewExecutor(ctx, sqlPlanner)
 
-	job := &ExecutorGrid{JobExecutor: baseJob}
+	job := &GridTask{JobExecutor: baseJob}
 	baseJob.Executor = job
 	job.GridServer = pg
 	job.Ctx = ctx
@@ -46,12 +44,12 @@ func BuildSqlJob(ctx *plan.Context, pg *PlannerGrid) (*ExecutorGrid, error) {
 	return job, err
 }
 
-// Build a Sql Job which has already been planned so this is just execution runner
-func BuildExecutorUnPlanned(ctx *plan.Context, pg *PlannerGrid) (*ExecutorGrid, error) {
+// BuildExecutorUnPlanned Build a Sql Job which has already been planned so this is just execution runner
+func BuildExecutorUnPlanned(ctx *plan.Context, pg *PlannerGrid) (*GridTask, error) {
 
 	baseJob := exec.NewExecutor(ctx, nil)
 
-	job := &ExecutorGrid{JobExecutor: baseJob}
+	job := &GridTask{JobExecutor: baseJob}
 	baseJob.Executor = job
 	job.GridServer = pg
 	if pg == nil {
@@ -63,10 +61,9 @@ func BuildExecutorUnPlanned(ctx *plan.Context, pg *PlannerGrid) (*ExecutorGrid, 
 	return job, nil
 }
 
-// Sql job that wraps the generic qlbridge job builder
-// - contains ref to the shared GridServer which has info to
-//   distribute tasks across servers
-type ExecutorGrid struct {
+// GridTask a Sql job that can be distributed.
+// Contains ref to the shared GridServer which has info to  distribute tasks across servers
+type GridTask struct {
 	*exec.JobExecutor
 	distributed bool
 	sp          *plan.Select
@@ -74,8 +71,8 @@ type ExecutorGrid struct {
 }
 
 // Finalize is after the Dag of Relational-algebra tasks have been assembled
-//  and just before we run them.
-func (m *ExecutorGrid) Finalize(resultWriter exec.Task) error {
+// and just before we run them.
+func (m *GridTask) Finalize(resultWriter exec.Task) error {
 
 	m.JobExecutor.RootTask.Add(resultWriter)
 	m.JobExecutor.Setup()
@@ -84,7 +81,7 @@ func (m *ExecutorGrid) Finalize(resultWriter exec.Task) error {
 	return nil
 }
 
-func (m *ExecutorGrid) WalkSource(p *plan.Source) (exec.Task, error) {
+func (m *GridTask) WalkSource(p *plan.Source) (exec.Task, error) {
 	//u.Debugf("%p %T  NewSource? HasConn?%v SourceExec=%v", m, m, p.Conn != nil, p.SourceExec)
 	if len(p.Static) > 0 {
 		return m.JobExecutor.WalkSource(p)
@@ -102,7 +99,9 @@ func (m *ExecutorGrid) WalkSource(p *plan.Source) (exec.Task, error) {
 // 	u.Debugf("%p Walk Projection  sp:%+v", m, m.sp)
 // 	return exec.NewProjection(m.Ctx, p), nil
 // }
-func (m *ExecutorGrid) WalkGroupBy(p *plan.GroupBy) (exec.Task, error) {
+
+// WalkGroupBy walks the GroupBy tasks for any re-plan due to being distributed
+func (m *GridTask) WalkGroupBy(p *plan.GroupBy) (exec.Task, error) {
 	if m.distributed {
 		u.Debugf("%p partial groupby distributed? %v", m, m.distributed)
 		p.Partial = true
@@ -110,7 +109,7 @@ func (m *ExecutorGrid) WalkGroupBy(p *plan.GroupBy) (exec.Task, error) {
 	return exec.NewGroupBy(m.Ctx, p), nil
 }
 
-func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
+func (m *GridTask) WalkSelect(p *plan.Select) (exec.Task, error) {
 
 	//u.WarnT(10)
 	//u.Debugf("%p Walk Select %s", m, p.Stmt)
@@ -197,7 +196,7 @@ func (m *ExecutorGrid) WalkSelect(p *plan.Select) (exec.Task, error) {
 
 // WalkSelectPartition is ONLY called by child-dag's, ie the remote end of a distributed
 //  sql query, to allow setup before walking
-func (m *ExecutorGrid) WalkSelectPartition(p *plan.Select, part *schema.Partition) (exec.Task, error) {
+func (m *GridTask) WalkSelectPartition(p *plan.Select, part *schema.Partition) (exec.Task, error) {
 	u.Infof("%p  %p Exec:%T  ChildDag?%v", m, p, m.JobExecutor, p.ChildDag)
 	m.sp = p
 	m.distributed = true
