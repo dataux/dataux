@@ -10,7 +10,8 @@ import (
 
 	u "github.com/araddon/gou"
 	"github.com/lytics/cloudstorage"
-	"github.com/lytics/cloudstorage/logging"
+	"github.com/lytics/cloudstorage/google"
+	"github.com/lytics/cloudstorage/localfs"
 	"github.com/stretchr/testify/assert"
 
 	_ "github.com/araddon/qlbridge/datasource/files"
@@ -34,18 +35,18 @@ export TESTINT=1
 */
 var (
 	testServicesRunning bool
-	localconfig         = &cloudstorage.CloudStoreContext{
-		LogggingContext: "unittest",
-		TokenSource:     cloudstorage.LocalFileSource,
-		LocalFS:         "tables/",
-		TmpDir:          "/tmp/localcache",
+	localconfig         = &cloudstorage.Config{
+		Type:       google.StoreType,
+		AuthMethod: localfs.AuthFileSystem,
+		LocalFS:    "tables/",
+		TmpDir:     "/tmp/localcache",
 	}
-	gcsIntconfig = &cloudstorage.CloudStoreContext{
-		LogggingContext: "dataux-test",
-		TokenSource:     cloudstorage.GCEDefaultOAuthToken,
-		Project:         "lytics-dev",
-		Bucket:          "lytics-dataux-tests",
-		TmpDir:          "/tmp/localcache",
+	gcsIntconfig = &cloudstorage.Config{
+		Type:       google.StoreType,
+		AuthMethod: google.AuthGCEDefaultOAuthToken,
+		Project:    "lytics-dev",
+		Bucket:     "lytics-dataux-tests",
+		TmpDir:     "/tmp/localcache",
 	}
 )
 
@@ -108,11 +109,7 @@ func RunBenchServer(b *testing.B) {
 
 func createLocalStore() (cloudstorage.Store, error) {
 
-	cloudstorage.LogConstructor = func(prefix string) logging.Logger {
-		return logging.NewStdLogger(true, logging.DEBUG, prefix)
-	}
-
-	var config *cloudstorage.CloudStoreContext
+	var config *cloudstorage.Config
 	//os.RemoveAll("/tmp/mockcloud")
 	os.RemoveAll("/tmp/localcache")
 	config = localconfig

@@ -4,8 +4,8 @@
 [[projects]]
   name = "cloud.google.com/go"
   packages = ["bigquery","bigtable","bigtable/internal/gax","bigtable/internal/option","civil","compute/metadata","datastore","iam","internal","internal/atomiccache","internal/fields","internal/optional","internal/version","longrunning","longrunning/autogen","storage"]
-  revision = "2d3a6656c17a60b0815b7e06ab0be04eacb6e613"
-  version = "v0.16.0"
+  revision = "050b16d2314d5fc3d4c9a51e4cd5c7468e77f162"
+  version = "v0.17.0"
 
 [[projects]]
   branch = "master"
@@ -17,13 +17,13 @@
   branch = "master"
   name = "github.com/araddon/gou"
   packages = ["."]
-  revision = "33600153ea8fd3ed2d60e2e27e34d809cd0a1533"
+  revision = "a90093876aa779409214f99ca1c992752299a6b8"
 
 [[projects]]
   branch = "master"
   name = "github.com/araddon/qlbridge"
   packages = ["datasource","datasource/files","datasource/membtree","datasource/memdb","datasource/mockcsv","datasource/mockcsvtestdata","exec","expr","expr/builtins","lex","plan","rel","schema","testutil","value","vm"]
-  revision = "f2f719f1c875e117e05d43554a66d85c2acfbd3d"
+  revision = "6111c413e502db05e54ed961050c724c5eec0de3"
 
 [[projects]]
   branch = "master"
@@ -34,8 +34,8 @@
 [[projects]]
   name = "github.com/coreos/etcd"
   packages = ["auth/authpb","clientv3","etcdserver/api/v3rpc/rpctypes","etcdserver/etcdserverpb","mvcc/mvccpb"]
-  revision = "b19dae00651b890498bcca38ac2cc3cad471281e"
-  version = "v3.2.12"
+  revision = "95a726a27e09030f9ccbd9982a1508f5a6d25ada"
+  version = "v3.2.13"
 
 [[projects]]
   name = "github.com/davecgh/go-spew"
@@ -59,7 +59,7 @@
   branch = "master"
   name = "github.com/gocql/gocql"
   packages = [".","internal/lru","internal/murmur","internal/streams"]
-  revision = "56a164ee9f3135e9cfe725a6d25939f24cb2d044"
+  revision = "b3286acf006eed1f4b2e43b0cbca7431e52a7065"
 
 [[projects]]
   name = "github.com/gogo/protobuf"
@@ -148,8 +148,8 @@
 [[projects]]
   branch = "master"
   name = "github.com/lytics/cloudstorage"
-  packages = [".","csbufio","logging"]
-  revision = "67b93f3a5ba9c8ef82594230c740ae17f5df54e6"
+  packages = [".","csbufio","google","localfs"]
+  revision = "50048a13d5f0b7e4270646ee4ee970ae5f16ed3c"
 
 [[projects]]
   branch = "master"
@@ -177,7 +177,7 @@
 
 [[projects]]
   name = "github.com/lytics/grid"
-  packages = [".","codec","registry","testetcd"]
+  packages = [".","codec","registry"]
   revision = "96e9bfc4ddaefc784b47b19d2b8e137d856eb10e"
   version = "v3.0.0"
 
@@ -238,8 +238,8 @@
 [[projects]]
   name = "github.com/stretchr/testify"
   packages = ["assert"]
-  revision = "69483b4bd14f5845b5a1e55bca19e954e827f1d0"
-  version = "v1.1.4"
+  revision = "b91bfb9ebec76498946beb6af7c0230c7cc7ba6c"
+  version = "v1.2.0"
 
 [[projects]]
   branch = "master"
@@ -251,7 +251,7 @@
   branch = "master"
   name = "golang.org/x/oauth2"
   packages = [".","google","internal","jws","jwt"]
-  revision = "0448841f0cbe9d174c6c1cedd177f583337b8e2c"
+  revision = "90155042cbc501d0b5c9badf50f1975dd2a7fdd0"
 
 [[projects]]
   branch = "master"
@@ -263,13 +263,13 @@
   branch = "master"
   name = "golang.org/x/text"
   packages = ["collate","collate/build","internal/colltab","internal/gen","internal/tag","internal/triegen","internal/ucd","language","secure/bidirule","transform","unicode/bidi","unicode/cldr","unicode/norm","unicode/rangetable"]
-  revision = "eb22672bea55af56d225d4e35405f4d2e9f062a0"
+  revision = "e19ae1496984b1c655b8044a65c0300a3c878dd3"
 
 [[projects]]
   branch = "master"
   name = "google.golang.org/api"
   packages = ["bigquery/v2","gensupport","googleapi","googleapi/internal/uritemplates","googleapi/transport","internal","iterator","option","storage/v1","transport","transport/grpc","transport/http"]
-  revision = "272e2963aad1a56aba54e1167c47abff8d37ac08"
+  revision = "92c31202d4179425301c9ad5a63abd8df45a9674"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -304,6 +304,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "27035f429675770351d8ab2e573af213ecbaed8094f9ff1f7ba2a6bec720546d"
+  inputs-digest = "c1244d36be0160d1fa3c8fcf54d8c4dd8f66ca9d1fb1245772cf243f446f73c0"
   solver-name = "gps-cdcl"
   solver-version = 1

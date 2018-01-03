@@ -102,7 +102,7 @@ func (m *ServerCtx) InfoSchema() (*schema.Schema, error) {
 }
 
 // JobMaker create job
-func (m *ServerCtx) JobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
+func (m *ServerCtx) JobMaker(ctx *plan.Context) (*planner.GridTask, error) {
 	//u.Debugf("jobMaker, going to do a partial plan?")
 	return planner.BuildExecutorUnPlanned(ctx, m.PlanGrid)
 }
