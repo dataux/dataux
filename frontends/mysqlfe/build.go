@@ -21,7 +21,7 @@ var (
 
 // MySqlJob job that wraps the dataux distributed planner with a dialect specific one
 type MySqlJob struct {
-	*planner.ExecutorGrid
+	*planner.GridTask
 }
 
 // BuildMySqlJob Create a MySql job that wraps underlying distributed planner, and qlbridge generic implementation
@@ -35,7 +35,7 @@ func BuildMySqlJob(svr *models.ServerCtx, ctx *plan.Context) (*MySqlJob, error) 
 	jobPlanner := plan.NewPlanner(ctx)
 	baseJob := exec.NewExecutor(ctx, jobPlanner)
 
-	job := &planner.ExecutorGrid{JobExecutor: baseJob}
+	job := &planner.GridTask{JobExecutor: baseJob}
 	job.Executor = job
 	job.GridServer = svr.PlanGrid
 	job.Ctx = ctx
