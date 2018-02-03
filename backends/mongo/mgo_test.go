@@ -48,7 +48,7 @@ func loadTestData() {
 	}
 }
 
-func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
+func jobMaker(ctx *plan.Context) (*planner.GridTask, error) {
 	ctx.Schema = testmysql.Schema
 	//u.Warnf("jobMaker, going to do a full plan?")
 	return planner.BuildExecutorUnPlanned(ctx, testmysql.ServerCtx.PlanGrid)
