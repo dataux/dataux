@@ -8,8 +8,8 @@ import (
 	"time"
 
 	u "github.com/araddon/gou"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+	"github.com/globalsign/mgo"
+	"github.com/globalsign/mgo/bson"
 
 	"github.com/araddon/qlbridge/schema"
 	"github.com/araddon/qlbridge/value"

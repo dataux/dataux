@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	u "github.com/araddon/gou"
+	"github.com/globalsign/mgo"
 	"github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/mgo.v2"
 
 	"github.com/araddon/qlbridge/datasource"
 	"github.com/araddon/qlbridge/plan"

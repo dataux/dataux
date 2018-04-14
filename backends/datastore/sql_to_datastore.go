@@ -481,7 +481,7 @@ func (m *SQLToDatstore) walkFilterBinary(node *expr.BinaryNode) error {
 		lhs := lhval.ToString()
 		if strings.HasPrefix(lhs, "%") {
 			// Need to polyFill?  Or Error
-			return fmt.Errorf("Google Datastore does not support % prefix", lhs)
+			return fmt.Errorf("Google Datastore does not support %v  prefix for %v", "%", lhs)
 		}
 		m.dsq = m.dsq.Filter(fmt.Sprintf("%q >=", lhs), rhval.Value())
 	default:

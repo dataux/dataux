@@ -19,7 +19,6 @@ import (
 	"github.com/araddon/qlbridge/plan"
 	"github.com/araddon/qlbridge/schema"
 
-	//bqbe "github.com/dataux/dataux/backends/bigquery"
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
 	"github.com/dataux/dataux/planner"
 	tu "github.com/dataux/dataux/testutil"
@@ -41,7 +40,7 @@ func init() {
 	tu.Setup()
 }
 
-func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
+func jobMaker(ctx *plan.Context) (*planner.GridTask, error) {
 	ctx.Schema = testmysql.Schema
 	return planner.BuildSqlJob(ctx, testmysql.ServerCtx.PlanGrid)
 }

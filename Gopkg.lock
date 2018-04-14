@@ -16,25 +16,26 @@
     "internal/atomiccache",
     "internal/fields",
     "internal/optional",
+    "internal/trace",
     "internal/version",
     "longrunning",
     "longrunning/autogen",
     "storage"
   ]
-  revision = "050b16d2314d5fc3d4c9a51e4cd5c7468e77f162"
-  version = "v0.17.0"
+  revision = "29f476ffa9c4cd4fd14336b6043090ac1ad76733"
+  version = "v0.21.0"
 
 [[projects]]
   branch = "master"
   name = "github.com/araddon/dateparse"
   packages = ["."]
-  revision = "f912f7e43f30f3403525bdc3254ee9958ffc1937"
+  revision = "b8014f0dba20b1727542b246efef132591129df7"
 
 [[projects]]
   branch = "master"
   name = "github.com/araddon/gou"
   packages = ["."]
-  revision = "265d2ec2c9144470a8bb17dd351debb0be1ad3c9"
+  revision = "fa458351e3d6a2ec9ab72f7ba4b94f68a941c0f3"
 
 [[projects]]
   branch = "master"
@@ -57,7 +58,7 @@
     "value",
     "vm"
   ]
-  revision = "b032cc45918381f89f082c0e2016fbb17483e493"
+  revision = "bd14c5452818c314e6c3207689bdef417a15a930"
 
 [[projects]]
   branch = "master"
@@ -75,8 +76,8 @@
     "mvcc/mvccpb",
     "pkg/types"
   ]
-  revision = "1b3ac99e8a431b381e633802cc42fe70e663baf5"
-  version = "v3.2.15"
+  revision = "e348b1aedd9167360c466ae98f7343d3e22281f8"
+  version = "v3.3.3"
 
 [[projects]]
   name = "github.com/davecgh/go-spew"
@@ -87,8 +88,20 @@
 [[projects]]
   name = "github.com/dchest/siphash"
   packages = ["."]
-  revision = "42ba037e748c9062a75e0924705c43b893edefcd"
-  version = "v1.0.0"
+  revision = "4ebf1de738443ea7f45f02dc394c4df1942a126d"
+  version = "v1.1.0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/globalsign/mgo"
+  packages = [
+    ".",
+    "bson",
+    "internal/json",
+    "internal/sasl",
+    "internal/scram"
+  ]
+  revision = "f76e4f9da92ecd56e3be26f5ba92580af1ef97b4"
 
 [[projects]]
   name = "github.com/go-sql-driver/mysql"
@@ -105,7 +118,7 @@
     "internal/murmur",
     "internal/streams"
   ]
-  revision = "dd47639f787e8583e1a13e17e20a9f6c4332bc29"
+  revision = "fa516cf7b8863ae9110072ca4368f6b1693e03c2"
 
 [[projects]]
   name = "github.com/gogo/protobuf"
@@ -167,7 +180,7 @@
   branch = "master"
   name = "github.com/hashicorp/go-memdb"
   packages = ["."]
-  revision = "75ff99613d288868d8888ec87594525906815dbc"
+  revision = "1289e7fffe71d8fd4d4d491ba9a412c50f244c44"
 
 [[projects]]
   branch = "master"
@@ -188,7 +201,7 @@
     ".",
     "reflectx"
   ]
-  revision = "05cef0741ade10ca668982355b3f3f0bcf0ff0a8"
+  revision = "2aeb6a910c2b94f2d5eb53d9895d80e27264ec41"
 
 [[projects]]
   branch = "master"
@@ -217,13 +230,13 @@
     "google",
     "localfs"
   ]
-  revision = "b738f5f5a70a634b2525f12c6abdbd4ad7f0f3cc"
+  revision = "74b8b471b489476dbcd6683dd091398ebfa25b8c"
 
 [[projects]]
   branch = "master"
   name = "github.com/lytics/confl"
   packages = ["."]
-  revision = "6b0c216af23857ca6392feadd8eb1e4894b432aa"
+  revision = "11840fa0e49ef91d2a7e0ab5445ded16bcfedade"
 
 [[projects]]
   branch = "master"
@@ -252,12 +265,6 @@
   ]
   revision = "96e9bfc4ddaefc784b47b19d2b8e137d856eb10e"
   version = "v3.0.0"
-
-[[projects]]
-  branch = "master"
-  name = "github.com/lytics/logrus"
-  packages = ["."]
-  revision = "4389a17ed024d8d196b5541116151f378705b0cc"
 
 [[projects]]
   branch = "master"
@@ -314,6 +321,26 @@
   version = "v1.2.1"
 
 [[projects]]
+  name = "go.opencensus.io"
+  packages = [
+    "exporter/stackdriver/propagation",
+    "internal",
+    "internal/tagencoding",
+    "plugin/ocgrpc",
+    "plugin/ochttp",
+    "plugin/ochttp/propagation/b3",
+    "stats",
+    "stats/internal",
+    "stats/view",
+    "tag",
+    "trace",
+    "trace/internal",
+    "trace/propagation"
+  ]
+  revision = "0095aec66ae14801c6711210f6f0716411cefdd3"
+  version = "v0.8.0"
+
+[[projects]]
   branch = "master"
   name = "golang.org/x/net"
   packages = [
@@ -326,7 +353,7 @@
     "lex/httplex",
     "trace"
   ]
-  revision = "b417086c80e91bfa321ef761574721644b8b9f61"
+  revision = "61147c48b25b599e5b561d2e9c4f3e1ef489ca41"
 
 [[projects]]
   branch = "master"
@@ -338,16 +365,9 @@
     "jws",
     "jwt"
   ]
-  revision = "a032972e28060ca4f5644acffae3dfc268cc09db"
+  revision = "921ae394b9430ed4fb549668d7b087601bd60a81"
 
 [[projects]]
-  branch = "master"
-  name = "golang.org/x/sys"
-  packages = ["unix"]
-  revision = "37707fdb30a5b38865cfb95e5aab41707daec7fd"
-
-[[projects]]
-  branch = "master"
   name = "golang.org/x/text"
   packages = [
     "collate",
@@ -365,13 +385,15 @@
     "unicode/norm",
     "unicode/rangetable"
   ]
-  revision = "e19ae1496984b1c655b8044a65c0300a3c878dd3"
+  revision = "f21a4dfb5e38f5895301dc265a8def02365cc3d0"
+  version = "v0.3.0"
 
 [[projects]]
   branch = "master"
   name = "google.golang.org/api"
   packages = [
     "bigquery/v2",
+    "cloudresourcemanager/v1",
     "gensupport",
     "googleapi",
     "googleapi/internal/uritemplates",
@@ -384,7 +406,7 @@
     "transport/grpc",
     "transport/http"
   ]
-  revision = "f7618f4b41caffc0e9f141e6f67957587341dde2"
+  revision = "fca24fcb41126b846105a93fb9e30f416bdd55ce"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -415,11 +437,12 @@
     "googleapis/datastore/v1",
     "googleapis/iam/v1",
     "googleapis/longrunning",
+    "googleapis/rpc/code",
     "googleapis/rpc/status",
     "googleapis/type/latlng",
     "protobuf/field_mask"
   ]
-  revision = "4eb30f4778eed4c258ba66527a0d4f9ec8a36c45"
+  revision = "7fd901a49ba6a7f87732eb344f6e3c5b19d1b200"
 
 [[projects]]
   name = "google.golang.org/grpc"
@@ -433,6 +456,7 @@
     "credentials",
     "credentials/oauth",
     "encoding",
+    "encoding/proto",
     "grpclb/grpc_lb_v1/messages",
     "grpclog",
     "health/grpc_health_v1",
@@ -449,14 +473,14 @@
     "tap",
     "transport"
   ]
-  revision = "6b51017f791ae1cfbec89c52efdf444b13b550ef"
-  version = "v1.9.2"
+  revision = "d11072e7ca9811b1100b80ca0269ac831f06d024"
+  version = "v1.11.3"
 
 [[projects]]
   name = "gopkg.in/inf.v0"
   packages = ["."]
-  revision = "3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4"
-  version = "v0.9.0"
+  revision = "d2d2541c53f18d2a059457998ce2876cc8e67cbf"
+  version = "v0.9.1"
 
 [[projects]]
   branch = "v2"
@@ -473,6 +497,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "73986b14fa145bbfba034e335eefba7d4f5480afd29c83b18cb369ed241fe7b2"
+  inputs-digest = "08f9b62dadc1130ec4d2273b7df43521f9ab4adf76bdb7d9df6dd6db701c9a55"
   solver-name = "gps-cdcl"
   solver-version = 1

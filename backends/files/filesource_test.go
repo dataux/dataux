@@ -2,6 +2,7 @@ package files_test
 
 import (
 	"bufio"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"io/ioutil"
@@ -36,7 +37,7 @@ export TESTINT=1
 var (
 	testServicesRunning bool
 	localconfig         = &cloudstorage.Config{
-		Type:       google.StoreType,
+		Type:       localfs.StoreType,
 		AuthMethod: localfs.AuthFileSystem,
 		LocalFS:    "tables/",
 		TmpDir:     "/tmp/localcache",
@@ -56,7 +57,7 @@ func init() {
 	tu.Setup()
 }
 
-func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
+func jobMaker(ctx *plan.Context) (*planner.GridTask, error) {
 	ctx.Schema = testmysql.Schema
 	return planner.BuildSqlJob(ctx, testmysql.ServerCtx.PlanGrid)
 }
@@ -119,11 +120,11 @@ func createLocalStore() (cloudstorage.Store, error) {
 func clearStore(t *testing.T, store cloudstorage.Store) {
 	q := cloudstorage.Query{}
 	q.Sorted()
-	objs, err := store.List(q)
+	objr, err := store.List(context.Background(), q)
 	assert.True(t, err == nil)
-	for _, o := range objs {
+	for _, o := range objr.Objects {
 		u.Debugf("deleting %q", o.Name())
-		store.Delete(o.Name())
+		store.Delete(context.Background(), o.Name())
 	}
 
 	// if os.Getenv("TESTINT") != "" {
@@ -185,7 +186,7 @@ func createTestData(t *testing.T) {
 	obj.Close()
 
 	//Read the object back out of the cloud storage.
-	obj2, err := store.Get("tables/article/article1.csv")
+	obj2, err := store.Get(context.Background(), "tables/article/article1.csv")
 	assert.Equal(t, nil, err)
 
 	f2, err := obj2.Open(cloudstorage.ReadOnly)
@@ -226,7 +227,7 @@ func TestSelectFilesList(t *testing.T) {
 	}{}
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select file, `table`, size, partition from localfiles_files",
-		ExpectRowCt: 3,
+		ExpectRowCt: 2,
 		ValidateRowData: func() {
 			u.Infof("%v", data)
 			// assert.True(t, data.Deleted == false, "Not deleted? %v", data)

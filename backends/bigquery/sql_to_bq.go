@@ -86,7 +86,7 @@ func (m *SqlToBQ) queryRewrite(original *rel.SqlSelect) error {
 			fqn := m.schema.Conf.TableAliases[strings.ToLower(from.Name)]
 			if fqn != "" {
 				from.Name = fqn
-				u.Warnf("got a from: %q", fqn)
+				//u.Warnf("got a from: %q", fqn)
 			}
 		}
 	}

@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS event (
 	`truncate article`,
 }
 
-func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
+func jobMaker(ctx *plan.Context) (*planner.GridTask, error) {
 	ctx.Schema = testmysql.Schema
 	return planner.BuildSqlJob(ctx, testmysql.ServerCtx.PlanGrid)
 }

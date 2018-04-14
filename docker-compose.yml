@@ -5,6 +5,8 @@ services:
       - "9042"
     image: cassandra:2
     network_mode: "host"
+    environment:
+       "CASSANDRA_LISTEN_ADDRESS": "127.0.0.1"
   etcd:
     expose:
       - "2379"

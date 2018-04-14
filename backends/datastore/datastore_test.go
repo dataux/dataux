@@ -57,7 +57,7 @@ func loadEmulatorClient() (context.Context, *datastore.Client) {
 	ctx := context.Background()
 	client, err := datastore.NewClient(ctx, "lol")
 	if err != nil {
-		panic(fmt.Sprintf("could not create google datastore client: project:%s err=%v", err))
+		panic(fmt.Sprintf("could not create google datastore client: err=%v", err))
 	}
 	return ctx, client
 }
@@ -82,7 +82,7 @@ func loadJWTAuth(jsonKey []byte, projectId string) (context.Context, *datastore.
 	return ctx, client
 }
 
-func jobMaker(ctx *plan.Context) (*planner.ExecutorGrid, error) {
+func jobMaker(ctx *plan.Context) (*planner.GridTask, error) {
 	ctx.Schema = testmysql.Schema
 	return planner.BuildSqlJob(ctx, testmysql.ServerCtx.PlanGrid)
 }
