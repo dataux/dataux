@@ -8,9 +8,9 @@ import (
 
 	"github.com/araddon/dateparse"
 	u "github.com/araddon/gou"
+	"github.com/globalsign/mgo"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/mgo.v2"
 
 	_ "github.com/dataux/dataux/backends/elasticsearch"
 	_ "github.com/dataux/dataux/backends/mongo"
