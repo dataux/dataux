@@ -226,7 +226,7 @@ func (m *MySqlResultWriter) WriteHeaders() error {
 		if col.Col != nil {
 			as = col.Col.As
 		}
-		if _, exists := wasWriten[col.Name]; exists {
+		if _, exists := wasWriten[as]; exists {
 			continue
 		}
 		wasWriten[col.Name] = struct{}{}

@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	// implement interfaces
+	// ensure we implement schema.Source interfaces
 	_ schema.Source = (*Source)(nil)
 )
 
@@ -27,9 +27,8 @@ func init() {
 	schema.RegisterSourceType(SourceType, &Source{})
 }
 
-// Source is the Lytics data source provider
-// responsible for schema management, and connection
-// management to Lytics
+// Source is the Lytics data source provider responsible for
+// schema management, and connection management to Lytics API's.
 type Source struct {
 	schema   *schema.Schema
 	conf     *schema.ConfigSource
@@ -51,7 +50,7 @@ func (m *Source) Setup(ss *schema.Schema) error {
 	m.conf = ss.Conf
 	m.tablemap = make(map[string]*schema.Table)
 
-	u.Infof("%p Conf: %+v  settings:%v", ss, ss.Conf, ss.Conf.Settings)
+	u.Debugf("%p Conf: %+v  settings:%v", ss, ss.Conf, ss.Conf.Settings)
 	if ss.Conf != nil && len(ss.Conf.Settings) > 0 {
 		m.apiKey = ss.Conf.Settings.String("apikey")
 	}
@@ -63,20 +62,15 @@ func (m *Source) Setup(ss *schema.Schema) error {
 	}
 
 	m.client = lytics.NewLytics(m.apiKey, "", nil)
-	u.Debugf("Init() Lytics schema P=%p", m.schema)
-
 	if err := m.loadSchema(); err != nil {
 		u.Errorf("could not load es tables: %v", err)
 		return err
-	}
-	if m.schema != nil {
-		u.Debugf("Post Init() Lytics schema P=%p tblct=%d", m.schema, len(m.schema.Tables()))
 	}
 	return nil
 }
 
 func (m *Source) Open(schemaName string) (schema.Conn, error) {
-	u.Debugf("Open(%v)", schemaName)
+	//u.Debugf("Open(%v)", schemaName)
 	tbl, err := m.schema.Table(schemaName)
 	if err != nil {
 		return nil, err
@@ -91,7 +85,9 @@ func (m *Source) Open(schemaName string) (schema.Conn, error) {
 }
 
 // Close this source
-func (m *Source) Close() error { return nil }
+func (m *Source) Close() error {
+	return nil
+}
 
 //func (m *Source) DataSource() schema.Source { return m }
 
@@ -128,7 +124,7 @@ func (m *Source) loadSchema() error {
 			return err
 		}
 	}
-	u.Debugf("found tables: %v", m.tables)
+	//u.Debugf("found tables: %v", m.tables)
 	return nil
 }
 
@@ -137,8 +133,6 @@ func (m *Source) loadTableSchema(s *lytics.Schema) error {
 	tbl := schema.NewTable(s.Name)
 
 	for _, col := range s.Columns {
-
-		u.Infof("%#v", col)
 
 		var fld *schema.Field
 		switch col.Type {
@@ -158,6 +152,7 @@ func (m *Source) loadTableSchema(s *lytics.Schema) error {
 			"map[string]time", "map[string]string", "map[string]bool", "membership":
 			fld = schema.NewFieldBase(col.As, value.JsonType, 2000, col.ShortDesc)
 		case "[]timebucket", "dynamic":
+			// These types are not supported
 			continue
 		default:
 			u.Warnf("Unahndled type %v type=%v", col.As, col.Type)

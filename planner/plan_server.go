@@ -86,15 +86,16 @@ func NodeName2(id1, id2 uint64) string {
 // to registry, and other singleton resources. It starts the workers,
 // grid processes, watch to ensure it knows about the rest of the peers in the system.
 type PlannerGrid struct {
-	Conf       *Conf
-	reg        *schema.Registry
-	GridServer *grid.Server
-	gridClient *grid.Client
-	started    bool
-	lastTaskId uint64
-	mu         sync.Mutex
-	mailboxes  *mailboxPool
-	peers      *peerList
+	Conf            *Conf
+	reg             *schema.Registry
+	GridServer      *grid.Server
+	gridClient      *grid.Client
+	started         bool
+	lastTaskId      uint64
+	mu              sync.Mutex
+	mailboxes       *mailboxPool
+	peers           *peerList
+	cancelPeerWatch []context.CancelFunc
 }
 
 func NewPlannerGrid(nodeCt int, r *schema.Registry) *PlannerGrid {
@@ -106,9 +107,10 @@ func NewPlannerGrid(nodeCt int, r *schema.Registry) *PlannerGrid {
 	ctx := u.NewContext(context.Background(), "planner-grid")
 
 	return &PlannerGrid{
-		Conf:  conf,
-		reg:   r,
-		peers: newPeerList(ctx),
+		Conf:            conf,
+		reg:             r,
+		peers:           newPeerList(ctx),
+		cancelPeerWatch: make([]context.CancelFunc, 0),
 	}
 }
 
@@ -118,7 +120,7 @@ func (m *PlannerGrid) Run(quit chan bool) error {
 	logger := u.GetLogger()
 
 	// Connect to etcd.
-	u.Infof("etcdservers: %v", m.Conf.EtcdServers)
+	//u.Debugf("etcdservers: %v", m.Conf.EtcdServers)
 	etcd, err := etcdv3.New(etcdv3.Config{Endpoints: m.Conf.EtcdServers})
 	if err != nil {
 		u.Errorf("failed to start etcd client: %v", err)
@@ -151,13 +153,13 @@ func (m *PlannerGrid) Run(quit chan bool) error {
 
 	go func() {
 		time.Sleep(time.Millisecond * 100)
-		u.Infof("starting mailboxes")
+		//u.Debugf("starting mailboxes")
 		m.startMailboxes()
-		u.Infof("Watch for peers")
+		//u.Debugf("Watch for peers")
 		go m.watchPeers()
 
 	}()
-	u.Warnf("Starting Grid %q", m.Conf.Hostname)
+	//u.Debugf("Starting Grid %q", m.Conf.Hostname)
 	// Blocking call to serve
 	err = m.GridServer.Serve(lis)
 	if err != nil {
@@ -167,13 +169,20 @@ func (m *PlannerGrid) Run(quit chan bool) error {
 	return nil
 }
 
+func (m *PlannerGrid) close() {
+	defer func() { recover() }()
+	for _, cancel := range m.cancelPeerWatch {
+		cancel()
+	}
+}
 func (m *PlannerGrid) watchPeers() {
 	newPeer := func(e *peerEntry) {
-		u.Infof("new actor %+v", e)
+		u.Debugf("new actor %+v", e)
 	}
 
-	ctx, _ := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 	ctx = u.NewContext(ctx, "planner-grid")
+	m.cancelPeerWatch = append(m.cancelPeerWatch, cancel)
 
 	// long running watch
 	m.peers.watchPeers(ctx, m.gridClient, newPeer)
@@ -225,7 +234,6 @@ func (m *PlannerGrid) startMailboxes() {
 			u.Warnf("wtf? %v", err)
 			break
 		} else {
-			u.Debugf("nice, created mailboxes")
 			m.mailboxes.ready = true
 			break
 		}

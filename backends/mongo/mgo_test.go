@@ -595,6 +595,23 @@ func TestSelectAggsGroupBy(t *testing.T) {
 	})
 }
 */
+
+func TestSelectGroupByProject1(t *testing.T) {
+	data := struct {
+		Ct     int    `db:"author_ct"`
+		Author string `db:"author"`
+	}{}
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select author, count(author) AS author_ct from article WHERE `author` = \"bjorn\" GROUP BY author ;",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			u.Infof("%v", data)
+			assert.Equal(t, 2, data.Ct)
+		},
+		RowData: &data,
+	})
+}
+
 func TestSelectWhereCompare(t *testing.T) {
 	data := struct {
 		Title   string

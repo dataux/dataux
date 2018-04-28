@@ -162,7 +162,7 @@ func (m *Source) connect() error {
 
 	host := chooseBackend(m.db, m.srcschema)
 
-	u.Debugf("connecting MongoDataSource: host='%s'  conf=%#v", host, m.srcschema.Conf)
+	//u.Debugf("connecting MongoDataSource: host='%s'  conf=%#v", host, m.srcschema.Conf)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

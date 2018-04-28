@@ -29,7 +29,7 @@
   branch = "master"
   name = "github.com/araddon/dateparse"
   packages = ["."]
-  revision = "b8014f0dba20b1727542b246efef132591129df7"
+  revision = "4b079c6fdd8d7d3e224357566f278da3c159f441"
 
 [[projects]]
   branch = "master"
@@ -58,7 +58,7 @@
     "value",
     "vm"
   ]
-  revision = "bd14c5452818c314e6c3207689bdef417a15a930"
+  revision = "47badfabaad439590551de10e00a74bbff933c45"
 
 [[projects]]
   branch = "master"
@@ -76,8 +76,8 @@
     "mvcc/mvccpb",
     "pkg/types"
   ]
-  revision = "e348b1aedd9167360c466ae98f7343d3e22281f8"
-  version = "v3.3.3"
+  revision = "fdde8705f5bf9a6d9dbfb0220caf2ee1ac816be8"
+  version = "v3.3.4"
 
 [[projects]]
   name = "github.com/davecgh/go-spew"
@@ -101,7 +101,7 @@
     "internal/sasl",
     "internal/scram"
   ]
-  revision = "f76e4f9da92ecd56e3be26f5ba92580af1ef97b4"
+  revision = "efe0945164a7e582241f37ae8983c075f8f2e870"
 
 [[projects]]
   name = "github.com/go-sql-driver/mysql"
@@ -118,7 +118,7 @@
     "internal/murmur",
     "internal/streams"
   ]
-  revision = "fa516cf7b8863ae9110072ca4368f6b1693e03c2"
+  revision = "4ba1af8a026b230ce3c646e594865c07ce01b541"
 
 [[projects]]
   name = "github.com/gogo/protobuf"
@@ -230,7 +230,7 @@
     "google",
     "localfs"
   ]
-  revision = "74b8b471b489476dbcd6683dd091398ebfa25b8c"
+  revision = "fffb08af5ed549e09aa1ab2837efbc4beb7415df"
 
 [[projects]]
   branch = "master"
@@ -346,6 +346,7 @@
   packages = [
     "context",
     "context/ctxhttp",
+    "http/httpguts",
     "http2",
     "http2/hpack",
     "idna",
@@ -353,7 +354,7 @@
     "lex/httplex",
     "trace"
   ]
-  revision = "61147c48b25b599e5b561d2e9c4f3e1ef489ca41"
+  revision = "5f9ae10d9af5b1c89ae6904293b14b064d4ada23"
 
 [[projects]]
   branch = "master"
@@ -365,7 +366,7 @@
     "jws",
     "jwt"
   ]
-  revision = "921ae394b9430ed4fb549668d7b087601bd60a81"
+  revision = "6881fee410a5daf86371371f9ad451b95e168b71"
 
 [[projects]]
   name = "golang.org/x/text"
@@ -406,7 +407,7 @@
     "transport/grpc",
     "transport/http"
   ]
-  revision = "fca24fcb41126b846105a93fb9e30f416bdd55ce"
+  revision = "a12439171c62991c8a4fd19686b7f4d6c8ecf850"
 
 [[projects]]
   name = "google.golang.org/appengine"
@@ -442,7 +443,7 @@
     "googleapis/type/latlng",
     "protobuf/field_mask"
   ]
-  revision = "7fd901a49ba6a7f87732eb344f6e3c5b19d1b200"
+  revision = "86e600f69ee4704c6efbf6a2a40a5c10700e76c2"
 
 [[projects]]
   name = "google.golang.org/grpc"

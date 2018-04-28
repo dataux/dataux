@@ -45,7 +45,7 @@ func (a *LeaderActor) Act(ctx context.Context) {
 
 	//a.logctx = u.FromContext(ctx)
 
-	u.Debugf("%s leader ACT", a.logctx)
+	//u.Debugf("%s leader ACT", a.logctx)
 
 	newPeer := func(e *peerEntry) {
 
@@ -151,7 +151,7 @@ func (s *peerList) GetPeers(ct int) []int {
 
 func (p *peerList) watchPeers(ctx context.Context, client *grid.Client, onNew NewPeer) {
 
-	u.Infof("%s %p Starting Peer Watch %#v", p.logctx, p, p)
+	//u.Debugf("%s %p Starting Peer Watch %#v", p.logctx, p, p)
 
 	// Ask for current peers.
 	peers, watch, err := client.QueryWatch(ctx, grid.Peers)
@@ -169,7 +169,7 @@ func (p *peerList) watchPeers(ctx context.Context, client *grid.Client, onNew Ne
 	for _, peer := range peers {
 		if e, ok := p.entries[peer.Name()]; ok {
 			e.found = true
-			u.Infof("%s found existing peer %s", p.logctx, peer.Name())
+			//u.Debugf("%s found existing peer %s", p.logctx, peer.Name())
 			continue
 		}
 
@@ -180,7 +180,7 @@ func (p *peerList) watchPeers(ctx context.Context, client *grid.Client, onNew Ne
 		}
 		p.add(e)
 
-		u.Debugf("%s %p found new worker sqlworker-%v  %v len(peers)=%d", p.logctx, p, e.id, peer.Name(), len(p.l))
+		//u.Debugf("%s %p found new worker sqlworker-%v  %v len(peers)=%d", p.logctx, p, e.id, peer.Name(), len(p.l))
 
 		onNew(e)
 	}
@@ -195,16 +195,16 @@ func (p *peerList) watchPeers(ctx context.Context, client *grid.Client, onNew Ne
 
 	p.mu.Unlock()
 
-	u.Infof("%s %p starting watch events %#v", p.logctx, p, p)
+	//u.Debugf("%s %p starting watch events %#v", p.logctx, p, p)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case event := <-watch:
-			u.Infof("event %v", event)
+			//u.Debugf("event %v", event)
 			p.mu.Lock()
-			u.Infof("event %v", event)
+			//u.Debugf("event %v", event)
 			switch event.Type {
 			case grid.WatchError:
 				// Error occured watching peers, deal with error.

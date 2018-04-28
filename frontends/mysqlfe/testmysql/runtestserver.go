@@ -109,7 +109,7 @@ func startServer(db string) {
 		}
 
 		planner.GridConf.EtcdServers = Conf.Etcd
-		u.Infof("etcd hosts: %v", planner.GridConf.EtcdServers)
+		//u.Infof("etcd hosts: %v", planner.GridConf.EtcdServers)
 
 		ServerCtx = models.NewServerCtx(Conf)
 		ServerCtx.Init()
@@ -129,8 +129,6 @@ func startServer(db string) {
 		}
 
 		go svr.Run()
-
-		u.Debugf("starting server")
 
 		// delay to ensure we have time to connect
 		time.Sleep(1000 * time.Millisecond)

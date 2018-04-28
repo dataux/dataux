@@ -2,6 +2,8 @@ package lytics_test
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/araddon/qlbridge/plan"
+	"github.com/araddon/qlbridge/schema"
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
 	"github.com/dataux/dataux/planner"
 	"github.com/dataux/dataux/testutil"
@@ -37,6 +40,31 @@ func RunTestServer(t *testing.T) func() {
 		planner.GridConf.JobMaker = jobMaker
 		planner.GridConf.SchemaLoader = testmysql.SchemaLoader
 		planner.GridConf.SupressRecover = testmysql.Conf.SupressRecover
+
+		reg := schema.DefaultRegistry()
+
+		by := []byte(fmt.Sprintf(`{
+			"name": "lytics_test",
+			"schema":"lyticsx",
+			"type": "lytics",
+			"settings" :{
+					"apikey" : "%s"
+			}
+		  }`, os.Getenv("LIOTESTKEY")))
+
+		sourceConf := &schema.ConfigSource{}
+		err := json.Unmarshal(by, sourceConf)
+		assert.Equal(t, nil, err)
+		err = reg.SchemaAddFromConfig(sourceConf)
+		assert.Equal(t, nil, err)
+
+		s, ok := reg.Schema("lyticsx")
+		assert.Equal(t, true, ok)
+		assert.NotEqual(t, nil, s)
+
+		// Setup test schema
+		testmysql.Schema = s
+
 		testmysql.RunTestServer(t)
 	}
 	return func() {}
@@ -61,14 +89,14 @@ func validateQuery(t *testing.T, querySql string, expectCols []string, expectCol
 
 func validateQuerySpec(t *testing.T, testSpec QuerySpec) {
 
-	if os.Getenv("LIOKEY") == "" {
-		t.Skip("No LIOKEY to run tests")
+	if os.Getenv("LIOTESTKEY") == "" {
+		t.Skip("No LIOTESTKEY to run tests")
 		return
 	}
 	RunTestServer(t)
 
 	// This is a connection to RunTestServer, which starts on port 13307
-	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/datauxtest")
+	dbx, err := sqlx.Connect("mysql", "root@tcp(127.0.0.1:13307)/lyticsx")
 	assert.True(t, err == nil, "%v", err)
 	defer dbx.Close()
 	//u.Debugf("%v", testSpec.Sql)

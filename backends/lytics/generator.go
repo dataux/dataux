@@ -3,8 +3,6 @@ package lytics
 import (
 	"fmt"
 
-	u "github.com/araddon/gou"
-
 	"github.com/araddon/qlbridge/exec"
 	"github.com/araddon/qlbridge/expr"
 	"github.com/araddon/qlbridge/plan"
@@ -42,7 +40,6 @@ type Generator struct {
 	tbl           *schema.Table
 	sel           *rel.SqlSelect
 	schema        *schema.Schema
-	ctx           *plan.Context
 	partition     *schema.Partition // current partition for this request
 	needsPolyFill bool              // do we request that features be polyfilled?
 	apiKey        string
@@ -70,6 +67,10 @@ func (m *Generator) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan
 // WalkExecSource allow this to do its own Exec planning.
 func (m *Generator) WalkExecSource(p *plan.Source) (exec.Task, error) {
 
+	if p.Context() == nil {
+		return nil, fmt.Errorf("Missing plan context")
+	}
+
 	if p.Stmt == nil {
 		return nil, fmt.Errorf("Plan did not include Sql Statement?")
 	}
@@ -77,8 +78,6 @@ func (m *Generator) WalkExecSource(p *plan.Source) (exec.Task, error) {
 		return nil, fmt.Errorf("Plan did not include Sql Select Statement?")
 	}
 	if m.p == nil {
-		u.Debugf("custom? %v", p.Custom)
-
 		m.p = p
 		if p.Custom.Bool("poly_fill") {
 			m.needsPolyFill = true

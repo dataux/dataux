@@ -32,7 +32,7 @@ docker run --rm -e "LOGGING=debug" -p 4000:4000 --name dataux gcr.io/dataux-io/d
 mysql -h 127.0.0.1 -P4000
 
 
--- Get api key from Account in Lytics
+-- Create api key from Api-Tokens in Lytics
 
 CREATE source lytics WITH {
   "type":"lytics", 
@@ -55,6 +55,7 @@ select * from user WHERE EXISTS email limit 10;
 
 TODO
 ------------------------
+* SELECT single entities.
 * handle ending paging/limits (ie, don't open cursors)
 * paging segment scans efficiently
 * Select INTO (mytable)

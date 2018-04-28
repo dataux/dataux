@@ -19,7 +19,7 @@ var (
 	_ exec.TaskRunner = (*ResultReader)(nil)
 )
 
-// Mongo ResultReader implements result paging, reading
+// ResultReader Mongo implements result paging, reading
 // - driver.Rows
 type ResultReader struct {
 	*exec.TaskBase
@@ -35,8 +35,8 @@ type ResultReader struct {
 	sql       *SqlToMgo
 }
 
-// A wrapper, allowing us to implement sql/driver Next() interface
-//   which is different than qlbridge/datasource Next()
+// ResultReaderNext a wrapper, allowing us to implement sql/driver Next() interface
+// which is different than qlbridge/datasource Next()
 type ResultReaderNext struct {
 	*ResultReader
 }
@@ -66,12 +66,9 @@ func (m *ResultReader) Run() error {
 	defer func() {
 		close(outCh) // closing output channels is the signal to stop
 		//m.TaskBase.Close()
-		//u.Debugf("nice, finalize ResultReader out: %p  row ct %v", outCh, len(m.Vals))
 	}()
 
 	m.finalized = true
-
-	//u.LogTracef(u.WARN, "hello")
 
 	sql := m.sql.sel
 	if sql == nil {
@@ -103,12 +100,10 @@ func (m *ResultReader) Run() error {
 		// are not projected
 		for i, col := range cols {
 			colNames[col.Col.SourceField] = i
-			//u.Debugf("%d col: %s %#v", i, col.As, col)
 		}
 	} else {
 		for i, col := range cols {
 			colNames[col.As] = i
-			//u.Debugf("%d col: %s %#v", i, col.As, col)
 		}
 	}
 
@@ -149,10 +144,8 @@ func (m *ResultReader) Run() error {
 		if !iter.Next(&bm) {
 			break
 		}
-		//u.Debugf("col? %v", bm)
 		vals := make([]driver.Value, len(cols))
 		for i, col := range cols {
-			//u.Debugf("col source:%s   %s", col.Col.SourceField, col.Col)
 			if val, ok := bm[col.SourceName()]; ok {
 				switch vt := val.(type) {
 				case bson.ObjectId:
@@ -166,7 +159,7 @@ func (m *ResultReader) Run() error {
 						vals[i] = by
 					}
 				default:
-					//u.Warnf("? %v %T", col, vt)
+					// u.Warnf("col=%d  ? %v type=%q  T=%T", i, col, col.Type.String(), vt)
 					vals[i] = vt
 				}
 
@@ -190,7 +183,6 @@ func (m *ResultReader) Run() error {
 			// continue
 		}
 	}
-	//u.Debugf("about to close")
 	if err := iter.Close(); err != nil {
 		u.Errorf("could not iter: %v", err)
 		return err

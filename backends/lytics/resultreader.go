@@ -39,7 +39,7 @@ type ResultReaderNext struct {
 
 func NewResultReader(req *Generator) *ResultReader {
 	m := &ResultReader{}
-	m.TaskBase = exec.NewTaskBase(req.ctx)
+	m.TaskBase = exec.NewTaskBase(req.p.Context())
 	m.Req = req
 	return m
 }
@@ -63,22 +63,17 @@ func (m *ResultReader) Run() error {
 
 	defer func() {
 		close(outCh) // closing output channels is the signal to stop
-		u.Debugf("nice, finalize ResultReader out: %p  row ct %v", outCh, len(m.Vals))
 	}()
 
 	// create the scanner
 	scan := client.PageAdHocSegment(m.Req.ql.String())
-
 	rowCt := 0
-
 	// handle processing the entities
 	for {
 		e := scan.Next()
 		if e == nil {
 			break
 		}
-
-		//u.Debugf("%v\n\n", e.PrettyJson())
 
 		row := make([]driver.Value, len(colNames))
 		eh := u.JsonHelper(e)
@@ -112,7 +107,6 @@ func (m *ResultReader) Run() error {
 				u.Warnf("unhandled %s", col.Type)
 				row[i] = eh.PrettyJson()
 			}
-
 			//u.Debugf("%q  %T  %v", col.As, row[i], row[i])
 		}
 

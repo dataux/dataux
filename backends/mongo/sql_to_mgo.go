@@ -74,7 +74,7 @@ func (m *SqlToMgo) Columns() []string { return m.tbl.Columns() }
 // to push down as much logic into mongo as possible
 func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.Task, error) {
 
-	u.Debugf("WalkSourceSelect %p", m)
+	//u.Debugf("WalkSourceSelect %p", m)
 	p.Conn = m
 
 	if len(p.Custom) == 0 {
@@ -128,7 +128,6 @@ func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.
 		}
 	}
 
-	u.Debugf("OrderBy? %v", len(m.sel.OrderBy))
 	if len(m.sel.OrderBy) > 0 {
 		m.sort = make([]bson.M, len(m.sel.OrderBy))
 		for i, col := range m.sel.OrderBy {
@@ -328,7 +327,6 @@ func (m *SqlToMgo) walkGroupBy() error {
 
 	for i, col := range m.sel.GroupBy {
 		if col.Expr != nil {
-			u.Infof("Walk group by %s  %T", col.Expr.String(), col.Expr)
 			switch col.Expr.(type) {
 			case *expr.IdentityNode, *expr.FuncNode:
 				esm := bson.M{}
