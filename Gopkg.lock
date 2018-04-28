@@ -2,6 +2,7 @@
 
 
 [[projects]]
+  branch = "master"
   name = "cloud.google.com/go"
   packages = [
     "bigquery",
@@ -22,8 +23,7 @@
     "longrunning/autogen",
     "storage"
   ]
-  revision = "29f476ffa9c4cd4fd14336b6043090ac1ad76733"
-  version = "v0.21.0"
+  revision = "82e4644f7eeb5bc6dadc46eb79c2772b96dea163"
 
 [[projects]]
   branch = "master"
@@ -486,6 +486,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "8d1653446f36b4e19adc161744b817d64277b1175220e079a4e910be47036ec0"
+  inputs-digest = "686aab6db9a1f80da5df68c5534737a4724d07e9d1cdc601a16137c5ca37b777"
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -27,7 +27,8 @@
 
 [[constraint]]
   name = "cloud.google.com/go"
-  version = "0.21.0"
+  # version = "0.21.0" on April 28 v0.21.0 won't build with google.golang.org/api
+  branch = "master"
 
 [[constraint]]
   branch = "master"
@@ -43,7 +44,7 @@
 
 [[constraint]]
   name = "github.com/coreos/etcd"
-  version = "3.3.3"
+  version = "3.3.4"
 
 [[constraint]]
   branch = "master"
