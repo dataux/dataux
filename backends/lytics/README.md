@@ -2,7 +2,7 @@
 
 Lytics Source
 ---------------------------
-Query [Lytics Api](https://www.getlytics.com/developers/rest-api#segment-scan) 
+Query [Lytics Api](https://www.lytics.com/developers/rest-api#segment-scan) 
 Or more specifically the Segment Scan api.
 
 Use SQL To query the api and via the mysql protocol, uses Secure HTTPS
