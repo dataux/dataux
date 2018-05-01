@@ -42,14 +42,16 @@ dockerbuild() {
   # if you get auth issues
   #
   #  rm ~/.docker/config.json
-  #  gcloud docker --authorize-only
+  #  gcloud auth configure-docker
+
 
   docker build -t gcr.io/dataux-io/dataux:$TAG .
-  gcloud docker -- push gcr.io/dataux-io/dataux:$TAG
+  #gcloud docker -- push gcr.io/dataux-io/dataux:$TAG
+  docker push gcr.io/dataux-io/dataux:$TAG
 
   docker tag gcr.io/dataux-io/dataux:$TAG gcr.io/dataux-io/dataux:latest
   #docker build -t gcr.io/dataux-io/dataux:latest .
-  gcloud docker -- push gcr.io/dataux-io/dataux:latest
+  docker push gcr.io/dataux-io/dataux:latest
 
   # now lets allow anyone to read these gcr images
   #  https://cloud.google.com/container-registry/docs/access-control

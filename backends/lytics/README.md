@@ -21,7 +21,7 @@ We are going to add an additional source (Lytics) via a `SQL CREATE` statement.
 ```sh
 
 docker pull gcr.io/dataux-io/dataux:latest
-docker run --rm -e "LOGGING=debug" -p 4000:4000 --name dataux gcr.io/dataux-io/dataux:latest
+docker run --rm -e "LOGGING=debug" -p 4000:4000 --network host --name dataux gcr.io/dataux-io/dataux:latest
 
 ```
 

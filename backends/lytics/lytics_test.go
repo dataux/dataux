@@ -44,7 +44,7 @@ func RunTestServer(t *testing.T) func() {
 		reg := schema.DefaultRegistry()
 
 		by := []byte(fmt.Sprintf(`{
-			"name": "lytics_test",
+			"name": "lyticsx",
 			"schema":"lyticsx",
 			"type": "lytics",
 			"settings" :{
@@ -183,6 +183,23 @@ func TestSimpleRowSelect(t *testing.T) {
 		ValidateRowData: func() {
 			//u.Infof("%v", data)
 			assert.True(t, data.UserId == "triggers123", "%v", data)
+		},
+		RowData: &data,
+	})
+}
+
+func TestSelectProjection(t *testing.T) {
+	data := struct {
+		UserId  string `db:"user_id"`
+		LoginCt int    `db:"login_ct"`
+	}{}
+	validateQuerySpec(t, QuerySpec{
+		Sql:         `select toint(json.jmespath(events,"login")) AS login_ct, user_id from user WHERE user_id = "user123";`,
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			//u.Infof("%v", data)
+			assert.Equal(t, "user123", data.UserId, "%v", data)
+			assert.Equal(t, 1, data.LoginCt, "%v", data)
 		},
 		RowData: &data,
 	})
