@@ -13,7 +13,10 @@ func needsFinalProjection(s *rel.SqlSelect) bool {
 	if s.Having != nil {
 		return true
 	}
-	// Where?
+	// if s.Where != nil {
+	// 	return true
+	// }
+
 	if len(s.OrderBy) > 0 {
 		return true
 	}
@@ -35,10 +38,15 @@ func (m *PlannerDefault) WalkSelect(p *Select) error {
 		return m.WalkLiteralQuery(p)
 
 	} else if len(p.Stmt.From) == 1 {
+		// TODO:   move to a Finalize() in query planner
+		// p.Stmt.From[0].Source = p.Stmt
+		from := p.Stmt.From[0]
+		from.Source = p.Stmt
+		//u.Infof("---PRE  %#v", from)
+		//from.Rewrite(p.Stmt)
+		//u.Infof("---POST %#v", from)
+		srcPlan, err := NewSource(m.Ctx, from, true)
 
-		p.Stmt.From[0].Source = p.Stmt // TODO:   move to a Finalize() in query planner
-
-		srcPlan, err := NewSource(m.Ctx, p.Stmt.From[0], true)
 		if err != nil {
 			return err
 		}
@@ -51,6 +59,7 @@ func (m *PlannerDefault) WalkSelect(p *Select) error {
 		}
 
 		if srcPlan.Complete && !needsFinalProjection(p.Stmt) {
+			u.Warnf("complete go add final projection")
 			goto finalProjection
 		}
 
@@ -127,6 +136,7 @@ func (m *PlannerDefault) WalkSelect(p *Select) error {
 
 finalProjection:
 	if m.Ctx.Projection == nil {
+		u.Warnf("adding final projection")
 		proj, err := NewProjectionFinal(m.Ctx, p)
 		//u.Infof("Projection:  %T:%p   %T:%p", proj, proj, proj.Proj, proj.Proj)
 		if err != nil {
