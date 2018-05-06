@@ -29,7 +29,6 @@ func (m *PlannerDefault) WalkSelect(p *Select) error {
 	// u.Debugf("VisitSelect ctx:%p  %+v", p.Ctx, p.Stmt)
 
 	needsFinalProject := true
-	//needsWhere := false
 
 	if len(p.Stmt.From) == 0 {
 
@@ -37,9 +36,8 @@ func (m *PlannerDefault) WalkSelect(p *Select) error {
 
 	} else if len(p.Stmt.From) == 1 {
 
-		// TODO:   move to a Finalize() in query planner
-		from := p.Stmt.From[0]
-		from.Rewrite(p.Stmt)
+		p.Stmt.From[0].Source = p.Stmt // TODO:   move to a Finalize() in query planner
+
 		srcPlan, err := NewSource(m.Ctx, p.Stmt.From[0], true)
 		if err != nil {
 			return err
@@ -52,12 +50,10 @@ func (m *PlannerDefault) WalkSelect(p *Select) error {
 			return err
 		}
 
-		//&& !needsFinalProjection(p.Stmt)
-		if srcPlan.Complete {
-			u.Warnf("go to final project")
+		if srcPlan.Complete && !needsFinalProjection(p.Stmt) {
 			goto finalProjection
 		}
-		u.Warnf("got source now adding more complete? %v", srcPlan.Complete)
+
 	} else {
 
 		var prevSource *Source
@@ -95,7 +91,6 @@ func (m *PlannerDefault) WalkSelect(p *Select) error {
 	}
 
 	if p.Stmt.Where != nil {
-		u.Warnf("adding where?")
 		switch {
 		case p.Stmt.Where.Source != nil:
 			// SELECT id from article WHERE id in (select article_id from comments where comment_ct > 50);
@@ -110,7 +105,7 @@ func (m *PlannerDefault) WalkSelect(p *Select) error {
 	}
 
 	if p.Stmt.IsAggQuery() {
-		u.Debugf("Adding aggregate/group by? %#v", m.Planner)
+		//u.Debugf("Adding aggregate/group by? %#v", m.Planner)
 		p.Add(NewGroupBy(p.Stmt))
 		needsFinalProject = false
 	}
@@ -124,7 +119,6 @@ func (m *PlannerDefault) WalkSelect(p *Select) error {
 	}
 
 	if needsFinalProject {
-		u.Infof("adding final project?")
 		err := m.WalkProjectionFinal(p)
 		if err != nil {
 			return err
@@ -134,7 +128,7 @@ func (m *PlannerDefault) WalkSelect(p *Select) error {
 finalProjection:
 	if m.Ctx.Projection == nil {
 		proj, err := NewProjectionFinal(m.Ctx, p)
-		u.Infof("Projection:  %T:%p   %T:%p", proj, proj, proj.Proj, proj.Proj)
+		//u.Infof("Projection:  %T:%p   %T:%p", proj, proj, proj.Proj, proj.Proj)
 		if err != nil {
 			u.Errorf("projection error? %v", err)
 			return err
@@ -150,7 +144,7 @@ finalProjection:
 func (m *PlannerDefault) WalkProjectionFinal(p *Select) error {
 	// Add a Final Projection to choose the columns for results
 	proj, err := NewProjectionFinal(m.Ctx, p)
-	u.Infof("Projection:  %T:%p   %T:%p", proj, proj, proj.Proj, proj.Proj)
+	//u.Infof("Projection:  %T:%p   %T:%p", proj, proj, proj.Proj, proj.Proj)
 	if err != nil {
 		return err
 	}
@@ -177,9 +171,9 @@ func buildColIndex(colSchema schema.ConnColumns, p *Source) error {
 func (m *PlannerDefault) WalkSourceSelect(p *Source) error {
 
 	if p.Stmt.Source != nil {
-		u.Debugf("%p VisitSubselect from.source = %q", p, p.Stmt.Source)
+		//u.Debugf("%p VisitSubselect from.source = %q", p, p.Stmt.Source)
 	} else {
-		u.Debugf("%p VisitSubselect from=%q", p, p)
+		//u.Debugf("%p VisitSubselect from=%q", p, p)
 	}
 
 	// All of this is plan info, ie needs JoinKey
@@ -189,7 +183,7 @@ func (m *PlannerDefault) WalkSourceSelect(p *Source) error {
 	}
 
 	// We need to build a ColIndex of source column/select/projection column
-	u.Debugf("datasource? %#v", p.Conn)
+	//u.Debugf("datasource? %#v", p.Conn)
 	if p.Conn == nil {
 		err := p.LoadConn()
 		if err != nil {

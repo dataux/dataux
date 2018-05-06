@@ -154,11 +154,9 @@ func projectionForSourcePlan(plan *Source) error {
 	// do not have to have pre-defined data in advance, in which case the schema output
 	// will not be deterministic on the sql []driver.values
 
-	//idents := expr.FindAllIdentityField()
-
 	for _, col := range plan.Stmt.Source.Columns {
 
-		u.Debugf("col: %v  star?%v", col, col.Star)
+		//u.Debugf("col: %v  star?%v", col, col.Star)
 		if plan.Tbl == nil {
 			if plan.Final {
 				if col.InFinalProjection() {

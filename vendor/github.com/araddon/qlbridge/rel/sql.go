@@ -1551,7 +1551,6 @@ func (m *SqlSource) Rewrite(parentStmt *SqlSelect) *SqlSelect {
 				col.ParentIndex = parentIdx
 				parentIdx++
 				sql2.Columns = append(sql2.Columns, col)
-				u.Warnf("adding col %+v to source", col)
 			}
 		}
 	}

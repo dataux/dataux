@@ -23,13 +23,13 @@
     "longrunning/autogen",
     "storage"
   ]
-  revision = "82e4644f7eeb5bc6dadc46eb79c2772b96dea163"
+  revision = "bdefed94861a12abb9c2286a929e74834f0babf6"
 
 [[projects]]
   branch = "master"
   name = "github.com/araddon/dateparse"
   packages = ["."]
-  revision = "4b079c6fdd8d7d3e224357566f278da3c159f441"
+  revision = "1e64c9214ab00f5ed65d81b8d4db2f6496aa2065"
 
 [[projects]]
   branch = "master"
@@ -58,7 +58,7 @@
     "value",
     "vm"
   ]
-  revision = "47badfabaad439590551de10e00a74bbff933c45"
+  revision = "f27c064bf7ecbe4f3ce58bf1256e2cdd99c47009"
 
 [[projects]]
   branch = "master"
@@ -118,7 +118,7 @@
     "internal/murmur",
     "internal/streams"
   ]
-  revision = "4ba1af8a026b230ce3c646e594865c07ce01b541"
+  revision = "fd286400aded7929877665feca1a94e834edd109"
 
 [[projects]]
   name = "github.com/gogo/protobuf"
@@ -143,8 +143,8 @@
     "ptypes/timestamp",
     "ptypes/wrappers"
   ]
-  revision = "925541529c1fa6821df4e44ce2723319eb2be768"
-  version = "v1.0.0"
+  revision = "b4deda0973fb4c70b50d226b1af49f3da59f5265"
+  version = "v1.1.0"
 
 [[projects]]
   branch = "master"
@@ -204,16 +204,16 @@
   revision = "2aeb6a910c2b94f2d5eb53d9895d80e27264ec41"
 
 [[projects]]
-  branch = "master"
   name = "github.com/kr/pretty"
   packages = ["."]
-  revision = "cfb55aafdaf3ec08f0db22699ab822c50091b1c4"
+  revision = "73f6ac0b30a98e433b289500d779f50c1a6f0712"
+  version = "v0.1.0"
 
 [[projects]]
-  branch = "master"
   name = "github.com/kr/text"
   packages = ["."]
-  revision = "7cafcd837844e784b526369c9bce262804aebc60"
+  revision = "e2ffdb16a802fe2bb95e2e35ff34f0e53aeef34f"
+  version = "v0.1.0"
 
 [[projects]]
   branch = "master"
@@ -230,7 +230,7 @@
     "google",
     "localfs"
   ]
-  revision = "fffb08af5ed549e09aa1ab2837efbc4beb7415df"
+  revision = "bab6fd68efc257f0e75adf4a978f6f192fcf9a62"
 
 [[projects]]
   branch = "master"
@@ -337,8 +337,8 @@
     "trace/internal",
     "trace/propagation"
   ]
-  revision = "0095aec66ae14801c6711210f6f0716411cefdd3"
-  version = "v0.8.0"
+  revision = "10cec2c05ea2cfb8b0d856711daedc49d8a45c56"
+  version = "v0.9.0"
 
 [[projects]]
   branch = "master"
@@ -354,7 +354,7 @@
     "lex/httplex",
     "trace"
   ]
-  revision = "5f9ae10d9af5b1c89ae6904293b14b064d4ada23"
+  revision = "640f4622ab692b87c2f3a94265e6f579fe38263d"
 
 [[projects]]
   branch = "master"
@@ -366,7 +366,7 @@
     "jws",
     "jwt"
   ]
-  revision = "6881fee410a5daf86371371f9ad451b95e168b71"
+  revision = "cdc340f7c179dbbfa4afd43b7614e8fcadde4269"
 
 [[projects]]
   name = "golang.org/x/text"
@@ -407,7 +407,7 @@
     "transport/grpc",
     "transport/http"
   ]
-  revision = "a12439171c62991c8a4fd19686b7f4d6c8ecf850"
+  revision = "20530fd5d65ad2caee87891f9896d7547cb400c9"
 
 [[projects]]
   name = "google.golang.org/appengine"
