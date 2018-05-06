@@ -1,0 +1,6 @@
+TAGS
+tags
+.*.swp
+
+/confl-fuzz.zip
+/fuzz

@@ -446,6 +446,19 @@ func TestSimpleRowSelect(t *testing.T) {
 		RowData: &data,
 	})
 
+	data2 := struct {
+		Name string
+	}{}
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select json.jmespath(body,\"name\") AS name FROM article WHERE `author` = \"aaron\";",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			u.Infof("%v", data2)
+			assert.Equal(t, "morestuff", data2.Name, "%v", data2)
+		},
+		RowData: &data2,
+	})
+
 	return
 
 	// The problem here is ??  related to the mysql/mysqlx/type etc, the values are being written

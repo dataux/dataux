@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
@@ -99,7 +100,7 @@ func (m *ResultReader) Run() error {
 		// since we are asking for poly-fill, the col names
 		// are not projected
 		for i, col := range cols {
-			colNames[col.Col.SourceField] = i
+			colNames[col.SourceName()] = i
 		}
 	} else {
 		for i, col := range cols {
@@ -136,7 +137,7 @@ func (m *ResultReader) Run() error {
 		u.Errorf("WTF?  no cols? %v", cols)
 	}
 
-	//n := time.Now()
+	n := time.Now()
 	m.Vals = make([][]driver.Value, 0)
 	iter := m.query.Iter()
 	for {
@@ -145,6 +146,7 @@ func (m *ResultReader) Run() error {
 			break
 		}
 		vals := make([]driver.Value, len(cols))
+		u.Infof("found row %#v", bm)
 		for i, col := range cols {
 			if val, ok := bm[col.SourceName()]; ok {
 				switch vt := val.(type) {
@@ -172,7 +174,7 @@ func (m *ResultReader) Run() error {
 			}
 		}
 		m.Vals = append(m.Vals, vals)
-		//u.Debugf("new row ct: %v cols:%v vals:%v", len(m.Vals), colNames, vals)
+		u.Debugf("new row ct: %v cols:%v vals:%v", len(m.Vals), colNames, vals)
 		//msg := &datasource.SqlDriverMessage{vals, len(m.Vals)}
 		msg := datasource.NewSqlDriverMessageMap(uint64(len(m.Vals)), vals, colNames)
 		//u.Debugf("mongo result msg out %#v", msg)
@@ -187,6 +189,6 @@ func (m *ResultReader) Run() error {
 		u.Errorf("could not iter: %v", err)
 		return err
 	}
-	//u.Debugf("finished query, took: %v for %v rows", time.Now().Sub(n), len(m.Vals))
+	u.Debugf("finished query, took: %v for %v rows", time.Now().Sub(n), len(m.Vals))
 	return nil
 }

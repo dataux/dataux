@@ -1,0 +1,4 @@
+ignore:
+  - "testutils/*"
+  - "azure/example/*"
+  - "google/storeutils/*"

@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package grid;
+
+message Delivery {
+    enum Ver {
+        V1 = 0;
+    }
+    Ver ver = 1;
+    bytes data = 2;
+    string typeName = 3;
+    string receiver = 4;
+}
+
+message ActorStart {
+	string type = 1;
+	string name = 2;
+	bytes data = 3;
+}
+
+message Ack {}
+
+message EchoMsg {
+    string msg = 1;
+}
+
+service wire {
+    rpc Process(Delivery) returns (Delivery) {}
+}

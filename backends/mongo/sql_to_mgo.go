@@ -731,6 +731,10 @@ func (m *SqlToMgo) walkAggFunc(node *expr.FuncNode) (q bson.M, _ error) {
 
 	default:
 		u.Warnf("not implemented ")
+		m.needsPolyFill = true
+		if q == nil {
+			return nil, nil
+		}
 	}
 	u.Debugf("func:  %v", q)
 	if q != nil {

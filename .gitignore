@@ -5,3 +5,5 @@ archive
 test.etcd
 tools/importgithub/importgithub
 backends/files/tables/
+.env
+*.diff

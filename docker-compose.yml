@@ -35,7 +35,7 @@ services:
     expose:
       - "8432"
     network_mode: "host"
-  mongo:
+  mongo2:
     command: "--smallfiles --port 37017"
     expose:
       - "37017"
