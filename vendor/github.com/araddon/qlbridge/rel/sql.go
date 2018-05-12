@@ -632,7 +632,12 @@ func (m Columns) Equal(cols Columns) bool {
 	return true
 }
 
-func (m *Column) Key() string { return m.As }
+func (m *Column) Key() string {
+	if m.left != "" {
+		return m.right
+	}
+	return m.As
+}
 func (m *Column) String() string {
 	w := expr.NewDefaultWriter()
 	m.WriteDialect(w)
@@ -1295,8 +1300,8 @@ func (m *SqlSelect) Rewrite() {
 	}
 }
 
-// We are removing Column Aliases "user_id as uid"
-//  as well as functions - used when we are going to defer projection, aggs
+// RewriteAsRawSelect We are removing Column Aliases "user_id as uid"
+// as well as functions - used when we are going to defer projection, aggs
 func (m *SqlSelect) RewriteAsRawSelect() {
 	originalCols := m.Columns
 	m.Columns = make(Columns, 0, len(originalCols)+5)
@@ -1319,8 +1324,13 @@ func rewriteIntoProjection(sel *SqlSelect, m Columns) {
 		case *expr.IdentityNode:
 			colsToAdd = append(colsToAdd, c.SourceField)
 		case *expr.FuncNode:
-			idents := expr.FindAllIdentityField(n)
-			colsToAdd = append(colsToAdd, idents...)
+
+			idents := expr.FindAllIdentities(n)
+			for _, in := range idents {
+				_, r, _ := in.LeftRight()
+				colsToAdd = append(colsToAdd, r)
+			}
+
 		case nil:
 			if c.Star {
 				colsToAdd = append(colsToAdd, "*")
@@ -1496,12 +1506,11 @@ func (m *SqlSource) Rewrite(parentStmt *SqlSelect) *SqlSelect {
 			left, _, hasLeft := col.LeftRight()
 			if !hasLeft {
 				// Was not left/right qualified, so use as is?  or is this an error?
-				// what is official sql grammar on this?
+				//  what is official sql grammar on this?
 				newCol := col.Copy()
 				newCol.ParentIndex = idx
 				newCol.Index = len(newCols)
 				newCols = append(newCols, newCol)
-				u.Debugf("newcol %#v", newCol)
 
 			} else if hasLeft && left == m.Alias {
 				newCol := col.CopyRewrite(m.Alias)
@@ -1542,7 +1551,6 @@ func (m *SqlSource) Rewrite(parentStmt *SqlSelect) *SqlSelect {
 
 	if parentStmt.Where != nil {
 		node, cols := rewriteWhere(parentStmt, m, parentStmt.Where.Expr, make(Columns, 0))
-		u.Debugf("WHERE=%v cols=%d", node, len(cols))
 		if node != nil {
 			sql2.Where = &SqlWhere{Expr: node}
 		}
@@ -1584,37 +1592,33 @@ func (m *SqlSource) findFromAliases() (string, string) {
 }
 
 func rewriteWhere(stmt *SqlSelect, from *SqlSource, node expr.Node, cols Columns) (expr.Node, Columns) {
-
-	u.Debugf("rewrite where T:%T  %v", node, node)
+	//u.Debugf("rewrite where %s", node)
 	switch nt := node.(type) {
 	case *expr.IdentityNode:
-		left, right, hasLeft := nt.LeftRight()
-		if !hasLeft {
-			in := expr.IdentityNode{Text: right}
-			cols = append(cols, NewColumn(right))
-			//u.Warnf("nice, found it! in = %v  cols:%d", in, len(cols))
-			return &in, cols
-		}
-		//u.Debugf("rewriteWhere  from.Name:%v l:%v  r:%v", from.alias, left, right)
-		if left == from.alias {
-			in := expr.IdentityNode{Text: right}
-			cols = append(cols, NewColumn(right))
-			//u.Warnf("nice, found it! in = %v  cols:%d", in, len(cols))
-			return &in, cols
+		if left, right, hasLeft := nt.LeftRight(); hasLeft {
+			//u.Debugf("rewriteWhere  from.Name:%v l:%v  r:%v", from.alias, left, right)
+			if left == from.alias {
+				in := expr.IdentityNode{Text: right}
+				cols = append(cols, NewColumn(right))
+				//u.Warnf("nice, found it! in = %v  cols:%d", in, len(cols))
+				return &in, cols
+			} else {
+				//u.Warnf("what to do? source:%v    %v", from.alias, nt.String())
+			}
 		} else {
-			u.Warnf("what to do? source:%v    %v", from.alias, nt.String())
+			//u.Debugf("returning original: %s", nt)
+			return node, cols
 		}
-
 	case *expr.NumberNode, *expr.NullNode, *expr.StringNode:
 		return nt, cols
 	case *expr.BinaryNode:
-		u.Infof("binaryNode %v  T=%q", nt.Operator, nt.Operator.T.String())
+		//u.Infof("binaryNode  T:%v", nt.Operator.T.String())
 		switch nt.Operator.T {
 		case lex.TokenAnd, lex.TokenLogicAnd, lex.TokenLogicOr:
 			var n1, n2 expr.Node
 			n1, cols = rewriteWhere(stmt, from, nt.Args[0], cols)
 			n2, cols = rewriteWhere(stmt, from, nt.Args[1], cols)
-			u.Debugf("n1= %v  n2=%v", n1, n2)
+
 			if n1 != nil && n2 != nil {
 				return &expr.BinaryNode{Operator: nt.Operator, Args: []expr.Node{n1, n2}}, cols
 			} else if n1 != nil {
@@ -1628,7 +1632,7 @@ func rewriteWhere(stmt *SqlSelect, from *SqlSource, node expr.Node, cols Columns
 			var n1, n2 expr.Node
 			n1, cols = rewriteWhere(stmt, from, nt.Args[0], cols)
 			n2, cols = rewriteWhere(stmt, from, nt.Args[1], cols)
-			u.Debugf("n1=%#v  n2=%#v    %#v", n1, n2, nt)
+			//u.Debugf("n1=%#v  n2=%#v    %#v", n1, n2, nt)
 			if n1 != nil && n2 != nil {
 				return &expr.BinaryNode{Operator: nt.Operator, Args: []expr.Node{n1, n2}}, cols
 				// } else if n1 != nil {
@@ -1636,14 +1640,15 @@ func rewriteWhere(stmt *SqlSelect, from *SqlSource, node expr.Node, cols Columns
 				// } else if n2 != nil {
 				// 	return n2
 			} else {
-				u.Warnf("n1=%#v  n2=%#v    %#v", n1, n2, nt)
+				//u.Warnf("n1=%#v  n2=%#v    %#v", n1, n2, nt)
 			}
 		default:
-			u.Warnf("un-implemented op: %#v", nt)
+			//u.Warnf("un-implemented op: %#v", nt)
 		}
 	default:
 		u.Warnf("%T node types are not suppored yet for where rewrite", node)
 	}
+	//u.Warnf("nil?? %T  %s  %#v", node, node, node)
 	return nil, cols
 }
 

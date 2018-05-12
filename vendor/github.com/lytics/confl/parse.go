@@ -301,7 +301,9 @@ findIndent:
 
 	for i, line := range lines {
 		//u.Debugf("%v indent=%d line %q", i, indent, line)
-		lines[i] = line[indent:]
+		if len(line) >= indent {
+			lines[i] = line[indent:]
+		}
 	}
 	return strings.Join(lines, "\n")
 }

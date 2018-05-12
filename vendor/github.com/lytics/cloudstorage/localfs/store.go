@@ -244,7 +244,11 @@ func (l *LocalStore) NewWriterWithContext(ctx context.Context, o string, metadat
 		return nil, err
 	}
 
-	return csbufio.OpenWriter(fo)
+	f, err := os.OpenFile(fo, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0665)
+	if err != nil {
+		return nil, err
+	}
+	return csbufio.NewWriter(f), nil
 }
 
 func (l *LocalStore) Get(ctx context.Context, o string) (cloudstorage.Object, error) {
