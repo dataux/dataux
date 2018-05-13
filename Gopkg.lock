@@ -406,7 +406,7 @@
     "transport/grpc",
     "transport/http"
   ]
-  revision = "4bd7f4beb291148443ed4553071c4e0697ff4afb"
+  revision = "15aea8711db98e640b277da9771a9d74270c2edc"
 
 [[projects]]
   name = "google.golang.org/appengine"
