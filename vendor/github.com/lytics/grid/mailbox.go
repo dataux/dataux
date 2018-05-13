@@ -102,9 +102,12 @@ func newMailbox(s *Server, name, nsName string, size int) (*Mailbox, error) {
 		return nil, err
 	}
 
+	boxC := make(chan Request, size)
 	cleanup := func() error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+
+		close(boxC)
 
 		// Immediately delete the subscription so that no one
 		// can send to it, at least from this host.
@@ -118,7 +121,6 @@ func newMailbox(s *Server, name, nsName string, size int) (*Mailbox, error) {
 		// Return any error from the deregister call.
 		return err
 	}
-	boxC := make(chan Request, size)
 	box := &Mailbox{
 		name:    name,
 		nsName:  nsName,

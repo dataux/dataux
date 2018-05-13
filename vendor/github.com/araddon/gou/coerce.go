@@ -59,6 +59,9 @@ func CoerceStringShort(v interface{}) string {
 func CoerceStrings(v interface{}) []string {
 	switch val := v.(type) {
 	case string:
+		if val == "" {
+			return nil
+		}
 		return strings.Split(val, ",")
 	case []string:
 		return val
@@ -69,12 +72,50 @@ func CoerceStrings(v interface{}) []string {
 			case string:
 				sva = append(sva, aval)
 			default:
-				//Warnf("Kind ? %T v=%v", aval, aval)
+				sv, err := CoerceString(av)
+				if err == nil && sv != "" {
+					sva = append(sva, sv)
+				}
 			}
 		}
 		return sva
 	}
 	return []string{CoerceStringShort(v)}
+}
+
+func CoerceFloats(v interface{}) []float64 {
+	switch val := v.(type) {
+	case float64:
+		return []float64{val}
+	case []string:
+		fa := make([]float64, 0)
+		for _, av := range val {
+			f, err := CoerceFloat(av)
+			if err == nil && !math.IsNaN(f) {
+				fa = append(fa, f)
+			}
+		}
+		return fa
+	case []interface{}:
+		fa := make([]float64, 0)
+		for _, av := range val {
+			switch aval := av.(type) {
+			case float64:
+				fa = append(fa, aval)
+			default:
+				f, err := CoerceFloat(av)
+				if err == nil && !math.IsNaN(f) {
+					fa = append(fa, f)
+				}
+			}
+		}
+		return fa
+	}
+	fv, err := CoerceFloat(v)
+	if err == nil {
+		return []float64{fv}
+	}
+	return nil
 }
 
 func CoerceFloat(v interface{}) (float64, error) {

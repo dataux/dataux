@@ -63,7 +63,7 @@ func BuildSqlJobPlanned(planner plan.Planner, executor Executor, ctx *plan.Conte
 
 	//u.Debugf("build: %q", ctx.Raw)
 	if ctx.Raw == "" {
-		panic("wtf")
+		return nil, fmt.Errorf("no sql provided")
 	}
 	stmt, err := rel.ParseSql(ctx.Raw)
 	if err != nil {
@@ -337,7 +337,7 @@ func (m *JobExecutor) WalkAlter(p *plan.Alter) (Task, error) {
 // WalkChildren walk dag of plan tasks creating execution tasks
 func (m *JobExecutor) WalkChildren(p plan.Task, root Task) error {
 	for _, t := range p.Children() {
-		u.Debugf("parent: %T  walk child %p %T  %#v", p, t, t, p.Children())
+		//u.Debugf("parent: %T  walk child %p %T  %#v", p, t, t, p.Children())
 		et, err := m.WalkPlanTask(t)
 		if err != nil {
 			u.Errorf("could not create task %#v err=%v", t, err)
