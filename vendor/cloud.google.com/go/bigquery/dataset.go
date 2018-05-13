@@ -345,9 +345,6 @@ func (it *TableIterator) fetch(pageSize int, pageToken string) (string, error) {
 }
 
 func bqToTable(tr *bq.TableReference, c *Client) *Table {
-	if tr == nil {
-		return nil
-	}
 	return &Table{
 		ProjectID: tr.ProjectId,
 		DatasetID: tr.DatasetId,
