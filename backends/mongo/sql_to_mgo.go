@@ -33,9 +33,9 @@ var (
 )
 
 // SqlToMgo Rewrite a Sql AST statement to a Mongo request
-//  - Walk the AST and see what can be pushed down and what can't
-//  - try to poly-fill the missing pieces
-//  - stateful single use request
+// - Walk the AST and see what can be pushed down and what can't
+// - try to poly-fill the missing pieces
+// - stateful single use request
 type SqlToMgo struct {
 	*exec.TaskBase
 	resp           *ResultReader
@@ -74,7 +74,7 @@ func (m *SqlToMgo) Columns() []string { return m.tbl.Columns() }
 // to push down as much logic into mongo as possible
 func (m *SqlToMgo) WalkSourceSelect(planner plan.Planner, p *plan.Source) (plan.Task, error) {
 
-	//u.Debugf("WalkSourceSelect %p", m)
+	u.Debugf("WalkSourceSelect \n\t%s\n\t%s", p.Stmt.String(), p.Stmt.Source.String())
 	p.Conn = m
 
 	if len(p.Custom) == 0 {

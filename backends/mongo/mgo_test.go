@@ -426,7 +426,6 @@ func TestSimpleRowSelect(t *testing.T) {
 		RowData: &data,
 	})
 
-	return
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select title, count, deleted from article WHERE deleted = true ",
 		ExpectRowCt: 3,
@@ -516,6 +515,23 @@ func TestSimpleRowSelect(t *testing.T) {
 	})
 }
 
+func TestSelectProjectionWithFunc(t *testing.T) {
+	data2 := struct {
+		Name string
+	}{}
+
+	// What we are testing here is that a function (json.jmespath) which does NOT
+	// exist in mongo still gets applied.  IE, we do query rewrite, push down, still do final project.
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select json.jmespath(body,\"name\") AS name FROM article WHERE `author` = \"aaron\";",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			u.Infof("%v", data2)
+			assert.Equal(t, "morestuff", data2.Name, "%v", data2)
+		},
+		RowData: &data2,
+	})
+}
 func TestSelectLimit(t *testing.T) {
 	data := struct {
 		Title string
