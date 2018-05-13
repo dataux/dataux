@@ -150,11 +150,13 @@ func (m *PlannerGrid) Run(quit chan bool) error {
 		u.Errorf("failed to start tcp listener server: %v", err)
 		return err
 	}
-
+	time.Sleep(time.Millisecond * 100)
+	//u.Debugf("starting mailboxes")
+	if err := m.startMailboxes(); err != nil {
+		return err
+	}
 	go func() {
-		time.Sleep(time.Millisecond * 100)
-		//u.Debugf("starting mailboxes")
-		m.startMailboxes()
+
 		//u.Debugf("Watch for peers")
 		go m.watchPeers()
 
@@ -215,7 +217,7 @@ func (m *PlannerGrid) CheckinMailbox(mb *grid.Mailbox) {
 	m.mu.Unlock()
 }
 
-func (m *PlannerGrid) startMailboxes() {
+func (m *PlannerGrid) startMailboxes() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var err error
@@ -232,12 +234,13 @@ func (m *PlannerGrid) startMailboxes() {
 			continue
 		} else if err != nil {
 			u.Warnf("wtf? %v", err)
-			break
+			return err
 		} else {
 			m.mailboxes.ready = true
-			break
+			return nil
 		}
 	}
+	return fmt.Errorf("Could not start mailboxes, tried 10 times")
 }
 
 type mailboxPool struct {
