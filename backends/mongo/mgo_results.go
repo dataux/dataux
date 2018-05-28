@@ -96,17 +96,18 @@ func (m *ResultReader) Run() error {
 	}
 	cols := m.sql.p.Proj.Columns
 	colNames := make(map[string]int, len(cols))
-	if m.sql.needsPolyFill {
-		// since we are asking for poly-fill, the col names
-		// are not projected
-		for i, col := range cols {
-			colNames[col.SourceName()] = i
-		}
-	} else {
-		for i, col := range cols {
-			colNames[col.As] = i
-		}
+	//if m.sql.needsPolyFill {
+	// since we are asking for poly-fill, the col names
+	// are not projected
+	for i, col := range cols {
+		colNames[col.SourceName()] = i
 	}
+	// } else {
+	// 	u.Warnf("not polyfill, so doing alias?")
+	// 	for i, col := range cols {
+	// 		colNames[col.As] = i
+	// 	}
+	// }
 
 	//u.Debugf("sqltomgo:%p  resultreader:%p colnames? %v", m.sql, m, colNames)
 
@@ -148,6 +149,7 @@ func (m *ResultReader) Run() error {
 		vals := make([]driver.Value, len(cols))
 		u.Infof("found row %#v", bm)
 		for i, col := range cols {
+			u.Debugf("%d col %q name=%q", i, col.SourceName(), col.Name)
 			if val, ok := bm[col.SourceName()]; ok {
 				switch vt := val.(type) {
 				case bson.ObjectId:

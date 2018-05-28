@@ -1,3 +1,6 @@
+// Package mongo implements a datasource for mongo.
+// It adapts mongo to mysql protocol, pushing down as much logic as
+// possible to mongo.
 package mongo
 
 import (
@@ -53,7 +56,8 @@ func NewSource() schema.Source {
 // Init initilize this source.
 func (m *Source) Init() {}
 
-// Setup this source.
+// Setup this source.  Connects to mongo, loads the schema
+// byt doing introspection on a sample of rows in each table.
 func (m *Source) Setup(ss *schema.Schema) error {
 
 	if m.srcschema != nil {
@@ -78,6 +82,7 @@ func (m *Source) Setup(ss *schema.Schema) error {
 	return m.loadSchema()
 }
 
+// Close this mongo source, closes the mongo session.
 func (m *Source) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -91,7 +96,7 @@ func (m *Source) Close() error {
 	return nil
 }
 
-// Tables list of tables
+// Tables list of tables eka collections in mongo terminoligy.
 func (m *Source) Tables() []string { return m.tables }
 
 // Table get single table schema.

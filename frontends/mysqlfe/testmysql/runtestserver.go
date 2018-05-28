@@ -115,7 +115,9 @@ func startServer(db string) {
 		ServerCtx.Init()
 		quit := make(chan bool)
 		go func() {
-			ServerCtx.PlanGrid.Run(quit)
+			if err := ServerCtx.PlanGrid.Run(quit); err != nil {
+				panic(err.Error())
+			}
 		}()
 
 		time.Sleep(time.Millisecond * 20)

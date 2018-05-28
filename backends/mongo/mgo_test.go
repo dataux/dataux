@@ -334,6 +334,7 @@ func TestSelectCountStar(t *testing.T) {
 
 func TestSelectDistributed(t *testing.T) {
 
+	return
 	u.Debugf("starting TestSelectDistributed")
 	data := struct {
 		Avg float64 `db:"title_avg"`
@@ -414,16 +415,6 @@ func TestSimpleRowSelect(t *testing.T) {
 		Deleted bool
 		//Category *datasource.StringArray
 	}{}
-
-	validateQuerySpec(t, tu.QuerySpec{
-		Sql:         "select title, count, deleted from article WHERE deleted = true ",
-		ExpectRowCt: 3,
-		ValidateRowData: func() {
-			assert.Equal(t, true, data.Deleted)
-		},
-		RowData: &data,
-	})
-
 	validateQuerySpec(t, tu.QuerySpec{
 		Sql:         "select title, count, deleted from article WHERE `author` = \"aaron\" ",
 		ExpectRowCt: 1,
@@ -431,6 +422,15 @@ func TestSimpleRowSelect(t *testing.T) {
 			//u.Infof("%v", data)
 			assert.True(t, data.Deleted == false, "Not deleted? %v", data)
 			assert.True(t, data.Title == "article1", "%v", data)
+		},
+		RowData: &data,
+	})
+
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select title, count, deleted from article WHERE deleted = true ",
+		ExpectRowCt: 3,
+		ValidateRowData: func() {
+			assert.Equal(t, true, data.Deleted)
 		},
 		RowData: &data,
 	})
@@ -515,6 +515,23 @@ func TestSimpleRowSelect(t *testing.T) {
 	})
 }
 
+func TestSelectProjectionWithFunc(t *testing.T) {
+	data2 := struct {
+		Name string
+	}{}
+
+	// What we are testing here is that a function (json.jmespath) which does NOT
+	// exist in mongo still gets applied.  IE, we do query rewrite, push down, still do final project.
+	validateQuerySpec(t, tu.QuerySpec{
+		Sql:         "select json.jmespath(body,\"name\") AS name FROM article WHERE `author` = \"aaron\";",
+		ExpectRowCt: 1,
+		ValidateRowData: func() {
+			u.Infof("%v", data2)
+			assert.Equal(t, "morestuff", data2.Name, "%v", data2)
+		},
+		RowData: &data2,
+	})
+}
 func TestSelectLimit(t *testing.T) {
 	data := struct {
 		Title string

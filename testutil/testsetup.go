@@ -15,6 +15,7 @@ import (
 	"github.com/araddon/qlbridge/datasource"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/dataux/dataux/frontends/mysqlfe/testmysql"
 )
@@ -275,9 +276,10 @@ func ValidateQuerySpec(t testing.TB, testSpec QuerySpec) {
 		}
 
 		if testSpec.ExpectRowCt > -1 {
-			if rowCt != testSpec.ExpectRowCt {
-				t.Errorf("expected %v rows but got %v", testSpec.ExpectRowCt, rowCt)
-			}
+			assert.Equalf(t, testSpec.ExpectRowCt, rowCt, "expected %v rows but got %v for %v", testSpec.ExpectRowCt, rowCt, testSpec.Sql)
+			// if rowCt != testSpec.ExpectRowCt {
+			// 	t.Errorf("expected %v rows but got %v", testSpec.ExpectRowCt, rowCt)
+			// }
 		}
 		if rows.Err() != nil {
 			t.Errorf("Expected no err got %v", err)
