@@ -23,19 +23,25 @@
     "longrunning/autogen",
     "storage"
   ]
-  revision = "82e4644f7eeb5bc6dadc46eb79c2772b96dea163"
+  revision = "24c3c3d77a0907226ed74ef8515f8a23544c7dfa"
+
+[[projects]]
+  name = "contrib.go.opencensus.io/exporter/stackdriver"
+  packages = ["propagation"]
+  revision = "37aa2801fbf0205003e15636096ebf0373510288"
+  version = "v0.5.0"
 
 [[projects]]
   branch = "master"
   name = "github.com/araddon/dateparse"
   packages = ["."]
-  revision = "4b079c6fdd8d7d3e224357566f278da3c159f441"
+  revision = "cfd92a431d0efe36a1b81ca25d15b98aae4dbdb6"
 
 [[projects]]
   branch = "master"
   name = "github.com/araddon/gou"
   packages = ["."]
-  revision = "fa458351e3d6a2ec9ab72f7ba4b94f68a941c0f3"
+  revision = "d7d8174cb8b3780a5ca20b99de05665dd17f208b"
 
 [[projects]]
   branch = "master"
@@ -58,7 +64,7 @@
     "value",
     "vm"
   ]
-  revision = "47badfabaad439590551de10e00a74bbff933c45"
+  revision = "2ed8776740dc55098897c33846e364c251d2fc6a"
 
 [[projects]]
   branch = "master"
@@ -76,8 +82,8 @@
     "mvcc/mvccpb",
     "pkg/types"
   ]
-  revision = "fdde8705f5bf9a6d9dbfb0220caf2ee1ac816be8"
-  version = "v3.3.4"
+  revision = "fca8add78a9d926166eb739b8e4a124434025ba3"
+  version = "v3.3.9"
 
 [[projects]]
   name = "github.com/davecgh/go-spew"
@@ -101,13 +107,13 @@
     "internal/sasl",
     "internal/scram"
   ]
-  revision = "efe0945164a7e582241f37ae8983c075f8f2e870"
+  revision = "113d3961e7311526535a1ef7042196563d442761"
 
 [[projects]]
   name = "github.com/go-sql-driver/mysql"
   packages = ["."]
-  revision = "a0583e0143b1624142adab07e0e97fe106d99561"
-  version = "v1.3"
+  revision = "d523deb1b23d913de5bdada721a6071e71283618"
+  version = "v1.4.0"
 
 [[projects]]
   branch = "master"
@@ -118,7 +124,7 @@
     "internal/murmur",
     "internal/streams"
   ]
-  revision = "4ba1af8a026b230ce3c646e594865c07ce01b541"
+  revision = "045d8d6abc70b5bd02bb18b8fdb05ee54d8c87aa"
 
 [[projects]]
   name = "github.com/gogo/protobuf"
@@ -127,8 +133,8 @@
     "proto",
     "protoc-gen-gogo/descriptor"
   ]
-  revision = "1adfc126b41513cc696b209667c8656ea7aac67c"
-  version = "v1.0.0"
+  revision = "636bf0302bc95575d69441b25a2603156ffdddf1"
+  version = "v1.1.1"
 
 [[projects]]
   name = "github.com/golang/protobuf"
@@ -143,14 +149,14 @@
     "ptypes/timestamp",
     "ptypes/wrappers"
   ]
-  revision = "925541529c1fa6821df4e44ce2723319eb2be768"
-  version = "v1.0.0"
+  revision = "b4deda0973fb4c70b50d226b1af49f3da59f5265"
+  version = "v1.1.0"
 
 [[projects]]
   branch = "master"
   name = "github.com/golang/snappy"
   packages = ["."]
-  revision = "553a641470496b2327abcac10b36396bd98e45c9"
+  revision = "2e65f85255dbc3072edf28d6b5b8efc472979f5a"
 
 [[projects]]
   branch = "master"
@@ -201,19 +207,19 @@
     ".",
     "reflectx"
   ]
-  revision = "2aeb6a910c2b94f2d5eb53d9895d80e27264ec41"
+  revision = "0dae4fefe7c0e190f7b5a78dac28a1c82cc8d849"
 
 [[projects]]
-  branch = "master"
   name = "github.com/kr/pretty"
   packages = ["."]
-  revision = "cfb55aafdaf3ec08f0db22699ab822c50091b1c4"
+  revision = "73f6ac0b30a98e433b289500d779f50c1a6f0712"
+  version = "v0.1.0"
 
 [[projects]]
-  branch = "master"
   name = "github.com/kr/text"
   packages = ["."]
-  revision = "7cafcd837844e784b526369c9bce262804aebc60"
+  revision = "e2ffdb16a802fe2bb95e2e35ff34f0e53aeef34f"
+  version = "v0.1.0"
 
 [[projects]]
   branch = "master"
@@ -230,19 +236,19 @@
     "google",
     "localfs"
   ]
-  revision = "fffb08af5ed549e09aa1ab2837efbc4beb7415df"
+  revision = "3646b62998f6b29468361fda2a7488767e8008d9"
 
 [[projects]]
   branch = "master"
   name = "github.com/lytics/confl"
   packages = ["."]
-  revision = "11840fa0e49ef91d2a7e0ab5445ded16bcfedade"
+  revision = "9b876add7d3ed837ff9750496dca8507dcf4d9f7"
 
 [[projects]]
   branch = "master"
   name = "github.com/lytics/datemath"
   packages = ["."]
-  revision = "2c793e7cfff97be9feb3bfe3c249cb5a83842ebb"
+  revision = "3ada1c10b5debaa3a4e0d34a42060429de7cdf96"
 
 [[projects]]
   branch = "master"
@@ -254,7 +260,7 @@
   branch = "master"
   name = "github.com/lytics/go-lytics"
   packages = ["."]
-  revision = "6b67e16c9874a59acdeea4aab6b4008dbe80e54e"
+  revision = "c0f04526e0f67775de29a2e259bf17d3f6c20866"
 
 [[projects]]
   name = "github.com/lytics/grid"
@@ -263,8 +269,8 @@
     "codec",
     "registry"
   ]
-  revision = "96e9bfc4ddaefc784b47b19d2b8e137d856eb10e"
-  version = "v3.0.0"
+  revision = "9b6cb039dafc409946495792d7f10c526c2382d5"
+  version = "v3.0.1"
 
 [[projects]]
   branch = "master"
@@ -317,13 +323,13 @@
 [[projects]]
   name = "github.com/stretchr/testify"
   packages = ["assert"]
-  revision = "12b6f73e6084dad08a7c6e575284b177ecafbc71"
-  version = "v1.2.1"
+  revision = "f35b8ab0b5a2cef36673838d662e249dd9c94686"
+  version = "v1.2.2"
 
 [[projects]]
   name = "go.opencensus.io"
   packages = [
-    "exporter/stackdriver/propagation",
+    ".",
     "internal",
     "internal/tagencoding",
     "plugin/ocgrpc",
@@ -337,8 +343,8 @@
     "trace/internal",
     "trace/propagation"
   ]
-  revision = "0095aec66ae14801c6711210f6f0716411cefdd3"
-  version = "v0.8.0"
+  revision = "e262766cd0d230a1bb7c37281e345e465f19b41b"
+  version = "v0.14.0"
 
 [[projects]]
   branch = "master"
@@ -351,10 +357,9 @@
     "http2/hpack",
     "idna",
     "internal/timeseries",
-    "lex/httplex",
     "trace"
   ]
-  revision = "5f9ae10d9af5b1c89ae6904293b14b064d4ada23"
+  revision = "f9ce57c11b242f0f1599cf25c89d8cb02c45295a"
 
 [[projects]]
   branch = "master"
@@ -366,7 +371,13 @@
     "jws",
     "jwt"
   ]
-  revision = "6881fee410a5daf86371371f9ad451b95e168b71"
+  revision = "3d292e4d0cdc3a0113e6d207bb137145ef1de42f"
+
+[[projects]]
+  branch = "master"
+  name = "golang.org/x/sys"
+  packages = ["unix"]
+  revision = "f0d5e33068cb57c22a181f5df0ffda885309eb5a"
 
 [[projects]]
   name = "golang.org/x/text"
@@ -407,12 +418,13 @@
     "transport/grpc",
     "transport/http"
   ]
-  revision = "a12439171c62991c8a4fd19686b7f4d6c8ecf850"
+  revision = "d089d6ac97131b2ee652f2fe736865338659a668"
 
 [[projects]]
   name = "google.golang.org/appengine"
   packages = [
     ".",
+    "cloudsql",
     "internal",
     "internal/app_identity",
     "internal/base",
@@ -425,8 +437,8 @@
     "socket",
     "urlfetch"
   ]
-  revision = "150dc57a1b433e64154302bdc40b6bb8aefa313a"
-  version = "v1.0.0"
+  revision = "b1f26356af11148e710935ed1ac8a7f5702c7612"
+  version = "v1.1.0"
 
 [[projects]]
   branch = "master"
@@ -443,7 +455,7 @@
     "googleapis/type/latlng",
     "protobuf/field_mask"
   ]
-  revision = "86e600f69ee4704c6efbf6a2a40a5c10700e76c2"
+  revision = "383e8b2c3b9e36c4076b235b32537292176bae20"
 
 [[projects]]
   name = "google.golang.org/grpc"
@@ -458,10 +470,14 @@
     "credentials/oauth",
     "encoding",
     "encoding/proto",
-    "grpclb/grpc_lb_v1/messages",
     "grpclog",
     "health/grpc_health_v1",
     "internal",
+    "internal/backoff",
+    "internal/channelz",
+    "internal/envconfig",
+    "internal/grpcrand",
+    "internal/transport",
     "keepalive",
     "metadata",
     "naming",
@@ -471,11 +487,10 @@
     "resolver/passthrough",
     "stats",
     "status",
-    "tap",
-    "transport"
+    "tap"
   ]
-  revision = "d11072e7ca9811b1100b80ca0269ac831f06d024"
-  version = "v1.11.3"
+  revision = "32fb0ac620c32ba40a4626ddf94d90d12cce3455"
+  version = "v1.14.0"
 
 [[projects]]
   name = "gopkg.in/inf.v0"
